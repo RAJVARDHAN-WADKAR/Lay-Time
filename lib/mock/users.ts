@@ -1,0 +1,57 @@
+import { User } from "@/lib/types";
+
+export const MOCK_USERS: User[] = [
+  {
+    id: "usr-admin",
+    name: "Alex Vance (Admin)",
+    email: "alex.admin@maritime-ops.com",
+    role: "Admin",
+    demoPassword: "admin",
+    roleDescription: "Full administrative access: User & role management, all claims, global system settings, and overrides.",
+    status: "Active",
+    createdAt: "2024-01-10",
+  },
+  {
+    id: "usr-super",
+    name: "Elena Rostova",
+    email: "elena.super@maritime-ops.com",
+    role: "Supervisor",
+    demoPassword: "supervisor",
+    roleDescription: "Operational supervisor: Authority to create/edit all claims, approve overrides, resolve discrepancies, and export settlement reports.",
+    status: "Active",
+    createdAt: "2024-01-05",
+  },
+  {
+    id: "usr-proc-1",
+    name: "Sarah Jenkins",
+    email: "sarah.jenkins@maritime-ops.com",
+    role: "Claim Processor",
+    demoPassword: "processor",
+    roleDescription: "Claim processor: Dedicated handling of assigned claims, Statement of Facts event entry, deduction logging, and OCR validation.",
+    assignedClaimsCount: 5,
+    status: "Active",
+    createdAt: "2024-02-15",
+  },
+  {
+    id: "usr-proc-2",
+    name: "Marcus Aurelius",
+    email: "marcus.a@maritime-ops.com",
+    role: "Claim Processor",
+    demoPassword: "processor",
+    roleDescription: "Claim processor: Handles secondary voyage portfolios and Statement of Facts reconciliation.",
+    assignedClaimsCount: 4,
+    status: "Active",
+    createdAt: "2024-03-01",
+  },
+  {
+    id: "usr-rev",
+    name: "David Chen",
+    email: "david.reviewer@maritime-ops.com",
+    role: "Reviewer",
+    demoPassword: "reviewer",
+    roleDescription: "Audit & compliance reviewer: Read-only inspection across all claims, timebar status monitoring, and calculation verification.",
+    status: "Active",
+    createdAt: "2024-04-12",
+  },
+];
+
