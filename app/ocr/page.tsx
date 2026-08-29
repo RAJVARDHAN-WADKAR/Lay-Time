@@ -102,21 +102,14 @@ export default function OcrSoFReviewPage() {
     setIsSaving(true);
     const gross = (new Date(editingAct.stopTime).getTime() - new Date(editingAct.startTime).getTime()) / (1000 * 60);
     const durationMinutes = isNaN(gross) ? 0 : Math.round(gross);
-    const updated = await updateActivity(claim.id, editingAct.id, {
+    const updatedClaim = await updateActivity(claim.id, editingAct.id, {
       ...editingAct,
       durationMinutes,
       durationFormatted: `${Math.floor(durationMinutes / 60)}h ${Math.abs(durationMinutes) % 60}m`,
       isCorrected: true,
     });
 
-    setClaim((prev) =>
-      prev
-        ? {
-            ...prev,
-            activities: prev.activities?.map((a) => (a.id === updated.id ? updated : a)),
-          }
-        : prev
-    );
+    setClaim(updatedClaim);
     setIsSaving(false);
     success("Activity Corrected", `"${editingAct.activityName}" updated and flagged as user-corrected`);
     setEditingAct(null);

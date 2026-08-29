@@ -1678,6 +1678,6 @@ export const SEED_DEMO_DOCUMENTS: DocumentRecord[] = [
 
 
 
-// Default empty data state
-export const MOCK_CLAIMS: Claim[] = [];
-export const MOCK_DOCUMENTS: DocumentRecord[] = [];
+// Export default data state
+export const MOCK_CLAIMS: Claim[] = SEED_DEMO_CLAIMS;
+export const MOCK_DOCUMENTS: DocumentRecord[] = SEED_DEMO_DOCUMENTS;

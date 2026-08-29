@@ -1,120 +1,79 @@
-import { User, UserRole } from "@/lib/types";
-import { getStorageItem, setStorageItem } from "./storage";
-import { createNotification } from "./notifications";
-
-const STORAGE_KEY = "demurrage_users";
-const delay = (ms: number = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+import { User } from "@/lib/types";
 
 export async function getUsers(): Promise<User[]> {
-  await delay();
-  return getStorageItem<User[]>(STORAGE_KEY, []);
+  try {
+    const res = await fetch("/api/users", { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.users || [];
+  } catch (error) {
+    console.error("API getUsers error:", error);
+    return [];
+  }
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  await delay();
-  const users = getStorageItem<User[]>(STORAGE_KEY, []);
-  const user = users.find((u) => u.id === id);
-  return user ? JSON.parse(JSON.stringify(user)) : null;
+  try {
+    const res = await fetch(`/api/users/${id}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.user || null;
+  } catch (error) {
+    return null;
+  }
 }
 
 export async function createUser(userData: {
   name: string;
   email: string;
+  role: User["role"];
+  password: string;
   username?: string;
-  role: UserRole;
-  status?: "Active" | "Inactive";
-  demoPassword?: string;
+  roleDescription?: string;
 }): Promise<User> {
-  await delay(80);
-  const users = getStorageItem<User[]>(STORAGE_KEY, []);
-  const newUser: User = {
-    id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    name: userData.name,
-    email: userData.email,
-    username: userData.username || userData.email.split("@")[0],
-    role: userData.role,
-    status: userData.status || "Active",
-    createdAt: new Date().toISOString().split("T")[0],
-    assignedClaimsCount: 0,
-    demoPassword: userData.demoPassword || "password123",
-  };
+  const res = await fetch("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(userData)
+  });
 
-  const updatedUsers = [newUser, ...users];
-  setStorageItem(STORAGE_KEY, updatedUsers);
-
-  try {
-    await createNotification({
-      title: "New User Added",
-      message: `User ${userData.name} was registered with role ${userData.role}.`,
-      type: "user",
-    });
-  } catch (e) {
-    console.error(e);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to create user");
   }
 
-  return JSON.parse(JSON.stringify(newUser));
+  const data = await res.json();
+  return data.user;
 }
 
-export async function updateUser(
-  id: string,
-  updates: Partial<User>
-): Promise<User> {
-  await delay(50);
-  const users = getStorageItem<User[]>(STORAGE_KEY, []);
-  const idx = users.findIndex((u) => u.id === id);
-  if (idx === -1) throw new Error("User not found");
+export async function updateUser(id: string, updates: Partial<User> & { password?: string }): Promise<User> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates)
+  });
 
-  users[idx] = { ...users[idx], ...updates };
-  setStorageItem(STORAGE_KEY, users);
-  return JSON.parse(JSON.stringify(users[idx]));
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to update user");
+  }
+
+  const data = await res.json();
+  return data.user;
 }
+
+export async function deactivateUser(id: string): Promise<boolean> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "DELETE"
+  });
+  return res.ok;
+}
+
+export const deleteUser = deactivateUser;
 
 export async function toggleUserStatus(id: string): Promise<User> {
-  await delay(50);
-  const users = getStorageItem<User[]>(STORAGE_KEY, []);
-  const idx = users.findIndex((u) => u.id === id);
-  if (idx === -1) throw new Error("User not found");
-
-  const newStatus = users[idx].status === "Active" ? "Inactive" : "Active";
-  users[idx].status = newStatus;
-  setStorageItem(STORAGE_KEY, users);
-
-  try {
-    await createNotification({
-      title: "User Status Changed",
-      message: `User ${users[idx].name} is now ${newStatus}.`,
-      type: "user",
-    });
-  } catch (e) {
-    console.error(e);
-  }
-
-  return JSON.parse(JSON.stringify(users[idx]));
-}
-
-export async function deleteUser(id: string): Promise<boolean> {
-  await delay(50);
-  const users = getStorageItem<User[]>(STORAGE_KEY, []);
-  const target = users.find((u) => u.id === id);
-  const filtered = users.filter((u) => u.id !== id);
-  setStorageItem(STORAGE_KEY, filtered);
-
-  if (target) {
-    try {
-      await createNotification({
-        title: "User Removed",
-        message: `User ${target.name} (${target.email}) was deleted.`,
-        type: "user",
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  return true;
-}
-
-export async function clearAllUsers(): Promise<void> {
-  await delay(50);
-  setStorageItem(STORAGE_KEY, []);
+  const user = await getUserById(id);
+  if (!user) throw new Error("User not found");
+  const newStatus = user.status === "Active" ? "Inactive" : "Active";
+  return await updateUser(id, { status: newStatus });
 }

@@ -3,7 +3,8 @@
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { getClaims, getNotifications, getDocuments } from "@/lib/api";
-import { Claim, DocumentRecord, NotificationRecord } from "@/lib/types";
+import { getRacCases } from "@/lib/api/rac";
+import { Claim, DocumentRecord, NotificationRecord, RacCase } from "@/lib/types";
 import { calculateDashboardMetrics, filterClaims } from "@/lib/mock/aggregate";
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/formatters";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
   Calendar,
   Layers,
   FileBarChart,
+  Briefcase,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -45,6 +47,7 @@ import {
 
 export default function DashboardPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
+  const [racCases, setRacCases] = useState<RacCase[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,14 +58,16 @@ export default function DashboardPage() {
   const loadAllData = async () => {
     try {
       setIsLoading(true);
-      const [cls, notifs, docs] = await Promise.all([
+      const [cls, notifs, docs, racs] = await Promise.all([
         getClaims(),
         getNotifications(),
         getDocuments(),
+        getRacCases(),
       ]);
       setClaims(cls);
       setNotifications(notifs);
       setDocuments(docs);
+      setRacCases(racs);
     } catch (e) {
       console.error(e);
     } finally {
@@ -179,6 +184,44 @@ export default function DashboardPage() {
           variant="rose"
           trend={metrics.amountUnderContention > 0 ? "Disputed" : undefined}
         />
+      </div>
+
+      {/* Integrated RAC & Recoverable Additional Costs Overview Widget */}
+      <div className="bg-linear-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-900/60 rounded-2xl p-4 sm:p-5 text-white shadow-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-indigo-600/30 text-indigo-400 rounded-xl border border-indigo-500/30">
+              <Briefcase className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-white">Recoverable Additional Costs (RAC) Exposure</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
+                  {racCases.length} Active RAC Cases
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Total Combined Maritime Exposure: <strong className="text-white">{formatCurrency(metrics.totalExposure + racCases.reduce((s, c) => s + (c.outstandingAmount || 0), 0))}</strong> (Demurrage + Recoverable Port Costs & Contentions)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2.5 shrink-0">
+            <Link
+              href="/rac"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm"
+            >
+              <span>RAC Dashboard</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+            <Link
+              href="/rac/cases"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-semibold transition"
+            >
+              <span>View RAC Cases</span>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* 3. SECTION 5: CLAIM OVERVIEW (LARGE CHART SECTION) */}

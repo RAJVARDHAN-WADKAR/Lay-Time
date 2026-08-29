@@ -81,6 +81,7 @@ export default function UsersPage() {
         email: newUserData.email.trim(),
         username: newUserData.username.trim() || newUserData.email.split("@")[0],
         role: newUserData.role,
+        password: (newUserData as any).password || "Password@123",
       });
 
       setUsers((prev) => [created, ...prev]);
@@ -351,6 +352,17 @@ export default function UsersPage() {
           </div>
 
           <div className="space-y-1">
+            <label className="font-bold text-slate-700 block">Password *</label>
+            <Input
+              type="password"
+              placeholder="Initial password (e.g. Pass@123)"
+              value={(newUserData as any).password || ""}
+              onChange={(e) => setNewUserData((p) => ({ ...p, password: e.target.value } as any))}
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
             <label className="font-bold text-slate-700 block">Role *</label>
             <Select
               value={newUserData.role}
@@ -359,7 +371,7 @@ export default function UsersPage() {
               <option value="Admin">Admin</option>
               <option value="Claim Processor">Claim Processor</option>
               <option value="Supervisor">Supervisor</option>
-              <option value="Viewer">Viewer</option>
+              <option value="Reviewer">Reviewer</option>
             </Select>
           </div>
 

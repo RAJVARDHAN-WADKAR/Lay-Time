@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Layers,
   Calculator,
+  Briefcase,
 } from "lucide-react";
 
 interface LedgerTableProps {
@@ -226,6 +227,7 @@ export function LedgerTable({
                   <th className="py-3.5 px-4">Claim Type</th>
                   <th className="py-3.5 px-4 text-right">Days Open</th>
                   <th className="py-3.5 px-4 text-right">Demurrage (USD)</th>
+                  <th className="py-3.5 px-4 text-center">RAC Dispute</th>
                   <th className="py-3.5 px-4 text-center">Actions</th>
                 </tr>
               </thead>
@@ -279,6 +281,18 @@ export function LedgerTable({
                       {formatCurrency(c.claimFiledAmount)}
                     </td>
 
+                    {/* RAC Link */}
+                    <td className="py-3.5 px-4 text-center">
+                      <Link
+                        href={`/claims/${c.id}`}
+                        className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 transition"
+                        title="View or attach RAC Recoverable Costs"
+                      >
+                        <Briefcase className="h-2.5 w-2.5" />
+                        <span>RAC Hub</span>
+                      </Link>
+                    </td>
+
                     {/* 9. Actions */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center space-x-1.5">
@@ -294,7 +308,7 @@ export function LedgerTable({
                         </Link>
                         <button
                           onClick={() => setDeletingId(c.id)}
-                          className="h-7 w-7 p-0 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          className="h-7 w-7 p-0 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                           title="Delete Claim"
                         >
                           <Trash2 className="h-3.5 w-3.5" />

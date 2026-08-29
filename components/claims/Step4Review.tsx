@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
   AlertCircle,
   CheckCircle2,
+  Briefcase,
 } from "lucide-react";
 
 interface Step4ReviewProps {
@@ -395,6 +396,13 @@ export function Step4Review({
               {formatCurrency(Number(formData.demurrageRatePerDay) || 0)} / day
             </span>
           </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-slate-100 flex items-start space-x-2 text-[11px] text-indigo-700 bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100">
+          <Briefcase className="h-4 w-4 shrink-0 text-indigo-600 mt-0.5" />
+          <span>
+            <strong>RAC Integration:</strong> Once published, you can attach Recoverable Additional Costs (RAC) files, port tariff contentions, and pumping warranties directly inside this claim&apos;s <em>RAC Recoverables</em> tab.
+          </span>
         </div>
       </div>
     </div>

@@ -1,16 +1,19 @@
-export type UserRole = "Admin" | "Claim Processor" | "Supervisor" | "Viewer" | "Reviewer";
+export type UserRole = "Admin" | "Claim Processor" | "Supervisor" | "Reviewer";
 
 export interface User {
   id: string;
   name: string;
   email: string;
   username?: string;
+  password?: string;
+  demoPassword?: string;
   role: UserRole;
   avatar?: string;
   assignedClaimsCount?: number;
+  assignedRacCount?: number;
   status: "Active" | "Inactive";
   createdAt: string;
-  demoPassword?: string;
+  updatedAt?: string;
   roleDescription?: string;
 }
 
@@ -71,6 +74,7 @@ export interface Berth {
   isProrataOverridden?: boolean;
   loadRate: number; // MT per day / hour
   cargoType?: string;
+  receiverName?: string;
 }
 
 export interface Port {
@@ -124,6 +128,7 @@ export interface DeductionItem {
 export interface Discrepancy {
   id: string;
   claimId: string;
+  racCaseId?: string;
   activityId?: string;
   type:
     | "start_after_stop"
@@ -135,7 +140,10 @@ export interface Discrepancy {
     | "impossible_duration"
     | "conflicting_timestamps"
     | "invalid_sequence"
-    | "low_confidence";
+    | "low_confidence"
+    | "missing_mandatory_doc"
+    | "timebar_expired"
+    | "unmatched_amount";
   severity: "error" | "warning" | "info";
   title: string;
   description: string;
@@ -143,6 +151,7 @@ export interface Discrepancy {
   currentValue?: string;
   suggestedValue?: string;
   isResolved: boolean;
+  resolvedBy?: string;
   resolvedAt?: string;
 }
 
@@ -198,24 +207,48 @@ export interface Claim {
   activities?: SoFActivity[];
   deductions?: DeductionItem[];
   discrepancies?: Discrepancy[];
+  documents?: DocumentRecord[];
+  ownerComparison?: OwnerComparison;
+  chasers?: EmailFollowup[];
   createdAt: string;
   updatedAt: string;
 }
 
+export interface DocumentRevision {
+  id: string;
+  documentId: string;
+  version: string;
+  fileName: string;
+  fileSize: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  changeSummary?: string;
+  filePath?: string;
+}
+
+export type DocumentType = "SOF" | "Charterparty" | "Timesheet" | "NOR" | "Notice" | "Pumping Log" | "Ullage Report" | "Bill of Lading" | "Other";
+
 export interface DocumentRecord {
   id: string;
-  claimId: string;
-  claimName: string;
+  claimId?: string;
+  claimName?: string;
+  racCaseId?: string;
   fileName: string;
   fileSize: number;
   fileType: string;
-  type: "SOF" | "Charterparty" | "Timesheet" | "NOR" | "Notice" | "Other";
+  category?: DocumentType;
+  type?: DocumentType;
   version?: string;
+  uploadedBy?: string;
   uploadedAt: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
   status: "Uploaded" | "OCR Processing..." | "OCR Completed" | "OCR Failed";
   ocrConfidence?: number;
   extractedItemsCount?: number;
   errorReason?: string;
+  filePath?: string;
+  revisions?: DocumentRevision[];
   ocrExtractedActivities?: SoFActivity[];
 }
 
@@ -223,9 +256,11 @@ export interface NotificationRecord {
   id: string;
   title: string;
   message: string;
-  type: "claim" | "document" | "calculation" | "system" | "user" | "timebar";
+  type: "claim" | "document" | "calculation" | "system" | "user" | "timebar" | "rac" | "email";
   claimId?: string;
   claimName?: string;
+  racCaseId?: string;
+  racReference?: string;
   isRead: boolean;
   createdAt: string;
 }
@@ -291,12 +326,18 @@ export interface ClaimCalculation {
     noticeDeadline: string;
     noticeSubmitted: string;
     isNoticeValid: boolean;
+    noticeAlarmLevel: "Normal" | "Approaching" | "Critical" | "Expired";
+    noticeDaysRemaining: number;
     claimDeadline: string;
     claimSubmitted: string;
     isClaimValid: boolean;
+    claimAlarmLevel: "Normal" | "Approaching" | "Critical" | "Expired";
+    claimDaysRemaining: number;
     isTimebarred: boolean;
   };
   assumptions?: CalculationAssumptions;
+  calculatedAt?: string;
+  calculatedBy?: string;
 }
 
 export interface CalculationAssumptions {
@@ -314,6 +355,214 @@ export interface CalculationAssumptions {
   companyAddress?: string;
   companyContact?: string;
   companyPhone?: string;
+}
+
+export interface OwnerComparison {
+  id?: string;
+  claimId: string;
+  ownerDemurrageAmount: number;
+  ownerLaytimeHours: number;
+  internalDemurrageAmount: number;
+  internalLaytimeHours: number;
+  differenceAmount: number;
+  differenceHours: number;
+  explanation: string;
+  berthComparisons?: {
+    berthName: string;
+    ownerHours: number;
+    internalHours: number;
+    diffHours: number;
+    ownerAmount: number;
+    internalAmount: number;
+    diffAmount: number;
+    notes: string;
+  }[];
+  portComparisons?: {
+    portName: string;
+    ownerAmount: number;
+    internalAmount: number;
+    diffAmount: number;
+    notes: string;
+  }[];
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface EmailFollowup {
+  id: string;
+  claimId: string;
+  recipientEmail: string;
+  subject: string;
+  templateType: "30_days_reminder" | "60_days_reminder" | "90_days_reminder" | "120_days_escalation" | "custom";
+  body: string;
+  status: "Scheduled" | "Sent" | "Pending Response";
+  daysAwaitingPayment: number;
+  scheduledDate: string;
+  sentAt?: string;
+  sentBy?: string;
+  responseReceived?: boolean;
+  responseNotes?: string;
+}
+
+export interface IncomingEmail {
+  id: string;
+  claimId?: string;
+  racCaseId?: string;
+  senderEmail: string;
+  subject: string;
+  receivedAt: string;
+  requiresResponse: boolean;
+  tag: string;
+  isHandled: boolean;
+  handledBy?: string;
+  handledAt?: string;
+  content: string;
+}
+
+export interface OilChemCalculation {
+  id: string;
+  claimId?: string;
+  cargoName: string;
+  cargoType: "Crude Oil" | "Fuel Oil" | "Clean Petroleum Product" | "Chemical Grade A" | "Chemical Grade B" | "Vegetable Oil";
+  quantityMetricTons: number;
+  density15C: number;
+  temperatureC: number;
+  vcfFactor: number; // Volume Correction Factor
+  correctedQuantity: number;
+  pumpingWarrantyRateM3H: number;
+  pumpingWarrantyPressureBar: number;
+  cowAllowedHours: number; // Crude Oil Washing allowance
+  manifoldConnectionHours: number;
+  actualPumpingHours: number;
+  allowedPumpingHours: number;
+  excessPumpingHours: number;
+  excessPumpingDemurrage: number;
+  hourlyRate: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface TimeSheetImport {
+  id: string;
+  claimId: string;
+  fileName: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  parsedRows: {
+    activityName: string;
+    startTime: string;
+    stopTime: string;
+    durationMinutes: number;
+    category: DeductionCategory;
+    percentageCounted: number;
+    remarks?: string;
+  }[];
+  isApproved: boolean;
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
+/* =========================================================================
+   RAC (Recoverable / Additional Costs / Claims) DOMAIN MODELS
+   ========================================================================= */
+
+export type RacStatus =
+  | "Draft"
+  | "Submitted"
+  | "Under Review"
+  | "Correction Required"
+  | "Reviewed"
+  | "Closed";
+
+export type RacType =
+  | "Demurrage Review"
+  | "Additional Port Costs"
+  | "Pumping Warranty Contention"
+  | "Berth Allocation Audit"
+  | "Bunkers / Deviation Claim"
+  | "Special Cargo Handling"
+  | "Detention / Shifting Dispute";
+
+export interface RacCase {
+  id: string; // e.g. "RAC-2024-001"
+  racReference: string;
+  clientName: string;
+  shipName: string;
+  voyageNumber?: string;
+  counterpartyName: string;
+  racType: RacType;
+  relevantDate: string;
+  assignedTo: string; // processor id or name
+  status: RacStatus;
+  totalAmount: number;
+  agreedAmount: number;
+  outstandingAmount: number;
+  deadlineDate?: string;
+  description?: string;
+  notes?: string;
+  supportingDocsCount?: number;
+  claimId?: string; // Optional linkage to an existing Claim
+  documents?: DocumentRecord[];
+  calculation?: RacCalculation;
+  statusHistory?: RacStatusHistoryEntry[];
+  discrepancies?: Discrepancy[];
+  createdBy: string;
+  createdAt: string;
+  updatedBy?: string;
+  updatedAt: string;
+}
+
+export interface RacStatusHistoryEntry {
+  id: string;
+  racCaseId: string;
+  previousStatus: RacStatus;
+  newStatus: RacStatus;
+  changedBy: string;
+  changedAt: string;
+  remarks?: string;
+}
+
+export interface RacCalculation {
+  id: string;
+  racCaseId: string;
+  ruleVersion: string;
+  parameters: {
+    baseRate?: number;
+    unitType?: "Days" | "Hours" | "Metric Tons" | "Lump Sum";
+    costCategories?: {
+      category: string;
+      unitCost: number;
+      quantity: number;
+      total: number;
+      deductiblePercent?: number;
+    }[];
+    taxOrVatPercent?: number;
+    graceAllowanceHours?: number;
+    prorataFactor?: number;
+    customRuleDescription?: string;
+  };
+  inputs: {
+    quantityOrDuration: number;
+    agreedDailyOrHourlyRate: number;
+    actualIncurredCost: number;
+    counterpartyAllowance: number;
+  };
+  adjustments: {
+    id: string;
+    description: string;
+    amount: number;
+    isDeduction: boolean;
+  }[];
+  calculatedResult: number;
+  formulaBreakdown: {
+    step: string;
+    formula: string;
+    value: number;
+  }[];
+  explanation: string;
+  calculationStatus: "Preliminary" | "Verified" | "Disputed" | "Approved";
+  reviewedBy?: string;
+  calculatedAt: string;
 }
 
 export interface DashboardMetrics {
@@ -334,4 +583,23 @@ export interface DashboardMetrics {
   statusDistribution: { status: ClaimStatus; count: number; value: number; color: string }[];
   demurrageTrend: { month: string; filed: number; received: number; agreed: number }[];
   clientExposure: { client: string; exposure: number; claimCount: number }[];
+  paymentAging: { bracket: string; amount: number; count: number }[];
+  // RAC Dashboard Metrics
+  racMetrics?: RacDashboardMetrics;
+}
+
+export interface RacDashboardMetrics {
+  totalCases: number;
+  openCases: number;
+  closedCases: number;
+  pendingReviewCases: number;
+  correctionRequiredCases: number;
+  assignedCasesCount: number;
+  totalRacAmount: number;
+  agreedRacAmount: number;
+  outstandingRacAmount: number;
+  approachingDeadlineCount: number;
+  statusDistribution: { status: RacStatus; count: number; value: number; color: string }[];
+  typeDistribution: { type: RacType; count: number; value: number }[];
+  clientExposure: { client: string; amount: number; caseCount: number }[];
 }

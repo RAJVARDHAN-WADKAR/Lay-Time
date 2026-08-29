@@ -1,215 +1,169 @@
-import { Claim, SoFActivity, DeductionItem } from "@/lib/types";
-import { getStorageItem, setStorageItem } from "./storage";
-import { createNotification } from "./notifications";
+import { Claim, SoFActivity, DeductionItem, OwnerComparison, EmailFollowup } from "@/lib/types";
 
-const STORAGE_KEY = "demurrage_claims";
-const delay = (ms: number = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+export async function getClaims(params?: {
+  status?: string;
+  claimType?: string;
+  client?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<Claim[]> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.status && params.status !== "All") query.set("status", params.status);
+    if (params?.claimType && params.claimType !== "All") query.set("claimType", params.claimType);
+    if (params?.client && params.client !== "All") query.set("client", params.client);
+    if (params?.search) query.set("search", params.search);
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.limit) query.set("limit", String(params.limit));
 
-export async function getClaims(): Promise<Claim[]> {
-  await delay();
-  return getStorageItem<Claim[]>(STORAGE_KEY, []);
+    const res = await fetch(`/api/claims?${query.toString()}`, {
+      cache: "no-store"
+    });
+    if (!res.ok) throw new Error("Failed to fetch claims");
+    const data = await res.json();
+    return data.claims || [];
+  } catch (error) {
+    console.error("API getClaims error:", error);
+    return [];
+  }
 }
 
 export async function getClaimById(id: string): Promise<Claim | null> {
-  await delay();
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const claim = claims.find((c) => c.id === id);
-  return claim ? JSON.parse(JSON.stringify(claim)) : null;
+  try {
+    const res = await fetch(`/api/claims/${id}`, {
+      cache: "no-store"
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.claim || null;
+  } catch (error) {
+    console.error(`API getClaimById(${id}) error:`, error);
+    return null;
+  }
 }
 
-export async function createClaim(claimData: Omit<Claim, "id" | "createdAt" | "updatedAt">): Promise<Claim> {
-  await delay(100);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const year = new Date().getFullYear();
-  const nextNum = String(claims.length + 1).padStart(3, "0");
-  const newId = `CLM-${year}-${nextNum}`;
-  const now = new Date().toISOString();
+export async function createClaim(claimData: Partial<Claim>): Promise<Claim> {
+  const res = await fetch("/api/claims", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(claimData)
+  });
 
-  const newClaim: Claim = {
-    ...claimData,
-    id: newId,
-    createdAt: now,
-    updatedAt: now,
-    daysOpen: claimData.daysOpen ?? 0,
-    claimClosed: claimData.claimClosed ?? false,
-    ports: claimData.ports || [],
-    activities: claimData.activities || [],
-    deductions: claimData.deductions || [],
-    documentLinks: claimData.documentLinks || [],
-  };
-
-  const updatedClaims = [newClaim, ...claims];
-  setStorageItem(STORAGE_KEY, updatedClaims);
-
-  // Trigger dynamic notification
-  try {
-    await createNotification({
-      title: "New Claim Created",
-      message: `Claim ${newId} for vessel ${newClaim.shipName || "New Vessel"} was registered.`,
-      type: "claim",
-      claimId: newId,
-      claimName: newClaim.claimName,
-    });
-  } catch (e) {
-    console.error("Failed to create notification", e);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to create claim");
   }
 
-  return JSON.parse(JSON.stringify(newClaim));
+  const data = await res.json();
+  return data.claim;
 }
 
 export async function updateClaim(id: string, updates: Partial<Claim>): Promise<Claim> {
-  await delay(80);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const index = claims.findIndex((c) => c.id === id);
-  if (index === -1) throw new Error(`Claim ${id} not found`);
+  const res = await fetch(`/api/claims/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates)
+  });
 
-  const prevStatus = claims[index].claimStatus;
-
-  claims[index] = {
-    ...claims[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
-
-  setStorageItem(STORAGE_KEY, claims);
-
-  // If status changed, notify
-  if (updates.claimStatus && updates.claimStatus !== prevStatus) {
-    try {
-      await createNotification({
-        title: "Claim Status Updated",
-        message: `Claim ${id} status changed from ${prevStatus} to ${updates.claimStatus}.`,
-        type: "claim",
-        claimId: id,
-        claimName: claims[index].claimName,
-      });
-    } catch (e) {
-      console.error(e);
-    }
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to update claim");
   }
 
-  return JSON.parse(JSON.stringify(claims[index]));
+  const data = await res.json();
+  return data.claim;
 }
 
 export async function deleteClaim(id: string): Promise<boolean> {
-  await delay(80);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const target = claims.find((c) => c.id === id);
-  const filtered = claims.filter((c) => c.id !== id);
-  setStorageItem(STORAGE_KEY, filtered);
-
-  if (target) {
-    try {
-      await createNotification({
-        title: "Claim Removed",
-        message: `Claim ${id} (${target.shipName}) was deleted.`,
-        type: "claim",
-        claimId: id,
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  return true;
+  const res = await fetch(`/api/claims/${id}`, {
+    method: "DELETE"
+  });
+  return res.ok;
 }
 
-export async function addActivity(claimId: string, activity: Omit<SoFActivity, "id">): Promise<SoFActivity> {
-  await delay(50);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const claim = claims.find((c) => c.id === claimId);
-  if (!claim) throw new Error(`Claim ${claimId} not found`);
+export async function getOwnerComparison(claimId: string): Promise<OwnerComparison | undefined> {
+  try {
+    const res = await fetch(`/api/claims/${claimId}/owner-comparison`, { cache: "no-store" });
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    return data.comparison;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+export async function saveOwnerComparison(claimId: string, comp: Partial<OwnerComparison>): Promise<OwnerComparison> {
+  const res = await fetch(`/api/claims/${claimId}/owner-comparison`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(comp)
+  });
+  if (!res.ok) throw new Error("Failed to save owner comparison");
+  const data = await res.json();
+  return data.comparison;
+}
+
+export async function getMissingDocsCheck(claimId: string): Promise<any> {
+  const res = await fetch(`/api/claims/${claimId}/missing-docs`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to check missing documents");
+  return await res.json();
+}
+
+export async function getClaimChasers(claimId: string): Promise<EmailFollowup[]> {
+  try {
+    const res = await fetch(`/api/claims/${claimId}/chasers`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.chasers || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function sendClaimChaser(claimId: string, chaser: Partial<EmailFollowup>): Promise<EmailFollowup> {
+  const res = await fetch(`/api/claims/${claimId}/chasers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(chaser)
+  });
+  if (!res.ok) throw new Error("Failed to dispatch claim follow-up");
+  const data = await res.json();
+  return data.chaser;
+}
+
+export async function addSoFActivity(claimId: string, activity: Omit<SoFActivity, "id">): Promise<Claim> {
+  const claim = await getClaimById(claimId);
+  if (!claim) throw new Error("Claim not found");
 
   const newActivity: SoFActivity = {
     ...activity,
-    id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    claimId,
+    id: `act-${Date.now()}`
   };
 
-  if (!claim.activities) claim.activities = [];
-  claim.activities.push(newActivity);
-  claim.updatedAt = new Date().toISOString();
-
-  setStorageItem(STORAGE_KEY, claims);
-  return JSON.parse(JSON.stringify(newActivity));
+  const updatedActivities = [...(claim.activities || []), newActivity];
+  return await updateClaim(claimId, { activities: updatedActivities });
 }
 
-export async function updateActivity(
-  claimId: string,
-  activityId: string,
-  updates: Partial<SoFActivity>
-): Promise<SoFActivity> {
-  await delay(50);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const claim = claims.find((c) => c.id === claimId);
-  if (!claim || !claim.activities) throw new Error("Claim or activities not found");
+export async function updateSoFActivity(claimId: string, activityId: string, updates: Partial<SoFActivity>): Promise<Claim> {
+  const claim = await getClaimById(claimId);
+  if (!claim) throw new Error("Claim not found");
 
-  const actIndex = claim.activities.findIndex((a) => a.id === activityId);
-  if (actIndex === -1) throw new Error(`Activity ${activityId} not found`);
+  const updatedActivities = (claim.activities || []).map((a) =>
+    a.id === activityId ? { ...a, ...updates } : a
+  );
 
-  claim.activities[actIndex] = {
-    ...claim.activities[actIndex],
-    ...updates,
-    isCorrected: true,
-  };
-  claim.updatedAt = new Date().toISOString();
-
-  setStorageItem(STORAGE_KEY, claims);
-  return JSON.parse(JSON.stringify(claim.activities[actIndex]));
+  return await updateClaim(claimId, { activities: updatedActivities });
 }
 
-export async function deleteActivity(claimId: string, activityId: string): Promise<boolean> {
-  await delay(50);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const claim = claims.find((c) => c.id === claimId);
-  if (!claim || !claim.activities) return false;
+export async function deleteSoFActivity(claimId: string, activityId: string): Promise<Claim> {
+  const claim = await getClaimById(claimId);
+  if (!claim) throw new Error("Claim not found");
 
-  claim.activities = claim.activities.filter((a) => a.id !== activityId);
-  claim.updatedAt = new Date().toISOString();
-
-  setStorageItem(STORAGE_KEY, claims);
-  return true;
+  const updatedActivities = (claim.activities || []).filter((a) => a.id !== activityId);
+  return await updateClaim(claimId, { activities: updatedActivities });
 }
 
-export async function addDeduction(claimId: string, deduction: Omit<DeductionItem, "id">): Promise<DeductionItem> {
-  await delay(50);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const claim = claims.find((c) => c.id === claimId);
-  if (!claim) throw new Error(`Claim ${claimId} not found`);
-
-  const newDeduction: DeductionItem = {
-    ...deduction,
-    id: `ded-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    claimId,
-  };
-
-  if (!claim.deductions) claim.deductions = [];
-  claim.deductions.push(newDeduction);
-  claim.updatedAt = new Date().toISOString();
-
-  setStorageItem(STORAGE_KEY, claims);
-  return JSON.parse(JSON.stringify(newDeduction));
-}
-
-export async function deleteDeduction(claimId: string, deductionId: string): Promise<boolean> {
-  await delay(50);
-  const claims = getStorageItem<Claim[]>(STORAGE_KEY, []);
-  const claim = claims.find((c) => c.id === claimId);
-  if (!claim || !claim.deductions) return false;
-
-  claim.deductions = claim.deductions.filter((d) => d.id !== deductionId);
-  claim.updatedAt = new Date().toISOString();
-
-  setStorageItem(STORAGE_KEY, claims);
-  return true;
-}
-
-export async function clearAllClaims(): Promise<void> {
-  await delay(50);
-  setStorageItem(STORAGE_KEY, []);
-}
-
-export async function resetMockClaims(): Promise<void> {
-  await delay(50);
-  setStorageItem(STORAGE_KEY, []);
-}
+export const addActivity = addSoFActivity;
+export const updateActivity = updateSoFActivity;
+export const deleteActivity = deleteSoFActivity;

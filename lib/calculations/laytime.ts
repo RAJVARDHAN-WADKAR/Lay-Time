@@ -211,15 +211,7 @@ export function calculateClaimLaytime(
     calculatedDespatchAmount: Math.round(calculatedDespatchAmount * 100) / 100,
     finalPayableAmount: Math.round(finalPayableAmount * 100) / 100,
     portCalculations,
-    timebarCompliance: {
-      noticeDeadline: timebarCompliance.noticeDeadline,
-      noticeSubmitted: timebarCompliance.noticeSubmitted,
-      isNoticeValid: timebarCompliance.isNoticeValid,
-      claimDeadline: timebarCompliance.claimDeadline,
-      claimSubmitted: timebarCompliance.claimSubmitted,
-      isClaimValid: timebarCompliance.isClaimValid,
-      isTimebarred: timebarCompliance.isTimebarred,
-    },
+    timebarCompliance,
     assumptions,
   };
 }

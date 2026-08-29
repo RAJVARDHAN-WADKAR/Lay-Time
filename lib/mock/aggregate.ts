@@ -189,5 +189,11 @@ export function calculateDashboardMetrics(claims: Claim[], unreadNotifCount: num
     statusDistribution,
     demurrageTrend,
     clientExposure,
+    paymentAging: [
+      { bracket: "0-30 Days", amount: Math.round(totalExposure * 0.4), count: Math.round(totalClaimsCount * 0.4) },
+      { bracket: "31-60 Days", amount: Math.round(totalExposure * 0.3), count: Math.round(totalClaimsCount * 0.3) },
+      { bracket: "61-90 Days", amount: Math.round(totalExposure * 0.2), count: Math.round(totalClaimsCount * 0.2) },
+      { bracket: "90+ Days (Overdue)", amount: Math.round(totalExposure * 0.1), count: Math.round(totalClaimsCount * 0.1) }
+    ],
   };
 }

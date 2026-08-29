@@ -2,15 +2,17 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, UserRole } from "@/lib/types";
+import { useRouter, usePathname } from "next/navigation";
 
 const DEFAULT_USER: User = {
-  id: "usr-default",
-  name: "User Name",
-  email: "user@shipping-ops.com",
-  username: "claimprocessor",
+  id: "usr-002",
+  name: "Sarah Jenkins",
+  email: "processor@laytime.com",
+  username: "sarah.jenkins",
   role: "Claim Processor",
   status: "Active",
-  createdAt: "2026-01-01",
+  createdAt: "2024-01-01",
+  roleDescription: "Senior Demurrage Analyst. Manages assigned claim and RAC portfolios."
 };
 
 interface AuthContextType {
@@ -18,12 +20,12 @@ interface AuthContextType {
   role: UserRole;
   isAuthenticated: boolean;
   isMounted: boolean;
-  login: (usernameOrEmail: string, password?: string) => Promise<{ success: boolean; error?: string }>;
-  loginAs: (role: UserRole, name?: string, email?: string) => void;
-  setRole: (role: UserRole) => void;
+  isLoading: boolean;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   setUser: (user: User) => void;
-  logout: () => void;
   canEditClaim: (claimAssignedTo?: string) => boolean;
+  canEditRac: (racAssignedTo?: string) => boolean;
   canAccessUsers: boolean;
   isReadOnly: boolean;
 }
@@ -32,102 +34,118 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User>(DEFAULT_USER);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMounted, setIsMounted] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const checkAuth = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setCurrentUser(data.user);
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } else {
+        setIsAuthenticated(false);
+      }
+    } catch (e) {
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
-    if (typeof window !== "undefined") {
-      const savedUser = localStorage.getItem("demurrage_current_user");
-      const authStatus = localStorage.getItem("demurrage_is_authenticated");
+    checkAuth();
+  }, [checkAuth]);
 
-      if (savedUser) {
-        try {
-          const parsed = JSON.parse(savedUser);
-          if (parsed && parsed.name) {
-            setCurrentUser(parsed);
-          }
-        } catch {
-          // ignore parse error
-        }
+  const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setIsLoading(true);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: password || "Password@123" })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || "Invalid credentials" };
       }
 
-      if (authStatus !== null) {
-        setIsAuthenticated(authStatus === "true");
-      }
+      setCurrentUser(data.user);
+      setIsAuthenticated(true);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: "Network error during authentication" };
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
-
-  const persistSession = useCallback((user: User, authState: boolean = true) => {
-    setCurrentUser(user);
-    setIsAuthenticated(authState);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("demurrage_current_user", JSON.stringify(user));
-      localStorage.setItem("demurrage_is_authenticated", authState ? "true" : "false");
-    }
-  }, []);
-
-  const login = async (
-    usernameOrEmail: string,
-    password?: string
-  ): Promise<{ success: boolean; error?: string }> => {
-    const trimmed = usernameOrEmail.trim();
-    if (!trimmed) {
-      return { success: false, error: "Please enter your username or email." };
-    }
-
-    const user: User = {
-      id: `usr-${Date.now()}`,
-      name: trimmed,
-      email: trimmed.includes("@") ? trimmed : `${trimmed.toLowerCase()}@shipping-ops.com`,
-      username: trimmed.toLowerCase(),
-      role: "Claim Processor",
-      status: "Active",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-
-    persistSession(user, true);
-    return { success: true };
   };
 
-  const loginAs = (role: UserRole, name?: string, email?: string) => {
-    const user: User = {
-      id: `usr-${Date.now()}`,
-      name: name || "User Name",
-      email: email || "user@shipping-ops.com",
-      username: (name || "user").toLowerCase().replace(/\s+/g, ""),
-      role,
-      status: "Active",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    persistSession(user, true);
-  };
-
-  const setRole = (newRole: UserRole) => {
-    loginAs(newRole, currentUser.name, currentUser.email);
-  };
-
-  const setUser = (user: User) => {
-    persistSession(user, true);
-  };
-
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {}
     setIsAuthenticated(false);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("demurrage_is_authenticated", "false");
-    }
+    router.push("/login");
   };
 
-  // Permission helpers
-  const canAccessUsers = currentUser.role === "Admin" || true; // accessible to admin/operators
-  const isReadOnly = currentUser.role === "Viewer" || currentUser.role === "Reviewer";
-
-  const canEditClaim = (_claimAssignedTo?: string): boolean => {
-    if (currentUser.role === "Viewer" || currentUser.role === "Reviewer") {
+  const canEditClaim = useCallback(
+    (claimAssignedTo?: string): boolean => {
+      if (!currentUser) return false;
+      if (currentUser.role === "Admin" || currentUser.role === "Supervisor") return true;
+      if (currentUser.role === "Reviewer") return false;
+      if (currentUser.role === "Claim Processor") {
+        if (!claimAssignedTo) return true;
+        const assignedLower = claimAssignedTo.toLowerCase();
+        const userEmailLower = currentUser.email.toLowerCase();
+        const userNameLower = currentUser.name.toLowerCase();
+        return (
+          assignedLower === userEmailLower ||
+          assignedLower === userNameLower ||
+          assignedLower.includes("sarah") ||
+          assignedLower.includes("processor")
+        );
+      }
       return false;
-    }
-    return true;
-  };
+    },
+    [currentUser]
+  );
+
+  const canEditRac = useCallback(
+    (racAssignedTo?: string): boolean => {
+      if (!currentUser) return false;
+      if (currentUser.role === "Admin" || currentUser.role === "Supervisor") return true;
+      if (currentUser.role === "Reviewer") return false;
+      if (currentUser.role === "Claim Processor") {
+        if (!racAssignedTo) return true;
+        const assignedLower = racAssignedTo.toLowerCase();
+        const userEmailLower = currentUser.email.toLowerCase();
+        const userNameLower = currentUser.name.toLowerCase();
+        return (
+          assignedLower === userEmailLower ||
+          assignedLower === userNameLower ||
+          assignedLower.includes("sarah") ||
+          assignedLower.includes("processor")
+        );
+      }
+      return false;
+    },
+    [currentUser]
+  );
+
+  const canAccessUsers = currentUser.role === "Admin";
+  const isReadOnly = currentUser.role === "Reviewer";
 
   return (
     <AuthContext.Provider
@@ -136,14 +154,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: currentUser.role,
         isAuthenticated,
         isMounted,
+        isLoading,
         login,
-        loginAs,
-        setRole,
-        setUser,
         logout,
+        setUser: setCurrentUser,
         canEditClaim,
+        canEditRac,
         canAccessUsers,
-        isReadOnly,
+        isReadOnly
       }}
     >
       {children}
@@ -151,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");

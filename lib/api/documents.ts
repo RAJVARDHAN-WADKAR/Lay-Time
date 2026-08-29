@@ -1,107 +1,105 @@
-import { DocumentRecord, SoFActivity } from "@/lib/types";
-import { getStorageItem, setStorageItem } from "./storage";
-import { createNotification } from "./notifications";
+import { DocumentRecord, DocumentType } from "@/lib/types";
 
-const STORAGE_KEY = "demurrage_documents";
-const delay = (ms: number = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+export async function getDocuments(filter?: { claimId?: string; racCaseId?: string }): Promise<DocumentRecord[]> {
+  try {
+    const query = new URLSearchParams();
+    if (filter?.claimId) query.set("claimId", filter.claimId);
+    if (filter?.racCaseId) query.set("racCaseId", filter.racCaseId);
 
-export async function getDocuments(): Promise<DocumentRecord[]> {
-  await delay();
-  return getStorageItem<DocumentRecord[]>(STORAGE_KEY, []);
+    const res = await fetch(`/api/documents?${query.toString()}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.documents || [];
+  } catch (error) {
+    console.error("API getDocuments error:", error);
+    return [];
+  }
+}
+
+export async function getDocumentById(id: string): Promise<DocumentRecord | null> {
+  try {
+    const res = await fetch(`/api/documents/${id}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.document || null;
+  } catch (error) {
+    return null;
+  }
 }
 
 export async function uploadDocument(
-  file: { name: string; size: number; type: string },
-  claimId: string = "",
-  claimName: string = "",
-  docType: DocumentRecord["type"] = "SOF"
+  fileOrDoc: Partial<DocumentRecord> | { name: string; size: number; type: string },
+  claimId?: string,
+  claimName?: string,
+  docType?: DocumentType
 ): Promise<DocumentRecord> {
-  await delay(100);
-  const docs = getStorageItem<DocumentRecord[]>(STORAGE_KEY, []);
-  const newDocId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-  const now = new Date().toISOString();
+  let payload: Partial<DocumentRecord>;
 
-  const newDoc: DocumentRecord = {
-    id: newDocId,
-    claimId: claimId || "General",
-    claimName: claimName || "General Port Document",
-    fileName: file.name,
-    fileSize: file.size,
-    fileType: file.type || "application/pdf",
-    type: docType,
-    version: "v1.0",
-    uploadedAt: now,
-    status: "Uploaded",
-    extractedItemsCount: 0,
-    ocrConfidence: 0.96,
-  };
-
-  const updatedDocs = [newDoc, ...docs];
-  setStorageItem(STORAGE_KEY, updatedDocs);
-
-  // Trigger dynamic notification
-  try {
-    await createNotification({
-      title: "Document Uploaded",
-      message: `Document "${file.name}" (${docType}) was uploaded for claim ${claimId || "General"}.`,
-      type: "document",
-      claimId: claimId,
-      claimName: claimName,
-    });
-  } catch (e) {
-    console.error(e);
+  if ("name" in fileOrDoc && typeof fileOrDoc.name === "string" && !("fileName" in fileOrDoc)) {
+    payload = {
+      fileName: fileOrDoc.name,
+      fileSize: fileOrDoc.size,
+      fileType: fileOrDoc.type || "application/pdf",
+      claimId: claimId || undefined,
+      claimName: claimName || undefined,
+      category: docType || "SOF",
+      version: "1.0",
+      uploadedBy: "Current User",
+      status: "Uploaded"
+    };
+  } else {
+    payload = fileOrDoc as Partial<DocumentRecord>;
   }
 
-  return JSON.parse(JSON.stringify(newDoc));
+  const res = await fetch("/api/documents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to upload document");
+  }
+
+  const data = await res.json();
+  return data.document;
 }
 
-export async function updateDocumentStatus(
-  id: string,
-  status: DocumentRecord["status"],
-  extractedItemsCount?: number,
-  extractedActivities?: SoFActivity[]
-): Promise<DocumentRecord> {
-  await delay(50);
-  const docs = getStorageItem<DocumentRecord[]>(STORAGE_KEY, []);
-  const doc = docs.find((d) => d.id === id);
-  if (!doc) throw new Error("Document not found");
+export async function updateDocumentStatus(id: string, status: DocumentRecord["status"]): Promise<DocumentRecord> {
+  const res = await fetch(`/api/documents/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status })
+  });
 
-  doc.status = status;
-  if (extractedItemsCount !== undefined) {
-    doc.extractedItemsCount = extractedItemsCount;
-  }
-  if (extractedActivities !== undefined) {
-    doc.ocrExtractedActivities = extractedActivities;
-  }
-
-  setStorageItem(STORAGE_KEY, docs);
-  return JSON.parse(JSON.stringify(doc));
+  if (!res.ok) throw new Error("Failed to update document status");
+  const data = await res.json();
+  return data.document;
 }
 
 export async function deleteDocument(id: string): Promise<boolean> {
-  await delay(50);
-  const docs = getStorageItem<DocumentRecord[]>(STORAGE_KEY, []);
-  const target = docs.find((d) => d.id === id);
-  const filtered = docs.filter((d) => d.id !== id);
-  setStorageItem(STORAGE_KEY, filtered);
-
-  if (target) {
-    try {
-      await createNotification({
-        title: "Document Deleted",
-        message: `Document "${target.fileName}" was removed from the system.`,
-        type: "document",
-        claimId: target.claimId,
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  return true;
+  const res = await fetch(`/api/documents/${id}`, {
+    method: "DELETE"
+  });
+  return res.ok;
 }
 
-export async function clearAllDocuments(): Promise<void> {
-  await delay(50);
-  setStorageItem(STORAGE_KEY, []);
+export async function triggerDocumentOcr(docId: string, claimId: string, fileName: string): Promise<any> {
+  const res = await fetch("/api/ocr", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName,
+      claimId,
+      docId
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "OCR Processing failed");
+  }
+
+  return await res.json();
 }

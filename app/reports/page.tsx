@@ -219,6 +219,8 @@ export default function ReportsPage() {
                 className="h-9 text-xs bg-white"
               >
                 <option value="demurrage_summary">Demurrage Summary Report</option>
+                <option value="rac_summary">RAC (Recoverable Additional Costs) Report</option>
+                <option value="combined_settlement">Combined Demurrage + RAC Settlement Dossier</option>
                 <option value="claim_aging">Claim Aging Report</option>
                 <option value="vessel_performance">Vessel Performance Report</option>
                 <option value="client_exposure">Client Exposure Analysis</option>

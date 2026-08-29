@@ -28,8 +28,13 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 
+import { OilChemCalculator } from "@/components/calculations/OilChemCalculator";
+import { RacCalculator } from "@/components/calculations/RacCalculator";
+import { Briefcase } from "lucide-react";
+
 export default function CalculationsPage() {
   const { success, info } = useToast();
+  const [calculatorTab, setCalculatorTab] = useState<"standard" | "oilchem" | "rac">("standard");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string>("");
   const [claim, setClaim] = useState<Claim | null>(null);
@@ -266,18 +271,55 @@ export default function CalculationsPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* 1. Header & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-        <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Laytime Calculator
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Automated demurrage &amp; despatch calculation engine with operational deduction auditing
-          </p>
-        </div>
+      {/* Tab Switcher */}
+      <div className="flex border-b border-slate-200 space-x-6 text-xs font-bold">
+        <button
+          onClick={() => setCalculatorTab("standard")}
+          className={`pb-3 border-b-2 transition ${
+            calculatorTab === "standard" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Standard Laytime &amp; Demurrage Calculator
+        </button>
+        <button
+          onClick={() => setCalculatorTab("oilchem")}
+          className={`pb-3 border-b-2 transition flex items-center space-x-1.5 ${
+            calculatorTab === "oilchem" ? "border-cyan-600 text-cyan-600" : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Oil &amp; Chemical Cargo Calculator</span>
+          <span className="bg-cyan-100 text-cyan-800 text-[10px] px-1.5 py-0.2 rounded font-bold">Liquid Tanker</span>
+        </button>
+        <button
+          onClick={() => setCalculatorTab("rac")}
+          className={`pb-3 border-b-2 transition flex items-center space-x-1.5 ${
+            calculatorTab === "rac" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Briefcase className="h-3.5 w-3.5 mr-1 text-indigo-600" />
+          <span>RAC Recoverable Costs Engine</span>
+          <span className="bg-indigo-100 text-indigo-800 text-[10px] px-1.5 py-0.2 rounded font-bold">Rule Engine</span>
+        </button>
+      </div>
+
+      {calculatorTab === "oilchem" ? (
+        <OilChemCalculator />
+      ) : calculatorTab === "rac" ? (
+        <RacCalculator />
+      ) : (
+        <>
+          {/* 1. Header & Mode Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
+            <div>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                  Standard Laytime Calculator
+                </h1>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Automated demurrage &amp; despatch calculation engine with operational deduction auditing
+              </p>
+            </div>
 
         {/* Claim Selector or Mode */}
         <div className="flex flex-wrap items-center gap-2.5">
@@ -657,6 +699,8 @@ export default function CalculationsPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }

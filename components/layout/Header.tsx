@@ -30,7 +30,7 @@ interface HeaderProps {
 export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, logout, setRole } = useAuth();
+  const { currentUser, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);

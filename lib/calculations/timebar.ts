@@ -4,10 +4,12 @@ export interface TimebarResult {
   noticeDeadline: string;
   noticeSubmitted: string;
   isNoticeValid: boolean;
+  noticeAlarmLevel: "Normal" | "Approaching" | "Critical" | "Expired";
   noticeDaysRemaining: number;
   claimDeadline: string;
   claimSubmitted: string;
   isClaimValid: boolean;
+  claimAlarmLevel: "Normal" | "Approaching" | "Critical" | "Expired";
   claimDaysRemaining: number;
   isTimebarred: boolean;
   summaryReason: string;
@@ -74,6 +76,22 @@ export function calculateTimebarCompliance(
     (!isNoticeValid && noticeDeadlineStr !== "—") ||
     (!isClaimValid && claimDeadlineStr !== "—");
 
+  const noticeAlarmLevel: TimebarResult["noticeAlarmLevel"] = !isNoticeValid || noticeDaysRemaining <= 0
+    ? "Expired"
+    : noticeDaysRemaining <= 5
+    ? "Critical"
+    : noticeDaysRemaining <= 14
+    ? "Approaching"
+    : "Normal";
+
+  const claimAlarmLevel: TimebarResult["claimAlarmLevel"] = !isClaimValid || claimDaysRemaining <= 0
+    ? "Expired"
+    : claimDaysRemaining <= 10
+    ? "Critical"
+    : claimDaysRemaining <= 25
+    ? "Approaching"
+    : "Normal";
+
   let summaryReason = "Claim submitted within allowed C/P timebars.";
   if (!isNoticeValid && !isClaimValid && noticeDeadlineStr !== "—") {
     summaryReason = `Both Notice and Claim submission are timebarred.`;
@@ -87,10 +105,12 @@ export function calculateTimebarCompliance(
     noticeDeadline: noticeDeadlineStr,
     noticeSubmitted: claim.noticeReceivedDate || "—",
     isNoticeValid,
+    noticeAlarmLevel,
     noticeDaysRemaining,
     claimDeadline: claimDeadlineStr,
     claimSubmitted: claim.claimReceivedDate || "—",
     isClaimValid,
+    claimAlarmLevel,
     claimDaysRemaining,
     isTimebarred,
     summaryReason,
