@@ -1,30 +1,18 @@
 import { DocumentRecord, DocumentType } from "@/lib/types";
+import {
+  getStoreDocuments,
+  getStoreDocumentById,
+  addStoreDocument,
+  deleteStoreDocument,
+  updateStoreDocumentStatus
+} from "@/lib/mock/clientStore";
 
 export async function getDocuments(filter?: { claimId?: string; racCaseId?: string }): Promise<DocumentRecord[]> {
-  try {
-    const query = new URLSearchParams();
-    if (filter?.claimId) query.set("claimId", filter.claimId);
-    if (filter?.racCaseId) query.set("racCaseId", filter.racCaseId);
-
-    const res = await fetch(`/api/documents?${query.toString()}`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.documents || [];
-  } catch (error) {
-    console.error("API getDocuments error:", error);
-    return [];
-  }
+  return getStoreDocuments(filter);
 }
 
 export async function getDocumentById(id: string): Promise<DocumentRecord | null> {
-  try {
-    const res = await fetch(`/api/documents/${id}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.document || null;
-  } catch (error) {
-    return null;
-  }
+  return getStoreDocumentById(id);
 }
 
 export async function uploadDocument(
@@ -43,6 +31,7 @@ export async function uploadDocument(
       claimId: claimId || undefined,
       claimName: claimName || undefined,
       category: docType || "SOF",
+      type: docType || "SOF",
       version: "1.0",
       uploadedBy: "Current User",
       status: "Uploaded"
@@ -51,55 +40,29 @@ export async function uploadDocument(
     payload = fileOrDoc as Partial<DocumentRecord>;
   }
 
-  const res = await fetch("/api/documents", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || "Failed to upload document");
-  }
-
-  const data = await res.json();
-  return data.document;
+  return addStoreDocument(payload);
 }
 
 export async function updateDocumentStatus(id: string, status: DocumentRecord["status"]): Promise<DocumentRecord> {
-  const res = await fetch(`/api/documents/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status })
-  });
-
-  if (!res.ok) throw new Error("Failed to update document status");
-  const data = await res.json();
-  return data.document;
+  return updateStoreDocumentStatus(id, status);
 }
 
 export async function deleteDocument(id: string): Promise<boolean> {
-  const res = await fetch(`/api/documents/${id}`, {
-    method: "DELETE"
-  });
-  return res.ok;
+  return deleteStoreDocument(id);
 }
 
 export async function triggerDocumentOcr(docId: string, claimId: string, fileName: string): Promise<any> {
-  const res = await fetch("/api/ocr", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fileName,
-      claimId,
-      docId
-    })
-  });
+  // Simulate realistic OCR extraction delay
+  await new Promise((r) => setTimeout(r, 600));
+  updateStoreDocumentStatus(docId, "OCR Completed");
 
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || "OCR Processing failed");
-  }
-
-  return await res.json();
+  return {
+    success: true,
+    docId,
+    claimId,
+    fileName,
+    confidence: 0.94,
+    extractedActivitiesCount: 6,
+    status: "Verified"
+  };
 }

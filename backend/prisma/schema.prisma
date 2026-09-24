@@ -1,0 +1,433 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  CLAIM_PROCESSOR
+  SUPERVISOR
+  REVIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClaimStatus {
+  INCOMPLETE
+  SUBMITTED
+  REVIEW
+  SETTLED
+  DISPUTED
+  TIMEBARRED
+}
+
+enum OCRStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_REVIEW
+  VERIFIED
+}
+
+enum RACSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum RACFindingStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+  IGNORED
+}
+
+enum DocumentType {
+  SOF
+  CHARTERPARTY
+  NOR
+  TIME_SHEET
+  CARGO_DOCUMENT
+  SUPPORTING_DOCUMENT
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  RECEIVED
+  CONCLUDED
+}
+
+enum NotificationType {
+  TIMEBAR_WARNING
+  MISSING_DOCUMENT
+  CLAIM_REVIEW
+  PAYMENT_PENDING
+  FOLLOW_UP
+  RAC_WARNING
+}
+
+model User {
+  id               String       @id @default(uuid())
+  name             String
+  email            String       @unique
+  passwordHash     String
+  role             Role         @default(CLAIM_PROCESSOR)
+  status           UserStatus   @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  lastLoginAt      DateTime?
+
+  assignedClaims   Claim[]      @relation("AssignedClaims")
+  notifications    Notification[]
+  resolvedFindings RACFinding[] @relation("ResolvedFindings")
+  ruleOverrides    RuleOverride[]
+}
+
+model Client {
+  id          String   @id @default(uuid())
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  claims      Claim[]
+}
+
+model Vessel {
+  id         String   @id @default(uuid())
+  name       String
+  imoNumber  String?
+  vesselType String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  claims     Claim[]
+}
+
+model Claim {
+  id                      String       @id @default(uuid())
+  claimNumber             String       @unique
+  claimName               String
+  clientId                String?
+  client                  Client?      @relation(fields: [clientId], references: [id])
+  brokerName              String?
+  status                  ClaimStatus  @default(INCOMPLETE)
+  claimType               String       @default("Load Port Demurrage")
+  vesselId                String?
+  vessel                  Vessel?      @relation(fields: [vesselId], references: [id])
+  charterpartyType        String       @default("GENCON")
+  counterpartyName        String?
+  counterpartyType        String?
+  demurrageRatePerDay     Float        @default(20000)
+  claimFiledAmount        Float        @default(0)
+  receivedClaimAmount     Float?
+  agreedAmount            Float?
+  billableAmount          Float?
+  paymentReceived         Float        @default(0)
+  paymentConcluded        Boolean      @default(false)
+  claimNotes              String?
+  layday                  DateTime?
+  cancellingDate          DateTime?
+  voyageEndDate           DateTime?
+  instructionReceivedDate DateTime?
+  noticeReceivedDate      DateTime?
+  claimReceivedDate       DateTime?
+  noticeTimebarDays       Int          @default(30)
+  claimTimebarDays        Int          @default(90)
+  timebarred              Boolean      @default(false)
+  claimAgreedDate         DateTime?
+  charterpartyDate        DateTime?
+  daysAwaitingPayment     Int          @default(0)
+  assignedProcessorId     String?
+  assignedProcessor       User?        @relation("AssignedClaims", fields: [assignedProcessorId], references: [id])
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  ports                   Port[]
+  statementOfFacts        StatementOfFacts[]
+  calculations            Calculation[]
+  racAnalyses             RACAnalysis[]
+  ownerCalculations       OwnerCalculation[]
+  internalCalculations    InternalCalculation[]
+  documents               Document[]
+  payments                Payment[]
+  notifications           Notification[]
+  ruleOverrides           RuleOverride[]
+
+  @@index([claimNumber])
+  @@index([clientId])
+  @@index([status])
+  @@index([claimType])
+  @@index([assignedProcessorId])
+  @@index([claimReceivedDate])
+  @@index([timebarred])
+  @@index([vesselId])
+}
+
+model Port {
+  id             String   @id @default(uuid())
+  claimId        String
+  claim          Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  name           String
+  numberOfBerths Int      @default(1)
+  loadRate       Float    @default(5000)
+  portType       String   @default("Load Port")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  berths         Berth[]
+}
+
+model Berth {
+  id                  String          @id @default(uuid())
+  portId              String
+  port                Port            @relation(fields: [portId], references: [id], onDelete: Cascade)
+  name                String
+  quantity            Float           @default(0)
+  loadRate            Float           @default(5000)
+  prorataPercentage   Float           @default(100)
+  isProrataOverridden Boolean         @default(false)
+  cargoType           String?
+  receiverName        String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  sofActivities       SOFActivity[]
+  deductionItems      DeductionItem[]
+}
+
+model StatementOfFacts {
+  id               String        @id @default(uuid())
+  claimId          String
+  claim            Claim         @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  documentId       String?
+  status           String        @default("DRAFT")
+  extractionSource String        @default("MANUAL")
+  verified         Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  activities       SOFActivity[]
+}
+
+model SOFActivity {
+  id                String           @id @default(uuid())
+  sofId             String
+  sof               StatementOfFacts @relation(fields: [sofId], references: [id], onDelete: Cascade)
+  berthId           String?
+  berth             Berth?           @relation(fields: [berthId], references: [id])
+  activityName      String
+  startTime         DateTime
+  stopTime          DateTime
+  durationMinutes   Int
+  percentageCounted Float            @default(100)
+  deductionCategory String           @default("Others")
+  remarks           String?
+  source            String           @default("MANUAL")
+  ocrConfidence     Float?
+  requiresReview    Boolean          @default(false)
+  verified          Boolean          @default(true)
+  isCorrected       Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([sofId])
+  @@index([berthId])
+}
+
+model OCRDocument {
+  id            String     @id @default(uuid())
+  documentId    String?
+  status        OCRStatus  @default(PROCESSING)
+  extractedText String?
+  confidence    Float      @default(0.95)
+  processedAt   DateTime   @default(now())
+  errorMessage  String?
+
+  fields        OCRField[]
+}
+
+model OCRField {
+  id             String      @id @default(uuid())
+  ocrDocumentId  String
+  ocrDocument    OCRDocument @relation(fields: [ocrDocumentId], references: [id], onDelete: Cascade)
+  fieldName      String
+  extractedValue String?
+  confidence     Float       @default(0.95)
+  requiresReview Boolean     @default(false)
+  verifiedValue  String?
+  status         String      @default("NEEDS_REVIEW")
+}
+
+model Calculation {
+  id                      String                @id @default(uuid())
+  claimId                 String
+  claim                   Claim                 @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  grossElapsedMinutes     Int
+  totalDeductionMinutes   Int
+  countedDeductionMinutes Int
+  netLaytimeUsedMinutes   Int
+  allowedLaytimeMinutes   Int
+  excessLaytimeMinutes    Int                   @default(0)
+  savedLaytimeMinutes     Int                   @default(0)
+  demurrageAmount         Float                 @default(0)
+  despatchAmount          Float                 @default(0)
+  finalClaimAmount        Float                 @default(0)
+  calculationBreakdown    Json
+  isOverridden            Boolean               @default(false)
+  overrideReason          String?
+  overriddenBy            String?
+  overriddenAt            DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  deductions              DeductionItem[]
+  racAnalyses             RACAnalysis[]
+  internalCalculations    InternalCalculation[]
+}
+
+model DeductionItem {
+  id                     String      @id @default(uuid())
+  calculationId          String
+  calculation            Calculation @relation(fields: [calculationId], references: [id], onDelete: Cascade)
+  title                  String
+  category               String
+  startTime              DateTime
+  stopTime               DateTime
+  durationMinutes        Int
+  percentageCounted      Float       @default(0)
+  berthId                String?
+  berth                  Berth?      @relation(fields: [berthId], references: [id])
+  prorataPercentage      Float       @default(100)
+  countedDurationMinutes Int
+  remarks                String?
+}
+
+model RACAnalysis {
+  id            String        @id @default(uuid())
+  claimId       String
+  claim         Claim         @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  calculationId String?
+  calculation   Calculation?  @relation(fields: [calculationId], references: [id])
+  overallStatus String        @default("COMPLETED")
+  score         Int           @default(88)
+  createdAt     DateTime      @default(now())
+  completedAt   DateTime?
+
+  findings      RACFinding[]
+}
+
+model RACFinding {
+  id              String           @id @default(uuid())
+  racAnalysisId   String
+  racAnalysis     RACAnalysis      @relation(fields: [racAnalysisId], references: [id], onDelete: Cascade)
+  severity        RACSeverity      @default(WARNING)
+  category        String
+  title           String
+  description     String
+  relatedEntity   String?
+  relatedEntityId String?
+  recommendation  String
+  status          RACFindingStatus @default(OPEN)
+  createdAt       DateTime         @default(now())
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolver        User?            @relation("ResolvedFindings", fields: [resolvedBy], references: [id])
+
+  @@index([racAnalysisId])
+  @@index([severity])
+  @@index([status])
+}
+
+model OwnerCalculation {
+  id                 String   @id @default(uuid())
+  claimId            String
+  claim              Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  laytimeUsedMinutes Int
+  deductionsMinutes  Int
+  finalAmount        Float
+  source             String   @default("OWNER_SUBMISSION")
+  createdAt          DateTime @default(now())
+}
+
+model InternalCalculation {
+  id                 String      @id @default(uuid())
+  claimId            String
+  claim              Claim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  calculationId      String
+  calculation        Calculation @relation(fields: [calculationId], references: [id], onDelete: Cascade)
+  laytimeUsedMinutes Int
+  deductionsMinutes  Int
+  finalAmount        Float
+  createdAt          DateTime    @default(now())
+}
+
+model Document {
+  id           String       @id @default(uuid())
+  claimId      String
+  claim        Claim        @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileType     String
+  fileSize     Int
+  documentType DocumentType @default(OTHER)
+  storagePath  String
+  uploadedBy   String?
+  uploadedAt   DateTime     @default(now())
+  status       String       @default("VERIFIED")
+  revision     Int          @default(1)
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  claimId       String
+  claim         Claim         @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  amount        Float
+  paymentDate   DateTime      @default(now())
+  paymentStatus PaymentStatus @default(PENDING)
+  reference     String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id])
+  claimId   String?
+  claim     Claim?           @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(CLAIM_REVIEW)
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([type])
+}
+
+model RuleOverride {
+  id              String   @id @default(uuid())
+  claimId         String?
+  claim           Claim?   @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  entityType      String
+  entityId        String
+  originalValue   String
+  overriddenValue String
+  reason          String
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  timestamp       DateTime @default(now())
+}

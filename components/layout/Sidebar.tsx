@@ -11,20 +11,19 @@ import {
   PlusCircle,
   Calculator,
   FileText,
+  ScanText,
+  Briefcase,
+  Clock,
+  BarChart3,
   FileBarChart,
   Bell,
-  Users,
   Settings,
+  Users,
   LogOut,
   Anchor,
-  ScanText,
-  Bot,
-  Briefcase,
   Layers,
-  FolderPlus,
-  BarChart3,
-  ShieldCheck,
-  UserCheck
+  ChevronRight,
+  Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -38,12 +37,13 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
+  roles?: string[];
 }
 
 export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, currentUser, canAccessUsers } = useAuth();
+  const { currentUser, role, logout, canAccessUsers } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchUnread = async () => {
@@ -57,89 +57,42 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
 
   useEffect(() => {
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000);
-    return () => clearInterval(interval);
+    const handleStorage = () => fetchUnread();
+    window.addEventListener("demurrage_storage_change", handleStorage);
+    const interval = setInterval(fetchUnread, 10000);
+    return () => {
+      window.removeEventListener("demurrage_storage_change", handleStorage);
+      clearInterval(interval);
+    };
   }, []);
 
-  const mainNav: NavItem[] = [
+  // Exact 12 Navigation Items as specified in Section 5
+  const navItems: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/claims", label: currentUser.role === "Claim Processor" ? "Assigned Claims" : "Claims Ledger", icon: FileSpreadsheet },
-    ...(currentUser.role !== "Reviewer" ? [{ href: "/claims/create", label: "Create Claim", icon: PlusCircle }] : []),
+    {
+      href: "/claims",
+      label: role === "Claim Processor" ? "Assigned Claims" : "Claims",
+      icon: FileSpreadsheet
+    },
+    ...(role !== "Reviewer"
+      ? [{ href: "/claims/create", label: "Create Claim", icon: PlusCircle }]
+      : []),
+    { href: "/calculator", label: "Laytime Calculator", icon: Calculator },
     { href: "/documents", label: "Documents", icon: FileText },
-    { href: "/ocr", label: "OCR Review", icon: ScanText },
-    { href: "/calculations", label: "Calculations", icon: Calculator },
-    { href: "/reports", label: "Reports", icon: FileBarChart }
-  ];
-
-  const racNav: NavItem[] = [
-    { href: "/rac", label: "RAC Dashboard", icon: BarChart3 },
-    { href: "/rac/cases", label: "RAC Cases", icon: Briefcase },
-    ...(currentUser.role !== "Reviewer" ? [{ href: "/rac/create", label: "Create RAC", icon: FolderPlus }] : []),
-    { href: "/rac/calculations", label: "RAC Calculation", icon: Layers },
-    { href: "/rac/reports", label: "RAC Reports", icon: FileBarChart }
-  ];
-
-  const workflowNav: NavItem[] = [
+    { href: "/ocr", label: "OCR & SoF", icon: ScanText },
+    { href: "/rac", label: "RAC Review", icon: Briefcase },
+    { href: "/timebar", label: "Time-Bar Monitor", icon: Clock },
+    { href: "/analytics", label: "Analytics", icon: BarChart3 },
+    { href: "/reports", label: "Reports", icon: FileBarChart },
     { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount },
-    { href: "/ai-assistant", label: "AI Assistant", icon: Bot }
-  ];
-
-  const adminNav: NavItem[] = [
-    { href: "/users", label: "Users", icon: Users },
-    { href: "/settings", label: "Settings", icon: Settings }
+    { href: "/settings", label: "Settings", icon: Settings },
+    ...(canAccessUsers ? [{ href: "/users", label: "User Management", icon: Users }] : [])
   ];
 
   const handleLogout = async () => {
     await logout();
     if (onCloseMobile) onCloseMobile();
   };
-
-  const renderNavSection = (title: string, items: NavItem[]) => (
-    <div className="mb-4">
-      {!isCollapsed && (
-        <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-          {title}
-        </p>
-      )}
-      <nav className="space-y-0.5">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && item.href !== "/rac" && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onCloseMobile}
-              className={cn(
-                "flex items-center px-3 py-2 text-xs font-medium rounded-lg transition-colors group relative",
-                isActive
-                  ? "bg-blue-600/20 text-blue-400 font-semibold border-l-2 border-blue-500 rounded-l-none pl-2.5"
-                  : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
-              )}
-              title={isCollapsed ? item.label : undefined}
-            >
-              <Icon
-                className={cn(
-                  "h-4 w-4 shrink-0 transition-transform group-hover:scale-110",
-                  isActive ? "text-blue-400" : "text-slate-400 group-hover:text-slate-200",
-                  isCollapsed ? "mx-auto" : "mr-3"
-                )}
-              />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
-              {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                <span className="ml-auto bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {item.badge}
-                </span>
-              )}
-              {isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full" />
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
-  );
 
   return (
     <aside
@@ -160,30 +113,71 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
-              <span className="font-extrabold text-sm text-white tracking-wider leading-none">
+              <span className="font-black text-sm text-white tracking-wider leading-none">
                 LAYTIME
               </span>
               <span className="text-[10px] text-blue-400 font-bold tracking-wider uppercase mt-1">
-                CALCULATION SYSTEM
+                SYSTEM SUITE
               </span>
               <span className="text-[9px] text-slate-400 font-medium tracking-tight mt-0.5">
-                Demurrage & RAC Suite
+                Demurrage & RAC Hub
               </span>
             </div>
           )}
         </Link>
       </div>
 
-      {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 custom-scrollbar">
-        {renderNavSection("Main", mainNav)}
-        {renderNavSection("RAC Module", racNav)}
-        {renderNavSection("Workflow", workflowNav)}
-        {canAccessUsers && renderNavSection("Admin", adminNav)}
+      {/* Navigation Links */}
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 custom-scrollbar">
+        {!isCollapsed && (
+          <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Navigation
+          </p>
+        )}
+        <nav className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onCloseMobile}
+                className={cn(
+                  "flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors group relative",
+                  isActive
+                    ? "bg-blue-600 text-white font-semibold shadow-md shadow-blue-900/30"
+                    : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                )}
+                title={isCollapsed ? item.label : undefined}
+              >
+                <Icon
+                  className={cn(
+                    "h-4 w-4 shrink-0 transition-transform group-hover:scale-110",
+                    isActive ? "text-white" : "text-slate-400 group-hover:text-slate-200",
+                    isCollapsed ? "mx-auto" : "mr-3"
+                  )}
+                />
+                {!isCollapsed && <span className="truncate flex-1">{item.label}</span>}
+                {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
+                  <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+                {isCollapsed && item.badge !== undefined && item.badge > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-rose-500 rounded-full" />
+                )}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
 
-      {/* User Profile & Logout Footer */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-900/50">
+      {/* User Profile & Role Indicator */}
+      <div className="p-3 border-t border-slate-800/80 bg-slate-900/60">
         {!isCollapsed ? (
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5 min-w-0">
@@ -191,23 +185,28 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
                 {currentUser?.name ? currentUser.name.charAt(0) : "U"}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-white truncate">{currentUser?.name || "User"}</p>
-                <div className="flex items-center space-x-1">
-                  <span className={cn(
-                    "text-[9px] font-bold px-1.5 py-0.2 rounded",
-                    currentUser?.role === "Admin" ? "bg-purple-900/60 text-purple-300" :
-                    currentUser?.role === "Supervisor" ? "bg-amber-900/60 text-amber-300" :
-                    currentUser?.role === "Reviewer" ? "bg-slate-800 text-slate-300" :
-                    "bg-blue-900/60 text-blue-300"
-                  )}>
-                    {currentUser?.role || "Claim Processor"}
-                  </span>
-                </div>
+                <p className="text-xs font-bold text-white truncate">
+                  {currentUser?.name || "User"}
+                </p>
+                <span
+                  className={cn(
+                    "text-[9px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5",
+                    role === "Admin"
+                      ? "bg-purple-900/80 text-purple-300 border border-purple-700/50"
+                      : role === "Supervisor"
+                      ? "bg-amber-900/80 text-amber-300 border border-amber-700/50"
+                      : role === "Reviewer"
+                      ? "bg-slate-800 text-slate-300 border border-slate-700"
+                      : "bg-blue-900/80 text-blue-300 border border-blue-700/50"
+                  )}
+                >
+                  {role}
+                </span>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
               title="Logout"
             >
               <LogOut className="h-4 w-4" />
@@ -216,7 +215,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
         ) : (
           <button
             onClick={handleLogout}
-            className="w-full flex justify-center p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+            className="w-full flex justify-center p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             title="Logout"
           >
             <LogOut className="h-4 w-4" />

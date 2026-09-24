@@ -1,4 +1,18 @@
 import { Claim, SoFActivity, DeductionItem, OwnerComparison, EmailFollowup } from "@/lib/types";
+import {
+  getStoreClaims,
+  getStoreClaimById,
+  createStoreClaim,
+  updateStoreClaim,
+  deleteStoreClaim,
+  addStoreActivity,
+  updateStoreActivity,
+  deleteStoreActivity,
+  getStoreOwnerComparison,
+  saveStoreOwnerComparison,
+  getStoreClaimChasers,
+  sendStoreClaimChaser
+} from "@/lib/mock/clientStore";
 
 export async function getClaims(params?: {
   status?: string;
@@ -8,160 +22,79 @@ export async function getClaims(params?: {
   page?: number;
   limit?: number;
 }): Promise<Claim[]> {
-  try {
-    const query = new URLSearchParams();
-    if (params?.status && params.status !== "All") query.set("status", params.status);
-    if (params?.claimType && params.claimType !== "All") query.set("claimType", params.claimType);
-    if (params?.client && params.client !== "All") query.set("client", params.client);
-    if (params?.search) query.set("search", params.search);
-    if (params?.page) query.set("page", String(params.page));
-    if (params?.limit) query.set("limit", String(params.limit));
-
-    const res = await fetch(`/api/claims?${query.toString()}`, {
-      cache: "no-store"
-    });
-    if (!res.ok) throw new Error("Failed to fetch claims");
-    const data = await res.json();
-    return data.claims || [];
-  } catch (error) {
-    console.error("API getClaims error:", error);
-    return [];
-  }
+  return getStoreClaims(params);
 }
 
 export async function getClaimById(id: string): Promise<Claim | null> {
-  try {
-    const res = await fetch(`/api/claims/${id}`, {
-      cache: "no-store"
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.claim || null;
-  } catch (error) {
-    console.error(`API getClaimById(${id}) error:`, error);
-    return null;
-  }
+  return getStoreClaimById(id);
 }
 
 export async function createClaim(claimData: Partial<Claim>): Promise<Claim> {
-  const res = await fetch("/api/claims", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(claimData)
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || "Failed to create claim");
-  }
-
-  const data = await res.json();
-  return data.claim;
+  return createStoreClaim(claimData);
 }
 
 export async function updateClaim(id: string, updates: Partial<Claim>): Promise<Claim> {
-  const res = await fetch(`/api/claims/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updates)
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || "Failed to update claim");
-  }
-
-  const data = await res.json();
-  return data.claim;
+  return updateStoreClaim(id, updates);
 }
 
 export async function deleteClaim(id: string): Promise<boolean> {
-  const res = await fetch(`/api/claims/${id}`, {
-    method: "DELETE"
-  });
-  return res.ok;
+  return deleteStoreClaim(id);
 }
 
 export async function getOwnerComparison(claimId: string): Promise<OwnerComparison | undefined> {
-  try {
-    const res = await fetch(`/api/claims/${claimId}/owner-comparison`, { cache: "no-store" });
-    if (!res.ok) return undefined;
-    const data = await res.json();
-    return data.comparison;
-  } catch (e) {
-    return undefined;
-  }
+  return getStoreOwnerComparison(claimId);
 }
 
 export async function saveOwnerComparison(claimId: string, comp: Partial<OwnerComparison>): Promise<OwnerComparison> {
-  const res = await fetch(`/api/claims/${claimId}/owner-comparison`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(comp)
-  });
-  if (!res.ok) throw new Error("Failed to save owner comparison");
-  const data = await res.json();
-  return data.comparison;
+  return saveStoreOwnerComparison(claimId, comp);
 }
 
 export async function getMissingDocsCheck(claimId: string): Promise<any> {
-  const res = await fetch(`/api/claims/${claimId}/missing-docs`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to check missing documents");
-  return await res.json();
+  const claim = getStoreClaimById(claimId);
+  const activities = claim?.activities || [];
+  const ports = claim?.ports || [];
+  const documents = claim?.documents || [];
+
+  const missing: string[] = [];
+  if (!claim?.documentLinks || claim.documentLinks.length === 0) {
+    missing.push("Statement of Facts (SoF)");
+  }
+  if (!claim?.charterpartyDate) {
+    missing.push("Charterparty Agreement");
+  }
+  if (!claim?.noticeReceivedDate) {
+    missing.push("Notice of Readiness (NOR)");
+  }
+  if (ports.length > 1) {
+    missing.push("Prorata Allocation Worksheets");
+  }
+
+  return {
+    claimId,
+    missingDocuments: missing,
+    hasCriticalMissing: missing.length > 0,
+    checkTimestamp: new Date().toISOString()
+  };
 }
 
 export async function getClaimChasers(claimId: string): Promise<EmailFollowup[]> {
-  try {
-    const res = await fetch(`/api/claims/${claimId}/chasers`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.chasers || [];
-  } catch (e) {
-    return [];
-  }
+  return getStoreClaimChasers(claimId);
 }
 
 export async function sendClaimChaser(claimId: string, chaser: Partial<EmailFollowup>): Promise<EmailFollowup> {
-  const res = await fetch(`/api/claims/${claimId}/chasers`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(chaser)
-  });
-  if (!res.ok) throw new Error("Failed to dispatch claim follow-up");
-  const data = await res.json();
-  return data.chaser;
+  return sendStoreClaimChaser(claimId, chaser);
 }
 
 export async function addSoFActivity(claimId: string, activity: Omit<SoFActivity, "id">): Promise<Claim> {
-  const claim = await getClaimById(claimId);
-  if (!claim) throw new Error("Claim not found");
-
-  const newActivity: SoFActivity = {
-    ...activity,
-    id: `act-${Date.now()}`
-  };
-
-  const updatedActivities = [...(claim.activities || []), newActivity];
-  return await updateClaim(claimId, { activities: updatedActivities });
+  return addStoreActivity(claimId, activity);
 }
 
 export async function updateSoFActivity(claimId: string, activityId: string, updates: Partial<SoFActivity>): Promise<Claim> {
-  const claim = await getClaimById(claimId);
-  if (!claim) throw new Error("Claim not found");
-
-  const updatedActivities = (claim.activities || []).map((a) =>
-    a.id === activityId ? { ...a, ...updates } : a
-  );
-
-  return await updateClaim(claimId, { activities: updatedActivities });
+  return updateStoreActivity(claimId, activityId, updates);
 }
 
 export async function deleteSoFActivity(claimId: string, activityId: string): Promise<Claim> {
-  const claim = await getClaimById(claimId);
-  if (!claim) throw new Error("Claim not found");
-
-  const updatedActivities = (claim.activities || []).filter((a) => a.id !== activityId);
-  return await updateClaim(claimId, { activities: updatedActivities });
+  return deleteStoreActivity(claimId, activityId);
 }
 
 export const addActivity = addSoFActivity;

@@ -28,7 +28,58 @@ import {
   Layers,
   Calculator,
   Briefcase,
+  SlidersHorizontal,
+  Check
 } from "lucide-react";
+
+export interface ColumnDef {
+  key: string;
+  label: string;
+  category: "General" | "Financials" | "Voyage" | "Compliance";
+  defaultVisible: boolean;
+}
+
+export const SRS_COLUMNS: ColumnDef[] = [
+  // 1-13 General
+  { key: "id", label: "Claim No.", category: "General", defaultVisible: true },
+  { key: "claimName", label: "Claim Name", category: "General", defaultVisible: true },
+  { key: "accountName", label: "Client Name", category: "General", defaultVisible: true },
+  { key: "shipName", label: "Ship Name", category: "General", defaultVisible: true },
+  { key: "claimStatus", label: "Claim Status", category: "General", defaultVisible: true },
+  { key: "claimType", label: "Claim Type", category: "General", defaultVisible: true },
+  { key: "brokerName", label: "Broker Name", category: "General", defaultVisible: false },
+  { key: "cpType", label: "CP Form", category: "General", defaultVisible: false },
+  { key: "counterpartyName", label: "Counterparty", category: "General", defaultVisible: false },
+  { key: "counterpartyType", label: "Counterparty Role", category: "General", defaultVisible: false },
+  { key: "assignedTo", label: "Assigned To", category: "General", defaultVisible: false },
+  { key: "daysOpen", label: "Days Open", category: "General", defaultVisible: true },
+  { key: "claimClosed", label: "Claim Closed", category: "General", defaultVisible: false },
+
+  // 14-21 Financials
+  { key: "claimFiledAmount", label: "Demurrage (USD)", category: "Financials", defaultVisible: true },
+  { key: "demurrageRatePerDay", label: "Demurrage Rate ($/d)", category: "Financials", defaultVisible: false },
+  { key: "receivedClaimAmount", label: "Received Claim ($)", category: "Financials", defaultVisible: false },
+  { key: "agreedAmount", label: "Agreed Settlement ($)", category: "Financials", defaultVisible: false },
+  { key: "billableAmount", label: "Billable Amount ($)", category: "Financials", defaultVisible: false },
+  { key: "paymentReceived", label: "Payment Collected ($)", category: "Financials", defaultVisible: false },
+  { key: "paymentConcluded", label: "Payment Concluded", category: "Financials", defaultVisible: false },
+  { key: "daysAwaitingPayment", label: "Days Awaiting Payment", category: "Financials", defaultVisible: false },
+
+  // 22-28 Voyage
+  { key: "layday", label: "Layday", category: "Voyage", defaultVisible: false },
+  { key: "cancellingDate", label: "Cancelling Date", category: "Voyage", defaultVisible: false },
+  { key: "voyageEndDate", label: "Voyage End Date", category: "Voyage", defaultVisible: false },
+  { key: "instructionReceivedDate", label: "Instruction Date", category: "Voyage", defaultVisible: false },
+  { key: "noticeReceivedDate", label: "Notice Received Date", category: "Voyage", defaultVisible: false },
+  { key: "claimReceivedDate", label: "Claim Received Date", category: "Voyage", defaultVisible: false },
+  { key: "charterpartyDate", label: "Charterparty Date", category: "Voyage", defaultVisible: false },
+
+  // 29-32 Compliance
+  { key: "noticeTimebarDays", label: "Notice Timebar (d)", category: "Compliance", defaultVisible: false },
+  { key: "claimTimebarDays", label: "Claim Timebar (d)", category: "Compliance", defaultVisible: false },
+  { key: "timebarred", label: "Timebar Status", category: "Compliance", defaultVisible: false },
+  { key: "racDispute", label: "RAC Hub", category: "Compliance", defaultVisible: true }
+];
 
 interface LedgerTableProps {
   initialClaims: Claim[];
@@ -46,9 +97,50 @@ export function LedgerTable({
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [selectedType, setSelectedType] = useState("ALL");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    SRS_COLUMNS.forEach((col) => {
+      initial[col.key] = col.defaultVisible;
+    });
+    return initial;
+  });
+
+  const activeColumnCount = useMemo(() => {
+    return Object.values(visibleColumns).filter(Boolean).length;
+  }, [visibleColumns]);
+
+  const toggleColumn = (key: string) => {
+    setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const selectAllColumns = () => {
+    const all: Record<string, boolean> = {};
+    SRS_COLUMNS.forEach((col) => {
+      all[col.key] = true;
+    });
+    setVisibleColumns(all);
+  };
+
+  const resetDefaultColumns = () => {
+    const def: Record<string, boolean> = {};
+    SRS_COLUMNS.forEach((col) => {
+      def[col.key] = col.defaultVisible;
+    });
+    setVisibleColumns(def);
+  };
+
+  const clearAllColumns = () => {
+    const none: Record<string, boolean> = {};
+    SRS_COLUMNS.forEach((col) => {
+      none[col.key] = false;
+    });
+    setVisibleColumns(none);
+  };
 
   const { success } = useToast();
 
@@ -177,6 +269,17 @@ export function LedgerTable({
             )}
           </Button>
 
+          {/* Columns Visibility Toggle Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsColumnModalOpen(true)}
+            className="text-xs h-9 px-3 rounded-xl flex items-center space-x-1.5 bg-white hover:bg-slate-50 text-slate-700"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
+            <span>Columns ({activeColumnCount}/32)</span>
+          </Button>
+
           {hasActiveFilters && (
             <Button
               variant="ghost"
@@ -218,82 +321,193 @@ export function LedgerTable({
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
-                  <th className="py-3.5 px-4">Claim No.</th>
-                  <th className="py-3.5 px-4">Claim Name</th>
-                  <th className="py-3.5 px-4">Client</th>
-                  <th className="py-3.5 px-4">Ship Name</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Claim Type</th>
-                  <th className="py-3.5 px-4 text-right">Days Open</th>
-                  <th className="py-3.5 px-4 text-right">Demurrage (USD)</th>
-                  <th className="py-3.5 px-4 text-center">RAC Dispute</th>
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider whitespace-nowrap">
+                  {visibleColumns.id && <th className="py-3.5 px-4">Claim No.</th>}
+                  {visibleColumns.claimName && <th className="py-3.5 px-4">Claim Name</th>}
+                  {visibleColumns.accountName && <th className="py-3.5 px-4">Client</th>}
+                  {visibleColumns.shipName && <th className="py-3.5 px-4">Ship Name</th>}
+                  {visibleColumns.claimStatus && <th className="py-3.5 px-4">Status</th>}
+                  {visibleColumns.claimType && <th className="py-3.5 px-4">Claim Type</th>}
+                  {visibleColumns.brokerName && <th className="py-3.5 px-4">Broker</th>}
+                  {visibleColumns.cpType && <th className="py-3.5 px-4">CP Form</th>}
+                  {visibleColumns.counterpartyName && <th className="py-3.5 px-4">Counterparty</th>}
+                  {visibleColumns.counterpartyType && <th className="py-3.5 px-4">Role</th>}
+                  {visibleColumns.assignedTo && <th className="py-3.5 px-4">Assigned To</th>}
+                  {visibleColumns.daysOpen && <th className="py-3.5 px-4 text-right">Days Open</th>}
+                  {visibleColumns.claimClosed && <th className="py-3.5 px-4 text-center">Closed</th>}
+                  {visibleColumns.claimFiledAmount && <th className="py-3.5 px-4 text-right">Demurrage (USD)</th>}
+                  {visibleColumns.demurrageRatePerDay && <th className="py-3.5 px-4 text-right">Rate ($/d)</th>}
+                  {visibleColumns.receivedClaimAmount && <th className="py-3.5 px-4 text-right">Received ($)</th>}
+                  {visibleColumns.agreedAmount && <th className="py-3.5 px-4 text-right">Agreed ($)</th>}
+                  {visibleColumns.billableAmount && <th className="py-3.5 px-4 text-right">Billable ($)</th>}
+                  {visibleColumns.paymentReceived && <th className="py-3.5 px-4 text-right">Collected ($)</th>}
+                  {visibleColumns.paymentConcluded && <th className="py-3.5 px-4 text-center">Concluded</th>}
+                  {visibleColumns.daysAwaitingPayment && <th className="py-3.5 px-4 text-right">Awaiting (d)</th>}
+                  {visibleColumns.layday && <th className="py-3.5 px-4">Layday</th>}
+                  {visibleColumns.cancellingDate && <th className="py-3.5 px-4">Cancelling Date</th>}
+                  {visibleColumns.voyageEndDate && <th className="py-3.5 px-4">Voyage End</th>}
+                  {visibleColumns.instructionReceivedDate && <th className="py-3.5 px-4">Instruction Date</th>}
+                  {visibleColumns.noticeReceivedDate && <th className="py-3.5 px-4">Notice Date</th>}
+                  {visibleColumns.claimReceivedDate && <th className="py-3.5 px-4">Claim Date</th>}
+                  {visibleColumns.charterpartyDate && <th className="py-3.5 px-4">CP Date</th>}
+                  {visibleColumns.noticeTimebarDays && <th className="py-3.5 px-4 text-right">Notice TB</th>}
+                  {visibleColumns.claimTimebarDays && <th className="py-3.5 px-4 text-right">Claim TB</th>}
+                  {visibleColumns.timebarred && <th className="py-3.5 px-4 text-center">Timebar</th>}
+                  {visibleColumns.racDispute && <th className="py-3.5 px-4 text-center">RAC Hub</th>}
                   <th className="py-3.5 px-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {paginatedClaims.map((c) => (
-                  <tr key={c.id} className="hover:bg-blue-50/30 transition-colors">
-                    {/* 1. Claim No. */}
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                      <Link href={`/claims/${c.id}`} className="hover:text-blue-600 hover:underline">
-                        {c.id}
-                      </Link>
-                    </td>
+                  <tr key={c.id} className="hover:bg-blue-50/30 transition-colors whitespace-nowrap">
+                    {visibleColumns.id && (
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                        <Link href={`/claims/${c.id}`} className="hover:text-blue-600 hover:underline">
+                          {c.id}
+                        </Link>
+                      </td>
+                    )}
 
-                    {/* 2. Claim Name */}
-                    <td className="py-3.5 px-4 font-semibold text-slate-900 max-w-xs truncate">
-                      <Link href={`/claims/${c.id}`} className="hover:text-blue-600">
-                        {c.claimName || `${c.shipName} Claim`}
-                      </Link>
-                    </td>
+                    {visibleColumns.claimName && (
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 max-w-xs truncate">
+                        <Link href={`/claims/${c.id}`} className="hover:text-blue-600">
+                          {c.claimName || `${c.shipName} Claim`}
+                        </Link>
+                      </td>
+                    )}
 
-                    {/* 3. Client */}
-                    <td className="py-3.5 px-4 text-slate-600 max-w-[180px] truncate">
-                      {c.accountName || "—"}
-                    </td>
+                    {visibleColumns.accountName && (
+                      <td className="py-3.5 px-4 text-slate-600 max-w-[180px] truncate">{c.accountName || "—"}</td>
+                    )}
 
-                    {/* 4. Ship Name */}
-                    <td className="py-3.5 px-4 font-medium text-slate-900 flex items-center space-x-1.5">
-                      <Ship className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                      <span className="truncate">{c.shipName}</span>
-                    </td>
+                    {visibleColumns.shipName && (
+                      <td className="py-3.5 px-4 font-medium text-slate-900 flex items-center space-x-1.5">
+                        <Ship className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                        <span className="truncate">{c.shipName}</span>
+                      </td>
+                    )}
 
-                    {/* 5. Status */}
-                    <td className="py-3.5 px-4">
-                      <StatusBadge status={c.claimStatus} />
-                    </td>
+                    {visibleColumns.claimStatus && (
+                      <td className="py-3.5 px-4">
+                        <StatusBadge status={c.claimStatus} />
+                      </td>
+                    )}
 
-                    {/* 6. Claim Type */}
-                    <td className="py-3.5 px-4 text-slate-600">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-medium text-slate-700">
-                        {c.claimType}
-                      </span>
-                    </td>
+                    {visibleColumns.claimType && (
+                      <td className="py-3.5 px-4 text-slate-600">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-medium text-slate-700">
+                          {c.claimType}
+                        </span>
+                      </td>
+                    )}
 
-                    {/* 7. Days Open */}
-                    <td className="py-3.5 px-4 text-right font-medium text-slate-600">
-                      {c.daysOpen || 0}d
-                    </td>
+                    {visibleColumns.brokerName && <td className="py-3.5 px-4 text-slate-600">{c.brokerName || "—"}</td>}
+                    {visibleColumns.cpType && (
+                      <td className="py-3.5 px-4 font-medium text-slate-700">{c.cpType || "—"}</td>
+                    )}
+                    {visibleColumns.counterpartyName && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.counterpartyName || "—"}</td>
+                    )}
+                    {visibleColumns.counterpartyType && (
+                      <td className="py-3.5 px-4 text-slate-500">{c.counterpartyType || "—"}</td>
+                    )}
+                    {visibleColumns.assignedTo && <td className="py-3.5 px-4 text-slate-700">{c.assignedTo}</td>}
+                    {visibleColumns.daysOpen && (
+                      <td className="py-3.5 px-4 text-right font-medium text-slate-600">{c.daysOpen || 0}d</td>
+                    )}
+                    {visibleColumns.claimClosed && (
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.claimClosed ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}>
+                          {c.claimClosed ? "Closed" : "Open"}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumns.claimFiledAmount && (
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900">
+                        {formatCurrency(c.claimFiledAmount)}
+                      </td>
+                    )}
+                    {visibleColumns.demurrageRatePerDay && (
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                        {formatCurrency(c.demurrageRatePerDay)}
+                      </td>
+                    )}
+                    {visibleColumns.receivedClaimAmount && (
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                        {formatCurrency(c.receivedClaimAmount || 0)}
+                      </td>
+                    )}
+                    {visibleColumns.agreedAmount && (
+                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-blue-700">
+                        {formatCurrency(c.agreedAmount || 0)}
+                      </td>
+                    )}
+                    {visibleColumns.billableAmount && (
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                        {formatCurrency(c.billableAmount || 0)}
+                      </td>
+                    )}
+                    {visibleColumns.paymentReceived && (
+                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-emerald-700">
+                        {formatCurrency(c.paymentReceived || 0)}
+                      </td>
+                    )}
+                    {visibleColumns.paymentConcluded && (
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.paymentConcluded ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                          {c.paymentConcluded ? "Concluded" : "Pending"}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumns.daysAwaitingPayment && (
+                      <td className="py-3.5 px-4 text-right text-slate-600">{c.daysAwaitingPayment || 0}d</td>
+                    )}
+                    {visibleColumns.layday && <td className="py-3.5 px-4 text-slate-600">{c.layday || "—"}</td>}
+                    {visibleColumns.cancellingDate && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.cancellingDate || "—"}</td>
+                    )}
+                    {visibleColumns.voyageEndDate && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.voyageEndDate || "—"}</td>
+                    )}
+                    {visibleColumns.instructionReceivedDate && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.instructionReceivedDate || "—"}</td>
+                    )}
+                    {visibleColumns.noticeReceivedDate && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.noticeReceivedDate || "—"}</td>
+                    )}
+                    {visibleColumns.claimReceivedDate && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.claimReceivedDate || "—"}</td>
+                    )}
+                    {visibleColumns.charterpartyDate && (
+                      <td className="py-3.5 px-4 text-slate-600">{c.charterpartyDate || "—"}</td>
+                    )}
+                    {visibleColumns.noticeTimebarDays && (
+                      <td className="py-3.5 px-4 text-right text-slate-600">{c.noticeTimebarDays || 30}d</td>
+                    )}
+                    {visibleColumns.claimTimebarDays && (
+                      <td className="py-3.5 px-4 text-right text-slate-600">{c.claimTimebarDays || 90}d</td>
+                    )}
+                    {visibleColumns.timebarred && (
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.timebarred ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>
+                          {c.timebarred ? "Timebarred" : "Safe"}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumns.racDispute && (
+                      <td className="py-3.5 px-4 text-center">
+                        <Link
+                          href={`/claims/${c.id}`}
+                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 transition"
+                          title="View or attach RAC Recoverable Costs"
+                        >
+                          <Briefcase className="h-2.5 w-2.5" />
+                          <span>RAC Hub</span>
+                        </Link>
+                      </td>
+                    )}
 
-                    {/* 8. Demurrage (USD) */}
-                    <td className="py-3.5 px-4 text-right font-bold text-slate-900">
-                      {formatCurrency(c.claimFiledAmount)}
-                    </td>
-
-                    {/* RAC Link */}
-                    <td className="py-3.5 px-4 text-center">
-                      <Link
-                        href={`/claims/${c.id}`}
-                        className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 transition"
-                        title="View or attach RAC Recoverable Costs"
-                      >
-                        <Briefcase className="h-2.5 w-2.5" />
-                        <span>RAC Hub</span>
-                      </Link>
-                    </td>
-
-                    {/* 9. Actions */}
+                    {/* Actions */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center space-x-1.5">
                         <Link href={`/claims/${c.id}`}>
@@ -442,6 +656,82 @@ export function LedgerTable({
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               Apply Filters
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Column Visibility Configuration Modal */}
+      <Modal
+        isOpen={isColumnModalOpen}
+        onClose={() => setIsColumnModalOpen(false)}
+        title="Customize Table Columns (32 Available)"
+        maxWidth="lg"
+      >
+        <div className="space-y-4 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="font-semibold text-slate-700">
+              Showing <strong className="text-blue-600">{activeColumnCount}</strong> of 32 columns
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={selectAllColumns} className="text-xs h-7 px-2">
+                Select All
+              </Button>
+              <Button variant="ghost" size="sm" onClick={resetDefaultColumns} className="text-xs h-7 px-2">
+                Reset Default (10)
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearAllColumns} className="text-xs h-7 px-2 text-rose-600 hover:text-rose-700">
+                Clear All
+              </Button>
+            </div>
+          </div>
+
+          <div className="max-h-[60vh] overflow-y-auto space-y-4 pr-1">
+            {(["General", "Financials", "Voyage", "Compliance"] as const).map((cat) => {
+              const catCols = SRS_COLUMNS.filter((c) => c.category === cat);
+              return (
+                <div key={cat} className="space-y-2">
+                  <h4 className="font-bold text-slate-900 border-b border-slate-100 pb-1 text-xs uppercase tracking-wider flex items-center justify-between">
+                    <span>{cat} Fields</span>
+                    <span className="text-slate-400 font-normal">
+                      {catCols.filter((c) => visibleColumns[c.key]).length}/{catCols.length}
+                    </span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {catCols.map((col) => {
+                      const isChecked = Boolean(visibleColumns[col.key]);
+                      return (
+                        <label
+                          key={col.key}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${
+                            isChecked
+                              ? "bg-blue-50/50 border-blue-200 text-slate-900 font-semibold"
+                              : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleColumn(col.key)}
+                            className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                          />
+                          <span className="text-xs truncate">{col.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end pt-3 border-t border-slate-100">
+            <Button
+              size="sm"
+              onClick={() => setIsColumnModalOpen(false)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Apply Column Layout
             </Button>
           </div>
         </div>

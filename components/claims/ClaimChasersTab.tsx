@@ -196,7 +196,7 @@ export function ClaimChasersTab({ claim, canEdit }: ClaimChasersTabProps) {
                     Dispatched on {new Date(ch.scheduledDate).toLocaleDateString()} by {ch.sentBy || "Analyst"}
                   </div>
                   <div className="text-[11px] text-slate-600 line-clamp-2 mt-1 italic">
-                    "{ch.body.substring(0, 100)}..."
+                    &quot;{ch.body.substring(0, 100)}...&quot;
                   </div>
                 </div>
               ))

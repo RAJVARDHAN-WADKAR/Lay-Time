@@ -69,7 +69,7 @@ export function ClaimOwnerComparisonTab({ claim, canEdit }: ClaimOwnerComparison
           <div>
             <h3 className="text-sm font-bold text-slate-900">Owner vs Internal Calculation Comparison</h3>
             <p className="text-xs text-slate-500">
-              Reconcile discrepancies between Owner's claim submission and Internal verified laytime calculation
+              Reconcile discrepancies between Owner&apos;s claim submission and Internal verified laytime calculation
             </p>
           </div>
         </div>
