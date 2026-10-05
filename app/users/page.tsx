@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatDate } from "@/lib/utils/formatters";
 import { useToast } from "@/lib/hooks/useToast";
+import { useAuth } from "@/lib/context/AuthContext";
+import { useRouter } from "next/navigation";
 import {
   Users as UsersIcon,
   UserPlus,
@@ -24,9 +26,13 @@ import {
   CheckCircle2,
   XCircle,
   Lock,
+  AlertOctagon,
+  ArrowLeft
 } from "lucide-react";
 
 export default function UsersPage() {
+  const router = useRouter();
+  const { role, canAccessUsers, isLoading: authLoading } = useAuth();
   const { success, error } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -60,12 +66,16 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    if (!authLoading && canAccessUsers) {
+      fetchUsers();
+    }
 
-    const handleStorage = () => fetchUsers();
+    const handleStorage = () => {
+      if (canAccessUsers) fetchUsers();
+    };
     window.addEventListener("demurrage_storage_change", handleStorage);
     return () => window.removeEventListener("demurrage_storage_change", handleStorage);
-  }, []);
+  }, [authLoading, canAccessUsers]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +160,43 @@ export default function UsersPage() {
       return true;
     });
   }, [users, searchTerm, roleFilter]);
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mx-auto" />
+          <p className="text-xs text-slate-500 font-medium">Verifying authorization permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canAccessUsers) {
+    return (
+      <div className="max-w-2xl mx-auto my-12 bg-white rounded-2xl border border-rose-200 shadow-xl p-8 text-center space-y-4">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-inner">
+          <AlertOctagon className="h-7 w-7" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            The User Management console is strictly restricted to users with the <strong>Admin</strong> role. Your current active role is <strong>{role}</strong>.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Button
+            size="sm"
+            onClick={() => router.push("/dashboard")}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-9 px-4 rounded-xl inline-flex items-center space-x-1.5 cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Return to Dashboard</span>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">

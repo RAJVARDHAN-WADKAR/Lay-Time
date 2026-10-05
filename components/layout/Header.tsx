@@ -32,11 +32,10 @@ interface HeaderProps {
 export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, role, switchRole, logout } = useAuth();
+  const { currentUser, role, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
@@ -92,13 +91,6 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   };
 
   const { title, crumb } = getPageInfo();
-
-  const demoRoles: { role: UserRole; label: string; desc: string; color: string }[] = [
-    { role: "Admin", label: "Admin", desc: "Full permissions & system settings", color: "text-purple-600 bg-purple-50" },
-    { role: "Claim Processor", label: "Claim Processor", desc: "Create, SoF, calculations & assigned claims", color: "text-blue-600 bg-blue-50" },
-    { role: "Supervisor", label: "Supervisor", desc: "Approval authority & calculation audit", color: "text-amber-600 bg-amber-50" },
-    { role: "Reviewer", label: "Reviewer", desc: "Read-only inspection mode", color: "text-slate-600 bg-slate-100" }
-  ];
 
   return (
     <>
@@ -159,46 +151,11 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
             </Link>
           )}
 
-          {/* Quick Role Switcher */}
-          <div className="relative">
-            <button
-              onClick={() => setIsRoleMenuOpen(!isRoleMenuOpen)}
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold hover:bg-slate-50 transition"
-              title="Click to switch simulated demo role"
-            >
-              <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-              <span className="hidden sm:inline text-slate-600">Role:</span>
-              <span className="text-slate-900 font-extrabold">{role}</span>
-              <ChevronDown className="h-3 w-3 text-slate-400" />
-            </button>
-
-            {isRoleMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in">
-                <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Simulate Demo Role
-                </div>
-                <div className="p-1 space-y-1">
-                  {demoRoles.map((r) => (
-                    <button
-                      key={r.role}
-                      onClick={() => {
-                        switchRole(r.role);
-                        setIsRoleMenuOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-xl text-xs transition flex items-center justify-between ${
-                        role === r.role ? "bg-blue-50 font-bold text-blue-700" : "hover:bg-slate-50 text-slate-700"
-                      }`}
-                    >
-                      <div>
-                        <div className="font-bold">{r.label}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{r.desc}</div>
-                      </div>
-                      {role === r.role && <UserCheck className="h-4 w-4 text-blue-600 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          {/* Active Role Indicator */}
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
+            <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+            <span className="hidden sm:inline text-slate-500 font-semibold">Role:</span>
+            <span className="text-slate-900 font-extrabold">{role}</span>
           </div>
 
           {/* Notifications Icon & Dropdown */}

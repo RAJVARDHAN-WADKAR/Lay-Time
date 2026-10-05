@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:seed-auth": "node scripts/seed-users.js",
+    "test:auth": "node scripts/test-auth-suite.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

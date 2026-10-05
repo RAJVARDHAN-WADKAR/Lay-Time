@@ -148,8 +148,8 @@ export function getClaims(params?: {
   if (params?.role === "Claim Processor") {
     const email = params.userEmail || "";
     const name = params.userName || "";
-    whereClauses.push("(LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) LIKE ?)");
-    queryParams.push(email, name, "%sarah%");
+    whereClauses.push("(LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) LIKE ? OR LOWER(assigned_to) LIKE ?)");
+    queryParams.push(email, name, "%rohit%", "%sarah%");
   }
 
   if (params?.status && params.status !== "All") {
@@ -288,7 +288,7 @@ export function createClaim(claim: Partial<Claim>, userEmail: string): Claim {
     claim.shipName || "Unknown Vessel",
     claim.cpType || "BPVOY4",
     claim.voyageNumber || "VOY-2024-01",
-    claim.assignedTo || userEmail || "Sarah Jenkins",
+    claim.assignedTo || userEmail || "Rohit Mengane",
     claim.daysOpen || 0,
     claim.claimClosed ? 1 : 0,
     claim.contentions || "",
@@ -827,8 +827,8 @@ export function getRacCases(params?: {
   if (params?.role === "Claim Processor") {
     const email = params.userEmail || "";
     const name = params.userName || "";
-    whereClauses.push("(LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) LIKE ?)");
-    queryParams.push(email, name, "%sarah%");
+    whereClauses.push("(LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) LIKE ? OR LOWER(assigned_to) LIKE ?)");
+    queryParams.push(email, name, "%rohit%", "%sarah%");
   }
 
   if (params?.claimId) {
@@ -952,7 +952,7 @@ export function createRacCase(data: Partial<RacCase>, user: string): RacCase {
   `).run(
     id, ref, data.clientName || "Client Trading Ltd", data.shipName || "Vessel", data.voyageNumber || "VOY-2024-01",
     data.counterpartyName || "Counterparty SA", data.racType || "Demurrage Review", data.relevantDate || now.split("T")[0],
-    data.assignedTo || user || "Sarah Jenkins", data.status || "Draft", data.totalAmount || 0,
+    data.assignedTo || user || "Rohit Mengane", data.status || "Draft", data.totalAmount || 0,
     data.agreedAmount || 0, data.outstandingAmount || data.totalAmount || 0, data.deadlineDate || null,
     data.description || "", data.notes || "", data.supportingDocsCount || 0, data.claimId || null,
     user, now, user, now

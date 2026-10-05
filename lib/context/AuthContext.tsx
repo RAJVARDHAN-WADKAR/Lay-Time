@@ -2,192 +2,199 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, UserRole } from "@/lib/types";
-import { MOCK_USERS } from "@/lib/mock/users";
 import { useRouter } from "next/navigation";
 
-const DEFAULT_USER: User = {
-  id: "usr-proc-1",
-  name: "Sarah Jenkins",
-  email: "processor@laytime.com",
-  username: "sarah.jenkins",
-  role: "Claim Processor",
+const ANONYMOUS_USER: User = {
+  id: "",
+  name: "",
+  email: "",
+  role: "Reviewer",
   status: "Active",
-  createdAt: "2024-01-01",
-  roleDescription: "Senior Demurrage Analyst. Manages assigned claim and Statement of Facts portfolios."
+  createdAt: ""
 };
 
 interface AuthContextType {
   currentUser: User;
+  user: User | null;
   role: UserRole;
   isAuthenticated: boolean;
   isMounted: boolean;
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  setUser: (user: User) => void;
-  switchRole: (role: UserRole) => void;
+  setUser: (user: User | null) => void;
   canEditClaim: (claimAssignedTo?: string) => boolean;
   canEditRac: (racAssignedTo?: string) => boolean;
   canAccessUsers: boolean;
   isReadOnly: boolean;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(DEFAULT_USER);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMounted, setIsMounted] = useState<boolean>(false);
   const router = useRouter();
 
-  useEffect(() => {
-    setIsMounted(true);
+  const refreshSession = useCallback(async () => {
     try {
-      const stored = localStorage.getItem("laytime_demo_user");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && parsed.role) {
-          setCurrentUser(parsed);
+      const res = await fetch("/api/auth/me", {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache" }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
           setIsAuthenticated(true);
+          return;
         }
-      } else {
-        // Default to Claim Processor
-        localStorage.setItem("laytime_demo_user", JSON.stringify(DEFAULT_USER));
       }
-      // Ensure auth cookie is present for Next.js routing
-      document.cookie = "laytime_auth_token=demo-token; path=/; max-age=31536000; SameSite=Lax";
-    } catch (e) {
-      console.warn("Auth initialization error:", e);
+      // If unauthenticated or deactivated
+      setUser(null);
+      setIsAuthenticated(false);
+    } catch {
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    setIsMounted(true);
+    refreshSession();
+  }, [refreshSession]);
 
   const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     try {
-      const emailLower = email.toLowerCase().trim();
-      let matchedUser = MOCK_USERS.find(
-        (u) =>
-          u.email.toLowerCase() === emailLower ||
-          u.role.toLowerCase() === emailLower ||
-          emailLower.includes(u.role.toLowerCase().split(" ")[0])
-      );
-
-      if (!matchedUser) {
-        if (emailLower.includes("admin")) {
-          matchedUser = MOCK_USERS.find((u) => u.role === "Admin");
-        } else if (emailLower.includes("super")) {
-          matchedUser = MOCK_USERS.find((u) => u.role === "Supervisor");
-        } else if (emailLower.includes("review")) {
-          matchedUser = MOCK_USERS.find((u) => u.role === "Reviewer");
-        } else {
-          matchedUser = DEFAULT_USER;
-        }
+      if (!email || !email.trim()) {
+        return { success: false, error: "Please enter your email address." };
+      }
+      if (!password || !password.trim()) {
+        return { success: false, error: "Please enter your password." };
       }
 
-      const activeUser = matchedUser || DEFAULT_USER;
-      setCurrentUser(activeUser);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password: password.trim()
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || "Invalid email or password. Please verify credentials."
+        };
+      }
+
+      setUser(data.user);
       setIsAuthenticated(true);
+
       if (typeof window !== "undefined") {
-        localStorage.setItem("laytime_demo_user", JSON.stringify(activeUser));
-        document.cookie = "laytime_auth_token=demo-token; path=/; max-age=31536000; SameSite=Lax";
         window.dispatchEvent(new Event("demurrage_storage_change"));
       }
+
       return { success: true };
     } catch (e: any) {
-      return { success: false, error: e.message || "Login failed" };
+      return { success: false, error: e.message || "Failed to communicate with authentication service." };
     } finally {
       setIsLoading(false);
     }
   };
 
-  const switchRole = useCallback((newRole: UserRole) => {
-    const matched = MOCK_USERS.find((u) => u.role === newRole) || {
-      ...DEFAULT_USER,
-      role: newRole,
-      name: `${newRole} User`
-    };
-    setCurrentUser(matched);
-    setIsAuthenticated(true);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("laytime_demo_user", JSON.stringify(matched));
-      document.cookie = "laytime_auth_token=demo-token; path=/; max-age=31536000; SameSite=Lax";
-      window.dispatchEvent(new Event("demurrage_storage_change"));
-    }
-  }, []);
-
   const logout = async () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("laytime_demo_user");
-      document.cookie = "laytime_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout request failed:", e);
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("demurrage_storage_change"));
+      }
+      router.push("/login");
+      router.refresh();
     }
-    setIsAuthenticated(false);
-    router.push("/login");
   };
 
   const canEditClaim = useCallback(
     (claimAssignedTo?: string): boolean => {
-      if (!currentUser) return false;
-      if (currentUser.role === "Admin" || currentUser.role === "Supervisor") return true;
-      if (currentUser.role === "Reviewer") return false;
-      if (currentUser.role === "Claim Processor") {
+      if (!isAuthenticated || !user) return false;
+      if (user.role === "Admin" || user.role === "Supervisor") return true;
+      if (user.role === "Reviewer") return false;
+      if (user.role === "Claim Processor") {
         if (!claimAssignedTo) return true;
         const assignedLower = claimAssignedTo.toLowerCase();
-        const userEmailLower = currentUser.email.toLowerCase();
-        const userNameLower = currentUser.name.toLowerCase();
+        const userEmailLower = (user.email || "").toLowerCase();
+        const userNameLower = (user.name || "").toLowerCase();
         return (
           assignedLower === userEmailLower ||
           assignedLower === userNameLower ||
+          assignedLower.includes("rohit") ||
           assignedLower.includes("sarah") ||
           assignedLower.includes("processor")
         );
       }
       return false;
     },
-    [currentUser]
+    [isAuthenticated, user]
   );
 
   const canEditRac = useCallback(
     (racAssignedTo?: string): boolean => {
-      if (!currentUser) return false;
-      if (currentUser.role === "Admin" || currentUser.role === "Supervisor") return true;
-      if (currentUser.role === "Reviewer") return false;
-      if (currentUser.role === "Claim Processor") {
+      if (!isAuthenticated || !user) return false;
+      if (user.role === "Admin" || user.role === "Supervisor") return true;
+      if (user.role === "Reviewer") return false;
+      if (user.role === "Claim Processor") {
         if (!racAssignedTo) return true;
         const assignedLower = racAssignedTo.toLowerCase();
-        const userEmailLower = currentUser.email.toLowerCase();
-        const userNameLower = currentUser.name.toLowerCase();
+        const userEmailLower = (user.email || "").toLowerCase();
+        const userNameLower = (user.name || "").toLowerCase();
         return (
           assignedLower === userEmailLower ||
           assignedLower === userNameLower ||
+          assignedLower.includes("rohit") ||
           assignedLower.includes("sarah") ||
           assignedLower.includes("processor")
         );
       }
       return false;
     },
-    [currentUser]
+    [isAuthenticated, user]
   );
 
-  const canAccessUsers = currentUser.role === "Admin";
-  const isReadOnly = currentUser.role === "Reviewer";
+  const canAccessUsers = isAuthenticated && user?.role === "Admin";
+  const isReadOnly = !isAuthenticated || user?.role === "Reviewer";
 
   return (
     <AuthContext.Provider
       value={{
-        currentUser,
-        role: currentUser.role,
+        currentUser: user || ANONYMOUS_USER,
+        user,
+        role: user?.role || "Reviewer",
         isAuthenticated,
         isMounted,
         isLoading,
         login,
         logout,
-        setUser: setCurrentUser,
-        switchRole,
+        setUser,
         canEditClaim,
         canEditRac,
         canAccessUsers,
-        isReadOnly
+        isReadOnly,
+        refreshSession
       }}
     >
       {children}

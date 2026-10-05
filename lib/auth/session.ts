@@ -42,13 +42,21 @@ export function checkRolePermission(
   return allowedRoles.includes(userRole);
 }
 
-export function canEditClaim(userRole: UserRole, userEmail: string, claimAssignedTo: string): boolean {
+export function canEditClaim(userRole: UserRole, userEmail: string, claimAssignedTo: string, userName?: string): boolean {
   if (userRole === "Admin" || userRole === "Supervisor") return true;
   if (userRole === "Reviewer") return false; // Reviewers have strictly read-only access
   if (userRole === "Claim Processor") {
-    return claimAssignedTo.toLowerCase() === userEmail.toLowerCase() ||
-           claimAssignedTo.toLowerCase() === "sarah jenkins" || // matches seed assignment
-           claimAssignedTo.toLowerCase().includes("processor");
+    if (!claimAssignedTo) return true;
+    const assignedLower = claimAssignedTo.toLowerCase();
+    const emailLower = (userEmail || "").toLowerCase();
+    const nameLower = (userName || "").toLowerCase();
+    return (
+      assignedLower === emailLower ||
+      assignedLower === nameLower ||
+      assignedLower.includes("rohit") ||
+      assignedLower.includes("sarah") ||
+      assignedLower.includes("processor")
+    );
   }
   return false;
 }

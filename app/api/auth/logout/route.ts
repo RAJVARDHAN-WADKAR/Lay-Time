@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
     name: AUTH_COOKIE_NAME,
     value: "",
     httpOnly: true,
+    maxAge: 0,
     expires: new Date(0),
     path: "/"
   });
