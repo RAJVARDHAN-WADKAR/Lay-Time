@@ -1,0 +1,100 @@
+import { RoleDefinition } from "./permissions.types";
+
+export const claimProcessorRole: RoleDefinition = {
+  name: "CLAIM_PROCESSOR",
+  purpose: "Claim preparer responsible for voyage analysis, Statement of Facts reconciliation, calculations, drafting negotiations, and logging RAC findings on assigned claims.",
+  scope: "own assigned claims only",
+  permissions: {
+    claims: ["view", "create", "edit", "approve"],
+    sof: ["view", "create", "edit"],
+    ports: ["view", "create", "edit"],
+    berths: ["view", "create", "edit"],
+    documents: ["view", "create", "edit"],
+    calculations: ["view", "create", "edit"],
+    rac: ["view", "create", "edit"],
+    ocr: ["view", "create", "edit"],
+    negotiations: ["view", "create", "edit"],
+    invoices: ["view", "create"],
+    payments: ["view", "create"],
+    clients: ["view", "create"],
+    vessels: ["view", "create"],
+    users: [],
+    settings: [],
+    dashboard: ["view"],
+    analytics: ["view"],
+    reports: ["view", "export"],
+    auditLog: []
+  },
+  hiddenFields: [
+    "billableAmount",
+    "minimumAcceptableAmount",
+    "minAcceptableAmount"
+  ],
+  visibleScreens: [
+    "/dashboard",
+    "/claims",
+    "/claims/create",
+    "/calculator",
+    "/calculations",
+    "/ocr",
+    "/rac",
+    "/timebar",
+    "/documents"
+  ],
+  menuItems: [
+    "Dashboard",
+    "My Claims",
+    "Create Claim",
+    "Calculator",
+    "RAC Management",
+    "Timebar Tracker",
+    "OCR Studio",
+    "Documents"
+  ],
+  tabs: [
+    "overview",
+    "claimInfo",
+    "voyage",
+    "ports",
+    "sof",
+    "documents",
+    "calculations",
+    "negotiations",
+    "rac",
+    "ownerComparison",
+    "timebar",
+    "payments",
+    "reports"
+  ],
+  buttons: [
+    "Create Claim",
+    "Edit Claim",
+    "Submit for Review",
+    "Add Activity",
+    "Edit Activity",
+    "Upload Document",
+    "Run Laytime",
+    "Recalculate Laytime",
+    "Request Negotiation",
+    "Draft Offer",
+    "Log Counterparty Offer",
+    "Submit RAC",
+    "Resolve Finding",
+    "Draft Invoice",
+    "Record Payment",
+    "Verify OCR",
+    "Export PDF",
+    "Export CSV"
+  ],
+  specialRules: [
+    "Sees and works only on claims assigned to them.",
+    "Claims created by Claim Processor are automatically assigned to the creator processor.",
+    "No calculation override permitted (override authority is Supervisor only).",
+    "Cannot ignore, authorize or close RAC findings (requires Supervisor).",
+    "Cannot initiate, approve, accept or close negotiations, and cannot see the minimum acceptable amount.",
+    "Draft invoices and recorded payments require Supervisor approval.",
+    "Financial fields: view the Owners Claim amount only; Billable($) and minimum acceptable amount are strictly hidden.",
+    "Clients and vessels: view and create (no edit or delete).",
+    "No access to users, settings, claim assignment or the audit log."
+  ]
+};

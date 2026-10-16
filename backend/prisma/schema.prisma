@@ -9,9 +9,9 @@ generator client {
 
 enum Role {
   ADMIN
-  CLAIM_PROCESSOR
   SUPERVISOR
-  REVIEWER
+  CLAIM_PROCESSOR
+  REVIEWER_CLIENT
 }
 
 enum UserStatus {

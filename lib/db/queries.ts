@@ -28,7 +28,7 @@ import { v4 as uuidv4 } from "uuid";
 // 1. USERS & AUTHENTICATION
 // =========================================================================
 
-export function getUserByEmail(email: string): (User & { password_hash: string }) | null {
+export function getUserByEmail(email: string): (User & { password_hash: string; token_version: number; client_id?: string; created_by?: string }) | null {
   const db = getDatabase();
   const row = db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(email) as any;
   if (!row) return null;
@@ -38,6 +38,13 @@ export function getUserByEmail(email: string): (User & { password_hash: string }
     email: row.email,
     username: row.username,
     role: row.role as UserRole,
+    clientId: row.client_id || undefined,
+    client_id: row.client_id || undefined,
+    clientName: row.client_name || undefined,
+    createdBy: row.created_by || undefined,
+    created_by: row.created_by || undefined,
+    tokenVersion: row.token_version ?? 1,
+    token_version: row.token_version ?? 1,
     avatar: row.avatar,
     status: row.status,
     roleDescription: row.role_description,
@@ -47,7 +54,7 @@ export function getUserByEmail(email: string): (User & { password_hash: string }
   };
 }
 
-export function getUserById(id: string): User | null {
+export function getUserById(id: string): (User & { token_version: number; client_id?: string; created_by?: string }) | null {
   const db = getDatabase();
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any;
   if (!row) return null;
@@ -57,6 +64,13 @@ export function getUserById(id: string): User | null {
     email: row.email,
     username: row.username,
     role: row.role as UserRole,
+    clientId: row.client_id || undefined,
+    client_id: row.client_id || undefined,
+    clientName: row.client_name || undefined,
+    createdBy: row.created_by || undefined,
+    created_by: row.created_by || undefined,
+    tokenVersion: row.token_version ?? 1,
+    token_version: row.token_version ?? 1,
     avatar: row.avatar,
     status: row.status,
     roleDescription: row.role_description,
@@ -69,14 +83,21 @@ export function getAllUsers(): User[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM users ORDER BY created_at ASC").all() as any[];
   return rows.map((r) => {
-    const claimCount = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?)").get(r.name, r.email) as any)?.c || 0;
-    const racCount = (db.prepare("SELECT COUNT(*) as c FROM rac_cases WHERE LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?)").get(r.name, r.email) as any)?.c || 0;
+    const claimCount = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR assigned_to = ?").get(r.name, r.email, r.id) as any)?.c || 0;
+    const racCount = (db.prepare("SELECT COUNT(*) as c FROM rac_cases WHERE LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR assigned_to = ?").get(r.name, r.email, r.id) as any)?.c || 0;
     return {
       id: r.id,
       name: r.name,
       email: r.email,
       username: r.username,
       role: r.role as UserRole,
+      clientId: r.client_id || undefined,
+      client_id: r.client_id || undefined,
+      clientName: r.client_name || undefined,
+      createdBy: r.created_by || undefined,
+      created_by: r.created_by || undefined,
+      tokenVersion: r.token_version ?? 1,
+      token_version: r.token_version ?? 1,
       avatar: r.avatar,
       status: r.status,
       assignedClaimsCount: claimCount,
@@ -88,32 +109,69 @@ export function getAllUsers(): User[] {
   });
 }
 
-export function createUser(data: { name: string; email: string; role: UserRole; passwordHash: string; roleDescription?: string }): User {
+export function createUser(data: {
+  name: string;
+  email: string;
+  role: UserRole;
+  clientId?: string;
+  clientName?: string;
+  createdBy?: string;
+  passwordHash: string;
+  roleDescription?: string;
+}): User {
   const db = getDatabase();
   const id = `usr-${Date.now()}`;
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO users (id, name, email, username, password_hash, role, status, role_description, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?)
-  `).run(id, data.name, data.email, data.email.split("@")[0], data.passwordHash, data.role, data.roleDescription || "", now, now);
+    INSERT INTO users (id, name, email, username, password_hash, role, client_id, client_name, created_by, token_version, status, role_description, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Active', ?, ?, ?)
+  `).run(
+    id,
+    data.name,
+    data.email,
+    data.email.split("@")[0],
+    data.passwordHash,
+    data.role,
+    data.clientId || null,
+    data.clientName || null,
+    data.createdBy || null,
+    data.roleDescription || "",
+    now,
+    now
+  );
 
   return getUserById(id)!;
 }
 
-export function updateUser(id: string, data: Partial<User> & { passwordHash?: string }): User | null {
+export function updateUser(id: string, data: Partial<User> & { passwordHash?: string; bumpToken?: boolean }): User | null {
   const db = getDatabase();
   const now = new Date().toISOString();
   const existing = getUserById(id);
   if (!existing) return null;
 
+  let shouldBump = !!data.bumpToken;
+
   if (data.passwordHash) {
     db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(data.passwordHash, now, id);
+    shouldBump = true;
   }
   if (data.name) db.prepare("UPDATE users SET name = ?, updated_at = ? WHERE id = ?").run(data.name, now, id);
   if (data.email) db.prepare("UPDATE users SET email = ?, updated_at = ? WHERE id = ?").run(data.email, now, id);
-  if (data.role) db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(data.role, now, id);
-  if (data.status) db.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?").run(data.status, now, id);
+  if (data.role && data.role !== existing.role) {
+    db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(data.role, now, id);
+    shouldBump = true;
+  }
+  if (data.clientId !== undefined) db.prepare("UPDATE users SET client_id = ?, updated_at = ? WHERE id = ?").run(data.clientId, now, id);
+  if (data.clientName !== undefined) db.prepare("UPDATE users SET client_name = ?, updated_at = ? WHERE id = ?").run(data.clientName, now, id);
+  if (data.status && data.status !== existing.status) {
+    db.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?").run(data.status, now, id);
+    shouldBump = true;
+  }
   if (data.roleDescription) db.prepare("UPDATE users SET role_description = ?, updated_at = ? WHERE id = ?").run(data.roleDescription, now, id);
+
+  if (shouldBump) {
+    db.prepare("UPDATE users SET token_version = token_version + 1 WHERE id = ?").run(id);
+  }
 
   return getUserById(id);
 }
@@ -121,8 +179,17 @@ export function updateUser(id: string, data: Partial<User> & { passwordHash?: st
 export function setUserStatus(id: string, status: "Active" | "Inactive"): boolean {
   const db = getDatabase();
   const now = new Date().toISOString();
-  const res = db.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?").run(status, now, id);
+  // Bumping token_version immediately invalidates all active sessions for this user
+  const res = db.prepare("UPDATE users SET status = ?, token_version = token_version + 1, updated_at = ? WHERE id = ?").run(status, now, id);
   return res.changes > 0;
+}
+
+export function bumpTokenVersion(userId: string): number {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  db.prepare("UPDATE users SET token_version = token_version + 1, updated_at = ? WHERE id = ?").run(now, userId);
+  const row = db.prepare("SELECT token_version FROM users WHERE id = ?").get(userId) as any;
+  return row?.token_version ?? 1;
 }
 
 // =========================================================================
@@ -133,6 +200,7 @@ export function getClaims(params?: {
   role?: UserRole;
   userEmail?: string;
   userName?: string;
+  clientName?: string;
   search?: string;
   status?: string;
   claimType?: string;
@@ -145,11 +213,18 @@ export function getClaims(params?: {
   let queryParams: any[] = [];
 
   // Claim Processor filter: Only view assigned claims
-  if (params?.role === "Claim Processor") {
+  if (params?.role === "Claim Processor" || params?.role === "Processor") {
     const email = params.userEmail || "";
     const name = params.userName || "";
     whereClauses.push("(LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) LIKE ? OR LOWER(assigned_to) LIKE ?)");
     queryParams.push(email, name, "%rohit%", "%sarah%");
+  }
+
+  // Client filter: Only view own client claims
+  if (params?.role === "Client") {
+    const cName = (params.clientName || "trafigura").toLowerCase();
+    whereClauses.push("(LOWER(account_name) LIKE ? OR LOWER(claim_name) LIKE ?)");
+    queryParams.push(`%${cName}%`, `%${cName}%`);
   }
 
   if (params?.status && params.status !== "All") {
@@ -244,6 +319,7 @@ function mapRowToClaim(row: any, includeRelations = false): Claim {
     claimAgreedDate: row.claim_agreed_date,
     charterpartyDate: row.charterparty_date,
     daysAwaitingPayment: row.days_awaiting_payment,
+    clientId: row.client_id || row.clientId,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -824,7 +900,7 @@ export function getRacCases(params?: {
   const whereClauses: string[] = [];
   const queryParams: any[] = [];
 
-  if (params?.role === "Claim Processor") {
+  if (params?.role === "Claim Processor" || params?.role === "Processor") {
     const email = params.userEmail || "";
     const name = params.userName || "";
     whereClauses.push("(LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) = LOWER(?) OR LOWER(assigned_to) LIKE ? OR LOWER(assigned_to) LIKE ?)");

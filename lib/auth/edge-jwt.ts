@@ -4,9 +4,12 @@ export const JWT_SECRET = process.env.JWT_SECRET || "laytime_secure_jwt_secret_k
 
 export interface SessionPayload {
   userId: string;
-  email: string;
-  name: string;
   role: UserRole;
+  assignedClientId: string | null;
+  tokenVersion: number;
+  email?: string;
+  name?: string;
+  clientName?: string;
   iat?: number;
   exp?: number;
 }

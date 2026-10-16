@@ -22,12 +22,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
     }
 
-    if (session.role === "Reviewer") {
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = normalizeRole(session.role);
+    const isClient = Boolean(session.assignedClientId);
+    if (session.role === "Reviewer" || (userRoleNorm === "REVIEWER_CLIENT" && !isClient)) {
       return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
     }
 
     const body = await request.json();
-    const doc = createDocument(body, session.name || session.email);
+    const doc = createDocument(body, session.name || session.email || "System");
 
     createNotificationRecord({
       title: "Document Uploaded",

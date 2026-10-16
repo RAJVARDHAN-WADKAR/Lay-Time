@@ -36,7 +36,7 @@ describe('RolesGuard Unit Tests', () => {
 
   it('should throw ForbiddenException if user lacks required role', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN]);
-    const ctx = createMockContext(Role.REVIEWER);
+    const ctx = createMockContext(Role.REVIEWER_CLIENT);
 
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });

@@ -41,12 +41,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
     }
 
-    if (session.role === "Reviewer") {
-      return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = normalizeRole(session.role);
+    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
+      return NextResponse.json({ error: "Forbidden: Reviewers and Clients have read-only access." }, { status: 403 });
     }
 
     const body = await request.json();
-    const newCase = createRacCase(body, session.name || session.email);
+    const newCase = createRacCase(body, session.name || session.email || "System");
 
     return NextResponse.json({
       success: true,

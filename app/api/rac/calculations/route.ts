@@ -10,7 +10,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role === "Reviewer") {
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = normalizeRole(session.role);
+    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
       return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
     }
 
@@ -26,12 +28,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "RAC case not found" }, { status: 404 });
     }
 
+    const reviewerIdentity = session.name || session.email || "System";
     const calculation = computeRacCalculation(racCaseId, {
       ...calcInput,
-      reviewedBy: session.name || session.email
+      reviewedBy: reviewerIdentity
     });
 
-    saveRacCalculationRecord(racCaseId, calculation, session.name || session.email);
+    saveRacCalculationRecord(racCaseId, calculation, reviewerIdentity);
 
     // Update RAC total amount
     updateRacCase(
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
         totalAmount: calculation.calculatedResult,
         outstandingAmount: Math.max(0, calculation.calculatedResult - racCase.agreedAmount)
       },
-      session.name || session.email
+      reviewerIdentity
     );
 
     return NextResponse.json({

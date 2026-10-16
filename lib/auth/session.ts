@@ -1,20 +1,8 @@
-import { NextRequest } from "next/server";
-import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, SessionPayload } from "./jwt";
 import { UserRole } from "@/lib/types";
 
 export const AUTH_COOKIE_NAME = "laytime_auth_token";
-
-export async function getCurrentUserFromCookies(): Promise<SessionPayload | null> {
-  try {
-    const cookieStore = cookies();
-    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    if (!token) return null;
-    return verifyToken(token);
-  } catch (e) {
-    return null;
-  }
-}
 
 export function getCurrentUserFromRequest(request: NextRequest): SessionPayload | null {
   // Check Authorization Header: Bearer <token>
@@ -34,29 +22,92 @@ export function getCurrentUserFromRequest(request: NextRequest): SessionPayload 
   return null;
 }
 
-export function checkRolePermission(
-  userRole: UserRole,
-  allowedRoles: UserRole[]
-): boolean {
-  if (userRole === "Admin") return true; // Admin has access to all operations
-  return allowedRoles.includes(userRole);
+export interface ScopedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  clientId?: string;
+  client_id?: string;
+  clientName?: string;
+  createdBy?: string;
+  tokenVersion: number;
+  status: "Active" | "Inactive";
+  assignedClientId?: string | null;
 }
 
-export function canEditClaim(userRole: UserRole, userEmail: string, claimAssignedTo: string, userName?: string): boolean {
-  if (userRole === "Admin" || userRole === "Supervisor") return true;
-  if (userRole === "Reviewer") return false; // Reviewers have strictly read-only access
-  if (userRole === "Claim Processor") {
-    if (!claimAssignedTo) return true;
-    const assignedLower = claimAssignedTo.toLowerCase();
-    const emailLower = (userEmail || "").toLowerCase();
-    const nameLower = (userName || "").toLowerCase();
-    return (
-      assignedLower === emailLower ||
-      assignedLower === nameLower ||
-      assignedLower.includes("rohit") ||
-      assignedLower.includes("sarah") ||
-      assignedLower.includes("processor")
-    );
+/**
+ * Server helper requireUser(): on every API request, load the user from the database
+ * and reject if inactive or tokenVersion differs.
+ */
+export async function requireUser(request: NextRequest): Promise<
+  | { user: ScopedUser; error?: never }
+  | { user?: never; error: NextResponse }
+> {
+  const session = getCurrentUserFromRequest(request);
+  if (!session || !session.userId) {
+    return {
+      error: NextResponse.json(
+        { error: "Unauthorized: Active session required" },
+        { status: 401 }
+      )
+    };
   }
-  return false;
+
+  // Load from database to verify active state and tokenVersion
+  const { getUserById } = await import("@/lib/db/queries");
+  const dbUser = getUserById(session.userId);
+  if (!dbUser) {
+    return {
+      error: NextResponse.json(
+        { error: "Unauthorized: User account not found" },
+        { status: 401 }
+      )
+    };
+  }
+
+  if (dbUser.status === "Inactive") {
+    return {
+      error: NextResponse.json(
+        { error: "Forbidden: Account is deactivated" },
+        { status: 403 }
+      )
+    };
+  }
+
+  const currentTokenVersion = dbUser.token_version ?? dbUser.tokenVersion ?? 1;
+  const sessionTokenVersion = session.tokenVersion ?? 1;
+  if (currentTokenVersion !== sessionTokenVersion) {
+    return {
+      error: NextResponse.json(
+        { error: "Unauthorized: Session invalidated, please log in again" },
+        { status: 401 }
+      )
+    };
+  }
+
+  const assignedClientId =
+    (dbUser.role === "REVIEWER_CLIENT" || dbUser.role === "Client")
+      ? dbUser.client_id || dbUser.clientId || null
+      : null;
+
+  return {
+    user: {
+      id: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      role: dbUser.role,
+      clientId: dbUser.client_id || dbUser.clientId,
+      client_id: dbUser.client_id || dbUser.clientId,
+      clientName: dbUser.clientName,
+      createdBy: dbUser.created_by || dbUser.createdBy,
+      tokenVersion: currentTokenVersion,
+      status: dbUser.status,
+      assignedClientId
+    }
+  };
 }
+
+export * from "./permissions";
+
+

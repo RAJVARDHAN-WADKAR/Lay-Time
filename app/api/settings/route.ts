@@ -4,6 +4,11 @@ import { getBusinessRule, saveBusinessRule } from "@/lib/db/queries";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = getCurrentUserFromRequest(request);
+    if (!session || session.role !== "Admin") {
+      return NextResponse.json({ error: "Forbidden: Settings are restricted to Administrator." }, { status: 403 });
+    }
+
     const assumptions = getBusinessRule("laytime_defaults") || {
       laytimeRule: "OOD_AOD",
       weekendRule: "SHEX",
@@ -30,12 +35,13 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const session = getCurrentUserFromRequest(request);
-    if (!session || session.role !== "Admin") {
+    const { normalizeRole } = await import("@/app/access/roles");
+    if (!session || normalizeRole(session.role) !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden: Only Admin can update settings." }, { status: 403 });
     }
 
     const body = await request.json();
-    saveBusinessRule("laytime_defaults", body, session.name || session.email);
+    saveBusinessRule("laytime_defaults", body, session.name || session.email || "System");
 
     return NextResponse.json({ success: true, settings: body });
   } catch (error: any) {

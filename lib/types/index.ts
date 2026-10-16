@@ -1,4 +1,15 @@
-export type UserRole = "Admin" | "Claim Processor" | "Supervisor" | "Reviewer";
+export type ExactRole = "ADMIN" | "SUPERVISOR" | "CLAIM_PROCESSOR" | "REVIEWER_CLIENT";
+
+export type UserRole =
+  | ExactRole
+  | "Admin"
+  | "Supervisor"
+  | "Processor"
+  | "Claim Processor"
+  | "Finance"
+  | "Reviewer"
+  | "Client";
+
 
 export interface User {
   id: string;
@@ -8,6 +19,13 @@ export interface User {
   password?: string;
   demoPassword?: string;
   role: UserRole;
+  clientId?: string;
+  client_id?: string;
+  clientName?: string;
+  createdBy?: string;
+  created_by?: string;
+  tokenVersion?: number;
+  token_version?: number;
   avatar?: string;
   assignedClaimsCount?: number;
   assignedRacCount?: number;
@@ -15,6 +33,43 @@ export interface User {
   createdAt: string;
   updatedAt?: string;
   roleDescription?: string;
+}
+
+export interface ClientRecord {
+  clientId: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface NegotiationThread {
+  id: string;
+  claimId: string;
+  status: "Open" | "Pending Approval" | "Settled" | "Closed";
+  proposedAgreedAmount?: number;
+  proposedCurrency?: string;
+  proposedBy?: string;
+  proposedAt?: string;
+  supervisorConfirmed: boolean;
+  supervisorConfirmedBy?: string;
+  supervisorConfirmedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NegotiationMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  senderRole: UserRole;
+  senderName: string;
+  messageType: "text" | "counter_offer";
+  content: string;
+  counterOfferAmount?: number;
+  currency?: string;
+  counterOfferStatus?: "Pending" | "Accepted" | "Rejected" | null;
+  respondedBy?: string;
+  respondedAt?: string;
+  createdAt: string;
 }
 
 export type ClaimStatus =
@@ -158,6 +213,8 @@ export interface Discrepancy {
 export interface Claim {
   // Primary Identifiers & General Info
   id: string;
+  clientId?: string;
+  client_id?: string;
   claimName: string; // "Claim Name"
   accountName: string; // "Account / Client Name"
   brokerName: string; // "Broker Name"
@@ -185,6 +242,11 @@ export interface Claim {
   billableAmount?: number; // "Billable Amount"
   paymentReceived?: number; // "Payment Received"
   paymentConcluded?: boolean; // "Payment Concluded"
+
+  // Calculation Override (Supervisor authority)
+  isOverridden?: boolean;
+  overriddenDemurrage?: number;
+  overrideReason?: string;
 
   // Key Operational Dates
   layday?: string; // "Layday"
@@ -295,6 +357,7 @@ export interface BerthCalculation {
   isOverridden?: boolean;
   isProrataOverridden?: boolean;
   overriddenDemurrage?: number;
+  overrideReason?: string;
 }
 
 export interface PortCalculation {
@@ -602,4 +665,29 @@ export interface RacDashboardMetrics {
   statusDistribution: { status: RacStatus; count: number; value: number; color: string }[];
   typeDistribution: { type: RacType; count: number; value: number }[];
   clientExposure: { client: string; amount: number; caseCount: number }[];
+}
+
+export type NegotiationOfferBy = "Our Team" | "Counterparty" | "Client";
+export type NegotiationOfferStatus = "Draft" | "Pending Approval" | "Sent" | "Countered" | "Accepted" | "Rejected";
+
+export interface NegotiationOffer {
+  id: string;
+  claimId: string;
+  offeredBy: NegotiationOfferBy;
+  amount: number;
+  date: string;
+  author: string;
+  status: NegotiationOfferStatus;
+  notes?: string;
+  isSharedWithClient?: boolean;
+}
+
+export interface NegotiationRecord {
+  claimId: string;
+  status: "Not Initiated" | "Requested" | "In Progress" | "Settled" | "Closed";
+  requestedBy?: string;
+  minimumAcceptableAmount?: number;
+  offers: NegotiationOffer[];
+  settledAmount?: number;
+  closedAt?: string;
 }

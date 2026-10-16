@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/lib/hooks/useToast";
+import { useAuth } from "@/lib/context/AuthContext";
+import { Can } from "@/components/auth/Can";
 import {
   Search,
   Download,
@@ -143,6 +145,7 @@ export function LedgerTable({
   };
 
   const { success } = useToast();
+  const { canDeleteClaim } = useAuth();
 
   // Unique clients for dropdown
   const uniqueClients = useMemo(() => {
@@ -520,13 +523,15 @@ export function LedgerTable({
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
-                        <button
-                          onClick={() => setDeletingId(c.id)}
-                          className="h-7 w-7 p-0 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                          title="Delete Claim"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <Can roles={["Supervisor"]}>
+                          <button
+                            onClick={() => setDeletingId(c.id)}
+                            className="h-7 w-7 p-0 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="Delete Claim"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </Can>
                       </div>
                     </td>
                   </tr>

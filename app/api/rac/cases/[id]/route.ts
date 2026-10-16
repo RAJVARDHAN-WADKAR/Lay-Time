@@ -40,8 +40,10 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role === "Reviewer") {
-      return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = normalizeRole(session.role);
+    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
+      return NextResponse.json({ error: "Forbidden: Reviewers and Clients have read-only access." }, { status: 403 });
     }
 
     const existing = getRacCaseById(params.id);
@@ -49,7 +51,7 @@ export async function PUT(
       return NextResponse.json({ error: "RAC case not found" }, { status: 404 });
     }
 
-    if (session.role === "Claim Processor") {
+    if (userRoleNorm === "CLAIM_PROCESSOR" || session.role === "Claim Processor" || session.role === "Processor") {
       const isAssigned =
         existing.assignedTo.toLowerCase() === (session.email || "").toLowerCase() ||
         existing.assignedTo.toLowerCase() === (session.name || "").toLowerCase() ||
@@ -60,7 +62,18 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const updated = updateRacCase(params.id, body, session.name || session.email);
+
+    // Claim Processor restriction: cannot authorize, ignore findings, or close RAC cases
+    if (userRoleNorm === "CLAIM_PROCESSOR" || session.role === "Claim Processor" || session.role === "Processor") {
+      if (body.status && (body.status === "Reviewed" || body.status === "Closed" || body.status === "Authorized")) {
+        return NextResponse.json({ error: "Forbidden: Claim Processors cannot authorize or close RAC cases. Only Admin and Supervisor can authorize or close cases." }, { status: 403 });
+      }
+      if (body.agreedAmount !== undefined && body.agreedAmount !== existing.agreedAmount && body.agreedAmount > 0) {
+        return NextResponse.json({ error: "Forbidden: Claim Processors cannot authorize agreed RAC settlement amounts." }, { status: 403 });
+      }
+    }
+
+    const updated = updateRacCase(params.id, body, session.name || session.email || "System");
 
     return NextResponse.json({ success: true, case: updated });
   } catch (error: any) {

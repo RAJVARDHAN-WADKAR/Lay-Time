@@ -38,7 +38,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const saved = saveOwnerComparisonForClaim(params.id, body, session.name || session.email);
+    const saved = saveOwnerComparisonForClaim(params.id, body, session.name || session.email || "System");
 
     return NextResponse.json({ success: true, comparison: saved });
   } catch (error: any) {

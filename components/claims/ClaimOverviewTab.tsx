@@ -4,7 +4,8 @@ import { formatCurrency, formatDate } from "@/lib/utils/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/inputs";
-import { CheckCircle2, XCircle, Save } from "lucide-react";
+import { CheckCircle2, XCircle, Save, Lock } from "lucide-react";
+import { useAuth } from "@/lib/context/AuthContext";
 
 interface ClaimOverviewTabProps {
   claim: Claim;
@@ -23,6 +24,13 @@ export function ClaimOverviewTab({
   onSave,
   isSaving,
 }: ClaimOverviewTabProps) {
+  const {
+    canSettleClaim,
+    canAssignClaim,
+    canEditBillableAmount,
+    canEditPayments,
+    canRecordPayments
+  } = useAuth();
   return (
     <div className="space-y-6 text-xs">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -93,17 +101,27 @@ export function ClaimOverviewTab({
                 >
                   <option value="Submitted">Submitted</option>
                   <option value="Incomplete">Incomplete</option>
-                  <option value="Review">Review</option>
-                  <option value="Settled">Settled</option>
+                  <option value="Review" disabled={!canSettleClaim}>
+                    Review {!canSettleClaim ? "(Supervisor only)" : ""}
+                  </option>
+                  <option value="Settled" disabled={!canSettleClaim}>
+                    Settled {!canSettleClaim ? "(Supervisor only)" : ""}
+                  </option>
                   <option value="Disputed">Disputed</option>
                   <option value="Timebarred">Timebarred</option>
                 </Select>
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Demurrage Rate ($/day)</label>
+                <label className="block font-medium text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Demurrage Rate ($/day)</span>
+                  {!canEditBillableAmount && (
+                    <span className="text-[10px] text-slate-400 font-normal">Supervisor/Finance only</span>
+                  )}
+                </label>
                 <Input
                   type="number"
+                  disabled={!canEditBillableAmount}
                   value={generalEditForm.demurrageRatePerDay}
                   onChange={(e) =>
                     setGeneralEditForm({
@@ -115,9 +133,32 @@ export function ClaimOverviewTab({
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Agreed Settlement ($)</label>
+                <label className="block font-medium text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Assigned Processor</span>
+                  {!canAssignClaim && (
+                    <span className="text-[10px] text-slate-400 font-normal">Supervisor only</span>
+                  )}
+                </label>
+                <Input
+                  disabled={!canAssignClaim}
+                  value={generalEditForm.assignedTo || claim.assignedTo || ""}
+                  onChange={(e) =>
+                    setGeneralEditForm({
+                      ...generalEditForm,
+                      assignedTo: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Agreed Settlement ($)</span>
+                  {!canSettleClaim && <span className="text-[10px] text-slate-400 font-normal">Supervisor only</span>}
+                </label>
                 <Input
                   type="number"
+                  disabled={!canSettleClaim}
                   value={generalEditForm.agreedAmount}
                   onChange={(e) =>
                     setGeneralEditForm({
@@ -129,9 +170,15 @@ export function ClaimOverviewTab({
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Payment Received ($)</label>
+                <label className="block font-medium text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Payment Received ($)</span>
+                  {(claim.paymentReceived || 0) > 0 && !canEditPayments && (
+                    <span className="text-[10px] text-slate-400 font-normal">Edit locked</span>
+                  )}
+                </label>
                 <Input
                   type="number"
+                  disabled={(claim.paymentReceived || 0) > 0 ? !canEditPayments : !canRecordPayments}
                   value={generalEditForm.paymentReceived}
                   onChange={(e) =>
                     setGeneralEditForm({

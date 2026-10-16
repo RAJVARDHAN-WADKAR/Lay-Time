@@ -144,7 +144,7 @@ async function runTestSuite() {
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Admin login successful");
-    assert(data.user.role === "Admin", `Admin role verified: ${data.user.role}`);
+    assert(data.user.role === "Admin" || data.user.role === "ADMIN", `Admin role verified: ${data.user.role}`);
     assert(!data.user.password_hash, "Admin response does NOT expose password_hash");
     adminToken = extractAuthCookie(res);
     assert(!!adminToken, "Admin session cookie (laytime_auth_token) received");
@@ -188,30 +188,30 @@ async function runTestSuite() {
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Claim Processor login successful");
-    assert(data.user.role === "Claim Processor", `Processor role verified: ${data.user.role}`);
+    assert(data.user.role === "Claim Processor" || data.user.role === "CLAIM_PROCESSOR", `Processor role verified: ${data.user.role}`);
     processorToken = extractAuthCookie(res);
   }
 
   if (processorToken) {
-    // Non-Admin blocked from /users in middleware
-    const usersPageRes = await fetch(`${BASE_URL}/users`, {
+    // Processor blocked from /settings by middleware
+    const settingsPageRes = await fetch(`${BASE_URL}/settings`, {
       headers: { Cookie: `laytime_auth_token=${processorToken}` },
       redirect: "manual"
     });
     assert(
-      usersPageRes.status === 307 || usersPageRes.status === 302,
-      `Processor blocked from /users by middleware (status ${usersPageRes.status})`
+      settingsPageRes.status === 307 || settingsPageRes.status === 302,
+      `Processor blocked from /settings by middleware (status ${settingsPageRes.status})`
     );
-    const location = usersPageRes.headers.get("location") || "";
+    const location = settingsPageRes.headers.get("location") || "";
     assert(location.includes("/dashboard"), `Processor redirected to /dashboard: ${location}`);
 
-    // Non-Admin blocked from /api/users API
+    // Processor allowed on /api/users for subtree
     const usersApiRes = await fetch(`${BASE_URL}/api/users`, {
       headers: { Cookie: `laytime_auth_token=${processorToken}` }
     });
     assert(
-      usersApiRes.status === 403,
-      `Processor blocked from /api/users API (status ${usersApiRes.status})`
+      usersApiRes.status === 200,
+      `Processor allowed on /api/users for subtree (status ${usersApiRes.status})`
     );
 
     // Processor can edit assigned claim
@@ -254,19 +254,19 @@ async function runTestSuite() {
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Supervisor login successful");
-    assert(data.user.role === "Supervisor", `Supervisor role verified: ${data.user.role}`);
+    assert(data.user.role === "Supervisor" || data.user.role === "SUPERVISOR", `Supervisor role verified: ${data.user.role}`);
     supervisorToken = extractAuthCookie(res);
   }
 
   if (supervisorToken) {
-    // Supervisor blocked from /users
+    // Supervisor can access /users
     const usersPageRes = await fetch(`${BASE_URL}/users`, {
       headers: { Cookie: `laytime_auth_token=${supervisorToken}` },
       redirect: "manual"
     });
     assert(
-      usersPageRes.status === 307 || usersPageRes.status === 302,
-      `Supervisor blocked from /users by middleware (status ${usersPageRes.status})`
+      usersPageRes.status === 200,
+      `Supervisor can access /users by middleware (status ${usersPageRes.status})`
     );
 
     // Supervisor can manage any claim
@@ -295,7 +295,7 @@ async function runTestSuite() {
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Reviewer login successful");
-    assert(data.user.role === "Reviewer", `Reviewer role verified: ${data.user.role}`);
+    assert(data.user.role === "Reviewer" || data.user.role === "REVIEWER_CLIENT", `Reviewer role verified: ${data.user.role}`);
     reviewerToken = extractAuthCookie(res);
   }
 
@@ -386,6 +386,785 @@ async function runTestSuite() {
       dashRes.status === 307 || dashRes.status === 302,
       `Post-logout /dashboard redirects to /login (status ${dashRes.status})`
     );
+  }
+
+  // =========================================================================
+  // TEST 9: EXTENDED ENTERPRISE AUTHORIZATION & ROW-LEVEL ISOLATION SUITE
+  // =========================================================================
+  console.log("\n--- 9. Extended Enterprise Authorization & Row-Level Isolation ---");
+
+  async function loginAs(email, password) {
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    const token = extractAuthCookie(res);
+    return { res, data, token };
+  }
+
+  // Re-authenticate test actors
+  const adminActor = await loginAs("rajvardhanwadkar76@gmail.com", "Raj@123");
+  const supervisorActor = await loginAs("swayamghatage3839@gmail.com", "Swayam@123");
+  const processorActor = await loginAs("rohitmengane2975@gmail.com", "Rohit@123");
+  const reviewerActor = await loginAs("paraschougale558@gmail.com", "Paras@123");
+  const clientActor = await loginAs("client@trafigura.com", "Client@123");
+
+  // 9.1 HIERARCHICAL USER CREATION & CREATE_MATRIX ENFORCEMENT
+  console.log("\n--- 9.1 Testing Hierarchical User Creation (CREATE_MATRIX) ---");
+  {
+    const rand = Date.now();
+
+    // Admin -> Reviewer (ALLOWED)
+    const adminCreateReviewer = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${adminActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Subtree Reviewer ${rand}`,
+        email: `rev.${rand}@laytime.com`,
+        role: "Reviewer"
+      })
+    });
+    assert(
+      adminCreateReviewer.status === 201,
+      `Admin can create Reviewer per CREATE_MATRIX (status ${adminCreateReviewer.status})`
+    );
+
+    // Admin -> Claim Processor (FORBIDDEN per CREATE_MATRIX)
+    const adminCreateProcessor = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${adminActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Illegal Processor ${rand}`,
+        email: `illegal.proc.${rand}@laytime.com`,
+        role: "Claim Processor"
+      })
+    });
+    assert(
+      adminCreateProcessor.status === 403,
+      `Admin blocked from creating Claim Processor out-of-hierarchy (status ${adminCreateProcessor.status})`
+    );
+
+    // Supervisor -> Claim Processor (ALLOWED)
+    const supCreateProcessor = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${supervisorActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Subtree Processor ${rand}`,
+        email: `proc.${rand}@laytime.com`,
+        role: "Claim Processor"
+      })
+    });
+    assert(
+      supCreateProcessor.status === 201,
+      `Supervisor can create Claim Processor per CREATE_MATRIX (status ${supCreateProcessor.status})`
+    );
+
+    // Supervisor -> Client (FORBIDDEN per CREATE_MATRIX)
+    const supCreateClient = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${supervisorActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Illegal Client ${rand}`,
+        email: `illegal.client.${rand}@laytime.com`,
+        role: "Client",
+        clientId: "client-trafigura"
+      })
+    });
+    assert(
+      supCreateClient.status === 403,
+      `Supervisor blocked from creating Client out-of-hierarchy (status ${supCreateClient.status})`
+    );
+
+    // Claim Processor -> Client (ALLOWED)
+    const procCreateClient = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${processorActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Subtree Client ${rand}`,
+        email: `client.${rand}@trafigura.com`,
+        role: "Client",
+        clientId: "client-trafigura",
+        clientName: "Trafigura"
+      })
+    });
+    assert(
+      procCreateClient.status === 201,
+      `Claim Processor can create Client per CREATE_MATRIX (status ${procCreateClient.status})`
+    );
+
+    // Claim Processor -> Supervisor (FORBIDDEN per CREATE_MATRIX)
+    const procCreateSupervisor = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${processorActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Illegal Supervisor ${rand}`,
+        email: `illegal.sup.${rand}@laytime.com`,
+        role: "Supervisor"
+      })
+    });
+    assert(
+      procCreateSupervisor.status === 403,
+      `Claim Processor blocked from creating Supervisor out-of-hierarchy (status ${procCreateSupervisor.status})`
+    );
+
+    // Reviewer -> Any User (FORBIDDEN)
+    const revCreateUser = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${reviewerActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Illegal Reviewer Sub ${rand}`,
+        email: `rev.sub.${rand}@laytime.com`,
+        role: "Reviewer"
+      })
+    });
+    assert(
+      revCreateUser.status === 403,
+      `Reviewer forbidden from creating users (status ${revCreateUser.status})`
+    );
+
+    // Client -> Any User (FORBIDDEN)
+    const cliCreateUser = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Illegal Client Sub ${rand}`,
+        email: `cli.sub.${rand}@laytime.com`,
+        role: "Client"
+      })
+    });
+    assert(
+      cliCreateUser.status === 403,
+      `Client forbidden from creating users (status ${cliCreateUser.status})`
+    );
+  }
+
+  // 9.2 SUBTREE ISOLATION & SELF-PROTECTION GUARDS
+  console.log("\n--- 9.2 Testing Subtree Isolation & Self-Protection ---");
+  {
+    // Processor cannot update Supervisor (outside actor subtree)
+    const procUpdateSupervisor = await fetch(`${BASE_URL}/api/users/usr-003`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${processorActor.token}`
+      },
+      body: JSON.stringify({ name: "Attempt Subtree Breach" })
+    });
+    assert(
+      procUpdateSupervisor.status === 403,
+      `Processor forbidden from updating user outside actor subtree (status ${procUpdateSupervisor.status})`
+    );
+
+    // Processor cannot deactivate Supervisor (outside actor subtree)
+    const procDeactivateSupervisor = await fetch(`${BASE_URL}/api/users/usr-003`, {
+      method: "DELETE",
+      headers: { Cookie: `laytime_auth_token=${processorActor.token}` }
+    });
+    assert(
+      procDeactivateSupervisor.status === 403,
+      `Processor forbidden from deactivating user outside actor subtree (status ${procDeactivateSupervisor.status})`
+    );
+
+    // Admin cannot self-deactivate
+    const adminSelfDeactivate = await fetch(`${BASE_URL}/api/users/usr-001`, {
+      method: "DELETE",
+      headers: { Cookie: `laytime_auth_token=${adminActor.token}` }
+    });
+    assert(
+      adminSelfDeactivate.status === 403,
+      `Self-deactivation safely blocked (status ${adminSelfDeactivate.status})`
+    );
+  }
+
+  // 9.3 ROW-LEVEL DATA ISOLATION (PROCESSOR & CLIENT)
+  console.log("\n--- 9.3 Testing Row-Level Data Isolation ---");
+  {
+    // Processor reading assigned claim -> 200
+    const procAssigned = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+      headers: { Cookie: `laytime_auth_token=${processorActor.token}` }
+    });
+    assert(
+      procAssigned.status === 200,
+      `Processor can read assigned claim CLM-2024-001 (status ${procAssigned.status})`
+    );
+
+    // Processor reading unassigned claim -> 404 (outside user's scope)
+    const procUnassigned = await fetch(`${BASE_URL}/api/claims/CLM-2024-003`, {
+      headers: { Cookie: `laytime_auth_token=${processorActor.token}` }
+    });
+    assert(
+      procUnassigned.status === 404,
+      `Processor reading unassigned claim returns 404 (status ${procUnassigned.status})`
+    );
+
+    // Client reading own claim -> 200
+    const clientOwn = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      clientOwn.status === 200,
+      `Client can read own claim CLM-2024-001 (status ${clientOwn.status})`
+    );
+    const clientOwnData = await clientOwn.json();
+    const claimKeys = Object.keys(clientOwnData.claim || {});
+    const isRestrictedDto =
+      claimKeys.includes("claimReference") &&
+      claimKeys.includes("totalDemurrageClaimed") &&
+      !claimKeys.includes("contentions") &&
+      !claimKeys.includes("calculations") &&
+      !claimKeys.includes("ports");
+    assert(
+      isRestrictedDto,
+      "Client receives restricted DTO with no calculations, SoF, or internal contentions"
+    );
+
+    // Client reading other client's claim -> 404
+    const clientOther = await fetch(`${BASE_URL}/api/claims/CLM-2024-002`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      clientOther.status === 404,
+      `Client reading other client claim CLM-2024-002 returns 404 (status ${clientOther.status})`
+    );
+  }
+
+  // 9.4 CLIENT PROTECTED FEATURE RESTRICTIONS (403)
+  console.log("\n--- 9.4 Testing Client Protected Feature Restrictions ---");
+  {
+    // Client blocked from Calculations endpoint -> 403
+    const cliCalcRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/calculations`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      cliCalcRes.status === 403,
+      `Client forbidden from calculation endpoints (status ${cliCalcRes.status})`
+    );
+
+    // Client blocked from SoF endpoint -> 403
+    const cliSofRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/sof`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      cliSofRes.status === 403,
+      `Client forbidden from SoF endpoints (status ${cliSofRes.status})`
+    );
+
+    // Client blocked from Override endpoint -> 403
+    const cliOverrideRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/override`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({ overrideAmount: 15000, reason: "Unauthorized attempt" })
+    });
+    assert(
+      cliOverrideRes.status === 403,
+      `Client forbidden from override endpoint (status ${cliOverrideRes.status})`
+    );
+
+    // Client blocked from RAC endpoint -> 403
+    const cliRacRes = await fetch(`${BASE_URL}/api/rac`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      cliRacRes.status === 403,
+      `Client forbidden from RAC endpoint (status ${cliRacRes.status})`
+    );
+  }
+
+  // 9.5 TOKEN VERSION REVOCATION & ACCOUNT DEACTIVATION
+  console.log("\n--- 9.5 Testing Token Version Revocation & Deactivation ---");
+  {
+    const rand = Date.now();
+    const tempUserEmail = `session.revocation.${rand}@laytime.com`;
+
+    // Supervisor creates temporary user
+    const createRes = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${supervisorActor.token}`
+      },
+      body: JSON.stringify({
+        name: `Revocation Test User ${rand}`,
+        email: tempUserEmail,
+        role: "Claim Processor",
+        password: "TempPassword@123"
+      })
+    });
+    const createData = await createRes.json();
+    const tempUserId = createData.user?.id;
+
+    // Log in as temporary user
+    const tempLogin = await loginAs(tempUserEmail, "TempPassword@123");
+    assert(tempLogin.res.status === 200, "Temporary user login successful");
+
+    // Verify session works before revocation
+    const activeMe = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { Cookie: `laytime_auth_token=${tempLogin.token}` }
+    });
+    assert(activeMe.status === 200, "Active session verified before revocation");
+
+    // Deactivate temporary user account
+    const deactRes = await fetch(`${BASE_URL}/api/users/${tempUserId}`, {
+      method: "DELETE",
+      headers: { Cookie: `laytime_auth_token=${supervisorActor.token}` }
+    });
+    assert(deactRes.status === 200, "Temporary user deactivated successfully");
+
+    // Next request with existing token is rejected immediately
+    const revokedMe = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { Cookie: `laytime_auth_token=${tempLogin.token}` }
+    });
+    assert(
+      revokedMe.status === 403 || revokedMe.status === 401,
+      `Deactivated account rejected on next request (status ${revokedMe.status})`
+    );
+  }
+
+  // 9.6 CLIENT NEGOTIATIONS LIFECYCLE & IMMUTABILITY
+  console.log("\n--- 9.6 Testing Client Negotiations Lifecycle & Immutability ---");
+  {
+    // Client posts text message -> 201
+    const postText = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({
+        messageType: "text",
+        content: "Automated negotiation message verification"
+      })
+    });
+    assert(
+      postText.status === 201,
+      `Client can post negotiation text message (status ${postText.status})`
+    );
+
+    // Attempt PUT/DELETE on negotiation messages -> 405 Method Not Allowed (Append-only)
+    const putMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({ content: "Edit attempt" })
+    });
+    assert(
+      putMsg.status === 405,
+      `Negotiation messages are append-only: PUT returns 405 (status ${putMsg.status})`
+    );
+
+    const delMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "DELETE",
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      delMsg.status === 405,
+      `Negotiation messages are append-only: DELETE returns 405 (status ${delMsg.status})`
+    );
+
+    // Client posts counter_offer -> 201 with status "Pending"
+    const postOffer = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({
+        messageType: "counter_offer",
+        content: "Proposed settlement offer",
+        counterOfferAmount: 22000
+      })
+    });
+    const offerData = await postOffer.json();
+    assert(
+      postOffer.status === 201 && offerData.message?.counterOfferStatus === "Pending",
+      `Client counter-offer posted with Pending status (status ${postOffer.status})`
+    );
+    const counterOfferMsgId = offerData.message?.id;
+
+    // Processor accepts counter_offer -> 200 (creates proposed agreed amount)
+    const procAccept = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/respond`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${processorActor.token}`
+      },
+      body: JSON.stringify({
+        messageId: counterOfferMsgId,
+        decision: "Accepted"
+      })
+    });
+    const acceptData = await procAccept.json();
+    assert(
+      procAccept.status === 200 && acceptData.thread?.proposedAgreedAmount === 22000,
+      `Processor acceptance sets proposed agreed amount to 22000 (status ${procAccept.status})`
+    );
+
+    // Supervisor confirms settlement -> 200 (commits to claims.agreed_amount)
+    const supConfirm = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/confirm`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${supervisorActor.token}`
+      }
+    });
+    assert(
+      supConfirm.status === 200,
+      `Supervisor confirms negotiation settlement (status ${supConfirm.status})`
+    );
+
+    // Verify claim agreed_amount reflects confirmed settlement
+    const verifiedClaimRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+      headers: { Cookie: `laytime_auth_token=${supervisorActor.token}` }
+    });
+    const verifiedClaimData = await verifiedClaimRes.json();
+    assert(
+      verifiedClaimData.claim?.agreedAmount === 22000,
+      `Confirmed settlement updated claims.agreed_amount to 22000: ${verifiedClaimData.claim?.agreedAmount}`
+    );
+  }
+
+  // 9.7 ZOD VALIDATION & SQL INJECTION RESILIENCE
+  console.log("\n--- 9.7 Testing Zod Validation & SQL Injection Resilience ---");
+  {
+    // Zod rejects malformed email
+    const malformedUser = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${supervisorActor.token}`
+      },
+      body: JSON.stringify({
+        name: "Test",
+        email: "not-an-email",
+        role: "Claim Processor"
+      })
+    });
+    assert(
+      malformedUser.status === 400,
+      `Zod rejects malformed email in user creation (status ${malformedUser.status})`
+    );
+
+    // Zod rejects oversized negotiation message (>2000 chars)
+    const oversizedContent = "A".repeat(2005);
+    const oversizedMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({
+        messageType: "text",
+        content: oversizedContent
+      })
+    });
+    assert(
+      oversizedMsg.status === 400,
+      `Zod rejects oversized message payload >2000 chars (status ${oversizedMsg.status})`
+    );
+
+    // Zod rejects negative counter-offer amount
+    const negativeOffer = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${clientActor.token}`
+      },
+      body: JSON.stringify({
+        messageType: "counter_offer",
+        content: "Negative offer test",
+        counterOfferAmount: -500
+      })
+    });
+    assert(
+      negativeOffer.status === 400,
+      `Zod rejects negative counter-offer amount (status ${negativeOffer.status})`
+    );
+
+    // SQL Injection attack attempt in parameterized endpoint returns 404 safely
+    const sqliRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001' OR '1'='1`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      sqliRes.status === 404,
+      `SQL injection attempt safely neutralized by parameterization (status ${sqliRes.status})`
+    );
+  }
+
+  // 9.8 COMPREHENSIVE REVIEWER STRICTLY READ-ONLY ACCESS & PROHIBITION MATRIX
+  console.log("\n--- 9.8 Testing Reviewer Strictly Read-Only Permissions & Prohibitions Matrix ---");
+  {
+    // Reviewer login
+    const revLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "paraschougale558@gmail.com", password: "Paras@123" })
+    });
+    const revToken = extractAuthCookie(revLoginRes);
+    const revHeaders = { Cookie: `laytime_auth_token=${revToken}` };
+    const revJsonHeaders = {
+      "Content-Type": "application/json",
+      Cookie: `laytime_auth_token=${revToken}`
+    };
+
+    // --- WHAT THE REVIEWER CAN DO (READ ONLY) ---
+    // 1. View claims, claim list, claim details and status
+    const revClaims = await fetch(`${BASE_URL}/api/claims`, { headers: revHeaders });
+    assert(revClaims.status === 200, `Reviewer can view claims list (status ${revClaims.status})`);
+    const revClaim = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, { headers: revHeaders });
+    assert(revClaim.status === 200, `Reviewer can view claim details and status (status ${revClaim.status})`);
+
+    // 2. View Statement of Facts (SoF), ports and berths
+    const revSof = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/sof`, { headers: revHeaders });
+    assert(revSof.status === 200, `Reviewer can view Statement of Facts, ports and berths (status ${revSof.status})`);
+
+    // 3. View documents and preview/download them
+    const revDocs = await fetch(`${BASE_URL}/api/documents`, { headers: revHeaders });
+    assert(revDocs.status === 200, `Reviewer can view documents list (status ${revDocs.status})`);
+    const revDocItem = await fetch(`${BASE_URL}/api/documents/doc-101`, { headers: revHeaders });
+    assert(revDocItem.status === 200, `Reviewer can preview/inspect document (status ${revDocItem.status})`);
+
+    // 4. View saved laytime calculation results and summaries (read stored results only)
+    const revCalc = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/calculations`, { headers: revHeaders });
+    assert(revCalc.status === 200, `Reviewer can view saved laytime calculation results (status ${revCalc.status})`);
+    const revOilChem = await fetch(`${BASE_URL}/api/oil-chem`, { headers: revHeaders });
+    assert(revOilChem.status === 200, `Reviewer can view saved oil/chem calculation summaries (status ${revOilChem.status})`);
+
+    // 5. View RAC findings and their status
+    const revRacCases = await fetch(`${BASE_URL}/api/rac/cases`, { headers: revHeaders });
+    assert(revRacCases.status === 200, `Reviewer can view RAC cases and findings (status ${revRacCases.status})`);
+    const revRacCase = await fetch(`${BASE_URL}/api/rac/cases/RAC-2024-001`, { headers: revHeaders });
+    assert(revRacCase.status === 200, `Reviewer can view RAC finding status (status ${revRacCase.status})`);
+
+    // 6. View payments and invoices
+    const revPayments = await fetch(`${BASE_URL}/api/payments`, { headers: revHeaders });
+    assert(revPayments.status === 200, `Reviewer can view payments (status ${revPayments.status})`);
+    const revInvoices = await fetch(`${BASE_URL}/api/invoices`, { headers: revHeaders });
+    assert(revInvoices.status === 200, `Reviewer can view invoices (status ${revInvoices.status})`);
+
+    // 7. View negotiation history, including minimum acceptable amount
+    const revNego = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations`, { headers: revHeaders });
+    const revNegoData = await revNego.json();
+    assert(
+      revNego.status === 200 && revNegoData.roleType === "oversight",
+      `Reviewer can view negotiation history in oversight mode (status ${revNego.status})`
+    );
+
+    // 8. View clients and vessels
+    const revClients = await fetch(`${BASE_URL}/api/clients`, { headers: revHeaders });
+    assert(revClients.status === 200, `Reviewer can view clients and vessels (status ${revClients.status})`);
+
+    // 9. View dashboards, analytics and reports that already exist
+    const revDash = await fetch(`${BASE_URL}/api/dashboard`, { headers: revHeaders });
+    assert(revDash.status === 200, `Reviewer can view dashboard metrics (status ${revDash.status})`);
+    const revReports = await fetch(`${BASE_URL}/api/reports`, { headers: revHeaders });
+    assert(revReports.status === 200, `Reviewer can view existing reports (status ${revReports.status})`);
+    const revFinReport = await fetch(`${BASE_URL}/api/reports/financial`, { headers: revHeaders });
+    assert(revFinReport.status === 200, `Reviewer can view existing financial reports (status ${revFinReport.status})`);
+
+    // --- WHAT THE REVIEWER MUST NEVER DO ---
+    // 1. Never create, edit or delete Statement of Facts (SoF)
+    const revPostSof = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/sof`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ activityName: "Unauthorized SoF Activity", startTime: "2024-07-12T10:00:00Z", stopTime: "2024-07-12T12:00:00Z" })
+    });
+    assert(revPostSof.status === 403, `Reviewer forbidden from creating/editing SoF (status ${revPostSof.status})`);
+
+    // 2. Never run, recalculate, preview-calculate or override laytime calculations
+    const revPostCalc = await fetch(`${BASE_URL}/api/calculations`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ claimFiledAmount: 10000 })
+    });
+    assert(revPostCalc.status === 403, `Reviewer forbidden from executing laytime calculation (status ${revPostCalc.status})`);
+
+    const revPostClaimCalc = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/calculations`, {
+      method: "POST",
+      headers: revJsonHeaders
+    });
+    assert(revPostClaimCalc.status === 403, `Reviewer forbidden from recalculating claim laytime (status ${revPostClaimCalc.status})`);
+
+    const revPostOverride = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/override`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ overriddenDemurrage: 20000, overrideReason: "Unauthorized override attempt" })
+    });
+    assert(revPostOverride.status === 403, `Reviewer forbidden from overriding laytime calculation (status ${revPostOverride.status})`);
+
+    const revPostOilChem = await fetch(`${BASE_URL}/api/oil-chem`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ cargoName: "Crude Oil", quantityMetricTons: 50000 })
+    });
+    assert(revPostOilChem.status === 403, `Reviewer forbidden from executing oil/chem calculation (status ${revPostOilChem.status})`);
+
+    // 3. Never run RAC analysis, or resolve, ignore, authorize or close RAC findings
+    const revPostRacCalc = await fetch(`${BASE_URL}/api/rac/calculations`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ racCaseId: "RAC-2024-001" })
+    });
+    assert(revPostRacCalc.status === 403, `Reviewer forbidden from running RAC analysis (status ${revPostRacCalc.status})`);
+
+    const revPostRacCase = await fetch(`${BASE_URL}/api/rac/cases`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ title: "Unauthorized Case" })
+    });
+    assert(revPostRacCase.status === 403, `Reviewer forbidden from creating RAC case (status ${revPostRacCase.status})`);
+
+    const revPutRacCase = await fetch(`${BASE_URL}/api/rac/cases/RAC-2024-001`, {
+      method: "PUT",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ status: "Closed" })
+    });
+    assert(revPutRacCase.status === 403, `Reviewer forbidden from updating/closing RAC case (status ${revPutRacCase.status})`);
+
+    // 4. Never run OCR, edit or verify OCR results
+    const revPostOcr = await fetch(`${BASE_URL}/api/ocr`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ fileName: "test.pdf", claimId: "CLM-2024-001" })
+    });
+    assert(revPostOcr.status === 403, `Reviewer forbidden from executing OCR (status ${revPostOcr.status})`);
+
+    // 5. Never upload, edit or delete documents
+    const revPostDoc = await fetch(`${BASE_URL}/api/documents`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ fileName: "unauthorized.pdf", claimId: "CLM-2024-001" })
+    });
+    assert(revPostDoc.status === 403, `Reviewer forbidden from uploading documents (status ${revPostDoc.status})`);
+
+    const revPutDoc = await fetch(`${BASE_URL}/api/documents/doc-101`, {
+      method: "PUT",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ status: "Verified" })
+    });
+    assert(revPutDoc.status === 403, `Reviewer forbidden from modifying documents (status ${revPutDoc.status})`);
+
+    const revDelDoc = await fetch(`${BASE_URL}/api/documents/doc-101`, {
+      method: "DELETE",
+      headers: revHeaders
+    });
+    assert(revDelDoc.status === 403, `Reviewer forbidden from deleting documents (status ${revDelDoc.status})`);
+
+    // 6. Never record or edit payments, or create or edit invoices
+    const revPostPay = await fetch(`${BASE_URL}/api/payments`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ claimId: "CLM-2024-001", amount: 5000 })
+    });
+    assert(revPostPay.status === 403, `Reviewer forbidden from recording payments (status ${revPostPay.status})`);
+
+    const revPostInv = await fetch(`${BASE_URL}/api/invoices`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ claimId: "CLM-2024-001", amount: 5000 })
+    });
+    assert(revPostInv.status === 403, `Reviewer forbidden from creating invoices (status ${revPostInv.status})`);
+
+    // 7. Never assign or reassign claims, or review-and-settle / approve / close claim
+    const revAssign = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+      method: "PUT",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ assignedTo: "another.user@laytime.com" })
+    });
+    assert(revAssign.status === 403, `Reviewer forbidden from assigning claims (status ${revAssign.status})`);
+
+    const revSettle = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+      method: "PUT",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ claimStatus: "Settled" })
+    });
+    assert(revSettle.status === 403, `Reviewer forbidden from settling claims (status ${revSettle.status})`);
+
+    // 8. Never create, edit or delete clients, vessels, or settings
+    const revPostClient = await fetch(`${BASE_URL}/api/clients`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ name: "Unauthorized Client" })
+    });
+    assert(revPostClient.status === 403, `Reviewer forbidden from creating clients (status ${revPostClient.status})`);
+
+    const revSettings = await fetch(`${BASE_URL}/api/settings`, { headers: revHeaders });
+    assert(revSettings.status === 403, `Reviewer forbidden from settings API (status ${revSettings.status})`);
+
+    // 9. Never generate new computed reports or trigger AI assistant
+    const revPostReport = await fetch(`${BASE_URL}/api/reports/financial`, {
+      method: "POST",
+      headers: revJsonHeaders
+    });
+    assert(revPostReport.status === 403, `Reviewer forbidden from triggering report computation (status ${revPostReport.status})`);
+
+    const revPostAi = await fetch(`${BASE_URL}/api/ai-assistant`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ prompt: "Calculate demurrage" })
+    });
+    assert(revPostAi.status === 403, `Reviewer forbidden from triggering AI assistant (status ${revPostAi.status})`);
+
+    // 10. Never initiate, draft, accept, reject or close negotiations
+    const revPostMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ messageType: "text", content: "Unauthorized review comment" })
+    });
+    assert(revPostMsg.status === 403, `Reviewer forbidden from posting negotiation messages (status ${revPostMsg.status})`);
+
+    const revRespondNego = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/respond`, {
+      method: "POST",
+      headers: revJsonHeaders,
+      body: JSON.stringify({ messageId: "msg-1", decision: "Accepted" })
+    });
+    assert(revRespondNego.status === 403, `Reviewer forbidden from accepting/rejecting counter-offers (status ${revRespondNego.status})`);
+
+    const revConfirmNego = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/confirm`, {
+      method: "POST",
+      headers: revJsonHeaders
+    });
+    assert(revConfirmNego.status === 403, `Reviewer forbidden from confirming settlements (status ${revConfirmNego.status})`);
+
+    // 11. Middleware page-level enforcement: restricted pages redirect Reviewer
+    const revCalcPage = await fetch(`${BASE_URL}/calculator`, { headers: revHeaders, redirect: "manual" });
+    assert(revCalcPage.status === 307 || revCalcPage.status === 302, `Reviewer redirected away from /calculator (status ${revCalcPage.status})`);
+
+    const revOcrPage = await fetch(`${BASE_URL}/ocr`, { headers: revHeaders, redirect: "manual" });
+    assert(revOcrPage.status === 307 || revOcrPage.status === 302, `Reviewer redirected away from /ocr (status ${revOcrPage.status})`);
+
+    const revAiPage = await fetch(`${BASE_URL}/ai-assistant`, { headers: revHeaders, redirect: "manual" });
+    assert(revAiPage.status === 307 || revAiPage.status === 302, `Reviewer redirected away from /ai-assistant (status ${revAiPage.status})`);
   }
 
   console.log("\n=========================================================");

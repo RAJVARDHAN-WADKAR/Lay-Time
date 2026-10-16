@@ -117,10 +117,10 @@ export async function POST(request: NextRequest) {
         `ts-imp-${Date.now()}`,
         claimId,
         fileName || "Timesheet.csv",
-        session.name || session.email,
+        session.name || session.email || "System",
         new Date().toISOString(),
         JSON.stringify(rowsToImport),
-        session.name || session.email,
+        session.name || session.email || "System",
         new Date().toISOString()
       );
 

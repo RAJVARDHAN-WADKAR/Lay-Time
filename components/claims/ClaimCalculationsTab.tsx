@@ -1,9 +1,78 @@
-import React from "react";
-import { ClaimCalculation } from "@/lib/types";
+import React, { useState } from "react";
+import { Claim, ClaimCalculation } from "@/lib/types";
 import { formatCurrency, formatMinutesToDuration } from "@/lib/utils/formatters";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/inputs";
+import { Badge } from "@/components/ui/badge";
+import { Modal } from "@/components/ui/modal";
+import { useAuth } from "@/lib/context/AuthContext";
+import { ShieldCheck, Edit3, CheckCircle2, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { Can } from "@/components/auth/Can";
 
-export function ClaimCalculationsTab({ calculationResult }: { calculationResult: ClaimCalculation }) {
+interface ClaimCalculationsTabProps {
+  calculationResult: ClaimCalculation;
+  claim?: Claim;
+  onUpdateClaim?: (updates: Partial<Claim>) => Promise<void>;
+}
+
+export function ClaimCalculationsTab({
+  calculationResult,
+  claim,
+  onUpdateClaim
+}: ClaimCalculationsTabProps) {
+  const { canOverrideCalculation, role } = useAuth();
+  const { success, error } = useToast();
+  const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
+  const [overrideAmount, setOverrideAmount] = useState<number>(
+    claim?.overriddenDemurrage ?? calculationResult.finalPayableAmount
+  );
+  const [overrideReason, setOverrideReason] = useState<string>(
+    claim?.overrideReason ?? ""
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleApplyOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideReason.trim()) {
+      error("Reason Required", "Please specify a commercial or operational justification for the calculation override.");
+      return;
+    }
+    if (!onUpdateClaim || !claim) return;
+
+    setIsSaving(true);
+    try {
+      await onUpdateClaim({
+        isOverridden: true,
+        overriddenDemurrage: Number(overrideAmount),
+        overrideReason: overrideReason.trim()
+      });
+      success("Calculation Overridden", `Override applied with justification: ${overrideReason}`);
+      setIsOverrideModalOpen(false);
+    } catch (e: any) {
+      error("Override Failed", e.message || "Failed to save calculation override");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetOverride = async () => {
+    if (!onUpdateClaim || !claim) return;
+    setIsSaving(true);
+    try {
+      await onUpdateClaim({
+        isOverridden: false,
+        overriddenDemurrage: undefined,
+        overrideReason: undefined
+      });
+      success("Override Cleared", "Restored deterministic calculations.");
+    } catch (e: any) {
+      error("Reset Failed", e.message || "Failed to clear override");
+    } finally {
+      setIsSaving(false);
+    }
+  };
   return (
     <div className="space-y-6 text-xs">
       <Card className="border-blue-200 bg-blue-50/40 shadow-xs">
@@ -12,11 +81,55 @@ export function ClaimCalculationsTab({ calculationResult }: { calculationResult:
             <CardTitle className="text-sm font-bold text-blue-950">Master Claim Laytime Summary</CardTitle>
             <CardDescription>Pure deterministic calculation engine results across all ports</CardDescription>
           </div>
-          <div className="text-right">
+          <div className="text-right space-y-1">
             <span className="text-xs text-slate-500 block">Final Payable Demurrage</span>
-            <span className="text-2xl font-bold text-blue-900">
-              {formatCurrency(calculationResult.finalPayableAmount)}
-            </span>
+            {claim?.isOverridden ? (
+              <div>
+                <span className="text-2xl font-bold text-amber-700">
+                  {formatCurrency(claim.overriddenDemurrage ?? calculationResult.finalPayableAmount)}
+                </span>
+                <span className="text-[10px] text-slate-400 line-through block">
+                  Calculated: {formatCurrency(calculationResult.finalPayableAmount)}
+                </span>
+                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                  Overridden by Supervisor
+                </Badge>
+                {claim.overrideReason && (
+                  <p className="text-[10px] text-amber-800 italic max-w-xs mt-0.5">
+                    Reason: {claim.overrideReason}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <span className="text-2xl font-bold text-blue-900">
+                {formatCurrency(calculationResult.finalPayableAmount)}
+              </span>
+            )}
+
+            <Can roles={["Supervisor"]}>
+              {onUpdateClaim && (
+                <div className="pt-2 flex justify-end space-x-1.5">
+                  <Button
+                    size="sm"
+                    onClick={() => setIsOverrideModalOpen(true)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] h-7 px-2.5 rounded-lg"
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    {claim?.isOverridden ? "Edit Override" : "Override with Reason"}
+                  </Button>
+                  {claim?.isOverridden && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleResetOverride}
+                      className="text-[11px] h-7 px-2 text-slate-600 hover:bg-slate-100"
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Can>
           </div>
         </CardHeader>
         <CardContent className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -86,6 +199,65 @@ export function ClaimCalculationsTab({ calculationResult }: { calculationResult:
           </Card>
         ))}
       </div>
+
+      {/* Override Calculation Modal (Supervisor with Reason) */}
+      <Modal
+        isOpen={isOverrideModalOpen}
+        onClose={() => setIsOverrideModalOpen(false)}
+        title="Supervisor Calculation Override"
+        maxWidth="md"
+      >
+        <form onSubmit={handleApplyOverride} className="space-y-4 text-xs">
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
+            <p className="font-bold flex items-center mb-1">
+              <ShieldCheck className="h-3.5 w-3.5 mr-1 text-amber-600" />
+              Supervisor Authority Gating
+            </p>
+            Under company governance rules, manual calculation overrides require a formal operational or commercial justification for audit compliance.
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Overridden Demurrage Payable ($)</label>
+            <Input
+              type="number"
+              value={overrideAmount}
+              onChange={(e) => setOverrideAmount(Number(e.target.value))}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Justification Reason * (Mandatory)</label>
+            <textarea
+              className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500"
+              rows={3}
+              placeholder="e.g. Commercial compromise per charterers email dated 12-Oct; 50% waiver on rain delay approved by Owner."
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsOverrideModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              isLoading={isSaving}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Apply Override
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

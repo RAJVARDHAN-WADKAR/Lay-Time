@@ -1,8 +1,34 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyEdgeToken } from "@/lib/auth/edge-jwt";
+import { UserRole } from "@/lib/types";
 
 const AUTH_COOKIE_NAME = "laytime_auth_token";
+
+// Project route-to-roles map for edge middleware
+const ROUTE_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
+  { prefix: "/settings", allowedRoles: ["ADMIN"] },
+  { prefix: "/users", allowedRoles: ["ADMIN", "SUPERVISOR"] },
+  { prefix: "/claims/create", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/calculator", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/calculations", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/ocr", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/ai-assistant", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/timebar", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/analytics", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/reports", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/dashboard", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/documents", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] }
+];
+
+// API route-to-roles map for edge middleware
+const API_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
+  { prefix: "/api/settings", allowedRoles: ["ADMIN"] },
+  { prefix: "/api/ocr", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/api/ai-assistant", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/api/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] }
+];
 
 // Protected application page prefixes
 const PROTECTED_PAGE_ROUTES = [
@@ -23,6 +49,22 @@ const PROTECTED_PAGE_ROUTES = [
   "/ai-assistant"
 ];
 
+function normalizeRole(role?: string): string {
+  if (!role) return "REVIEWER_CLIENT";
+  const upper = role.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (upper === "ADMIN") return "ADMIN";
+  if (upper === "SUPERVISOR") return "SUPERVISOR";
+  if (upper === "CLAIM_PROCESSOR" || upper === "PROCESSOR") return "CLAIM_PROCESSOR";
+  if (upper === "REVIEWER" || upper === "CLIENT" || upper === "REVIEWER_CLIENT") return "REVIEWER_CLIENT";
+  if (upper === "FINANCE") return "SUPERVISOR";
+  return "REVIEWER_CLIENT";
+}
+
+function roleMatches(userRole: any, allowedRoles: string[]): boolean {
+  const normUser = normalizeRole(userRole);
+  return allowedRoles.some((r) => normalizeRole(r) === normUser);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -35,14 +77,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. Read authentication cookie
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  // 2. Read authentication cookie or Bearer token header
+  let token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  if (!token) {
+    const authHeader = request.headers.get("authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7).trim();
+    }
+  }
+
   const session = token ? await verifyEdgeToken(token) : null;
   const isAuthenticated = !!session;
 
   // 3. Root URL redirect
   if (pathname === "/") {
     if (isAuthenticated) {
+      if (session?.role === "Admin") {
+        return NextResponse.redirect(new URL("/users", request.url));
+      }
+      if (session?.role === "Client") {
+        return NextResponse.redirect(new URL("/claims", request.url));
+      }
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.redirect(new URL("/login", request.url));
@@ -51,6 +106,12 @@ export async function middleware(request: NextRequest) {
   // 4. Login Page Handling
   if (pathname === "/login") {
     if (isAuthenticated) {
+      if (session?.role === "Admin") {
+        return NextResponse.redirect(new URL("/users", request.url));
+      }
+      if (session?.role === "Client") {
+        return NextResponse.redirect(new URL("/claims", request.url));
+      }
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();
@@ -65,32 +126,67 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 6. Check if route is protected
+  const isApiRoute = pathname.startsWith("/api/");
   const isProtectedPage = PROTECTED_PAGE_ROUTES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
-  const isApiRoute = pathname.startsWith("/api/");
 
+  // 6. Handle API routes
+  if (isApiRoute) {
+    if (!isAuthenticated) {
+      return NextResponse.json(
+        { error: "Unauthorized: Active session required" },
+        { status: 401 }
+      );
+    }
+
+    // Edge API role map enforcement
+    for (const rule of API_ROLES_MAP) {
+      if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
+        if (session.assignedClientId && rule.prefix === "/api/rac") {
+          return NextResponse.json(
+            { error: "Forbidden: Client role may not access this resource" },
+            { status: 403 }
+          );
+        }
+        if (!roleMatches(session.role, rule.allowedRoles)) {
+          return NextResponse.json(
+            { error: "Forbidden: Insufficient permissions for this resource" },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    return NextResponse.next();
+  }
+
+  // 7. Handle Protected Pages
   if (isProtectedPage) {
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("from", pathname);
       const redirectResponse = NextResponse.redirect(loginUrl);
-      // Clear invalid cookie if present
       if (token) {
         redirectResponse.cookies.delete(AUTH_COOKIE_NAME);
       }
       return redirectResponse;
     }
 
-    // Role-based route enforcement: /users is Admin-only
-    if (pathname === "/users" || pathname.startsWith("/users/")) {
-      if (session.role !== "Admin") {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
+    // Edge route-to-roles map enforcement
+    for (const rule of ROUTE_ROLES_MAP) {
+      if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
+        if (session.assignedClientId && rule.prefix === "/rac") {
+          return NextResponse.redirect(new URL("/claims", request.url));
+        }
+        if (!roleMatches(session.role, rule.allowedRoles)) {
+          const fallback = session.assignedClientId || session.role === "Client" ? "/claims" : "/dashboard";
+          return NextResponse.redirect(new URL(fallback, request.url));
+        }
       }
     }
 
-    // Authenticated access: set no-cache headers to prevent browser back-button caching of protected content
+    // Authenticated access: set no-cache headers
     const response = NextResponse.next();
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("Pragma", "no-cache");
@@ -98,24 +194,11 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  if (isApiRoute && !isAuthenticated) {
-    return NextResponse.json(
-      { error: "Unauthorized: Active session required" },
-      { status: 401 }
-    );
-  }
-
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };

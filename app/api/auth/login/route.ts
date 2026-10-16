@@ -33,12 +33,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    // Sign JWT
+    // Sign JWT with userId, role, assignedClientId (null unless Client), tokenVersion
+    const isClientRole = user.role === "Client" || (user.role === "REVIEWER_CLIENT" && Boolean(user.client_id || user.clientId));
+    const assignedClientId = isClientRole ? (user.client_id || user.clientId || null) : null;
     const token = signToken({
       userId: user.id,
+      role: user.role,
+      assignedClientId,
+      tokenVersion: user.token_version ?? user.tokenVersion ?? 1,
       email: user.email,
       name: user.name,
-      role: user.role
+      clientName: user.clientName
     });
 
     const userResponse = {
@@ -47,6 +52,8 @@ export async function POST(request: NextRequest) {
       email: user.email,
       username: user.username,
       role: user.role,
+      clientId: assignedClientId || undefined,
+      clientName: user.clientName,
       avatar: user.avatar,
       status: user.status,
       roleDescription: user.roleDescription,
@@ -59,14 +66,14 @@ export async function POST(request: NextRequest) {
       user: userResponse
     });
 
-    // Set Secure HTTP-Only Cookie
+    // Set Secure HTTP-Only Cookie (8 hours)
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
       value: token,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 8 * 60 * 60, // 8 hours
       path: "/"
     });
 

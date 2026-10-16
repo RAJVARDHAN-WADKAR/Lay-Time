@@ -43,7 +43,20 @@ interface NavItem {
 export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, role, logout, canAccessUsers } = useAuth();
+  const {
+    currentUser,
+    role,
+    logout,
+    canAccessUsers,
+    canAccessSettings,
+    canCreateClaim,
+    canViewDashboard,
+    canViewLaytime,
+    canViewDocuments,
+    canUploadOcr,
+    canViewRac,
+    canViewReports
+  } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchUnread = async () => {
@@ -66,28 +79,87 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
     };
   }, []);
 
-  // Exact 12 Navigation Items as specified in Section 5
-  const navItems: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    {
-      href: "/claims",
-      label: role === "Claim Processor" ? "Assigned Claims" : "Claims",
-      icon: FileSpreadsheet
-    },
-    ...(role !== "Reviewer"
-      ? [{ href: "/claims/create", label: "Create Claim", icon: PlusCircle }]
-      : []),
-    { href: "/calculator", label: "Laytime Calculator", icon: Calculator },
-    { href: "/documents", label: "Documents", icon: FileText },
-    { href: "/ocr", label: "OCR & SoF", icon: ScanText },
-    { href: "/rac", label: "RAC Review", icon: Briefcase },
-    { href: "/timebar", label: "Time-Bar Monitor", icon: Clock },
-    { href: "/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/reports", label: "Reports", icon: FileBarChart },
-    { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount },
-    { href: "/settings", label: "Settings", icon: Settings },
-    ...(canAccessUsers ? [{ href: "/users", label: "User Management", icon: Users }] : [])
-  ];
+  // Navigation Items adhering strictly to the Zero-Trust RBAC Matrix
+  // Client users see ONLY: My Claims and Notifications
+  const isClient =
+    role === "Client" ||
+    (role === "REVIEWER_CLIENT" &&
+      Boolean(
+        currentUser?.clientId ||
+          (currentUser as any)?.client_id ||
+          (currentUser as any)?.assignedClientId
+      ));
+
+  const navItems: NavItem[] = isClient
+    ? [
+        {
+          href: "/claims",
+          label: "My Claims",
+          icon: FileSpreadsheet
+        },
+        { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount }
+      ]
+    : [
+        ...(canViewDashboard
+          ? [{ href: "/dashboard", label: role === "Finance" ? "Financial Dashboard" : "Dashboard", icon: LayoutDashboard }]
+          : []),
+        {
+          href: "/claims",
+          label:
+            role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR"
+              ? "Assigned Claims"
+              : "Claims Ledger",
+          icon: FileSpreadsheet
+        },
+        ...(canCreateClaim
+          ? [{ href: "/claims/create", label: "Create Claim", icon: PlusCircle }]
+          : []),
+        ...(canViewLaytime && role !== "Reviewer" && role !== "REVIEWER_CLIENT"
+          ? [{ href: "/calculator", label: "Laytime Calculator", icon: Calculator }]
+          : []),
+        ...(canViewDocuments
+          ? [{ href: "/documents", label: "Documents", icon: FileText }]
+          : []),
+        ...(canUploadOcr
+          ? [{ href: "/ocr", label: "OCR & SoF", icon: ScanText }]
+          : []),
+        ...(canViewRac
+          ? [{ href: "/rac", label: "RAC Review", icon: Briefcase }]
+          : []),
+        ...(role !== "Admin" && role !== "ADMIN" && role !== "Finance"
+          ? [{ href: "/timebar", label: "Time-Bar Monitor", icon: Clock }]
+          : []),
+        ...(canViewDashboard
+          ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
+          : []),
+        ...(canViewReports
+          ? [{ href: "/reports", label: role === "Finance" ? "Financial Reports" : "Reports", icon: FileBarChart }]
+          : []),
+        { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount },
+        ...(role === "Admin" ||
+        role === "ADMIN" ||
+        role === "Supervisor" ||
+        role === "SUPERVISOR" ||
+        role === "Claim Processor" ||
+        role === "CLAIM_PROCESSOR" ||
+        role === "Processor"
+          ? [
+              {
+                href: "/users",
+                label:
+                  role === "Supervisor" || role === "SUPERVISOR"
+                    ? "Team & Users"
+                    : role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR"
+                    ? "Client Directory"
+                    : "User Management",
+                icon: Users
+              }
+            ]
+          : []),
+        ...(role === "Admin" || role === "ADMIN" || role === "Supervisor" || role === "SUPERVISOR"
+          ? [{ href: "/settings", label: "Company Settings", icon: Settings }]
+          : [])
+      ];
 
   const handleLogout = async () => {
     await logout();
@@ -195,6 +267,10 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
                       ? "bg-purple-900/80 text-purple-300 border border-purple-700/50"
                       : role === "Supervisor"
                       ? "bg-amber-900/80 text-amber-300 border border-amber-700/50"
+                      : role === "Finance"
+                      ? "bg-emerald-900/80 text-emerald-300 border border-emerald-700/50"
+                      : role === "Client"
+                      ? "bg-cyan-900/80 text-cyan-300 border border-cyan-700/50"
                       : role === "Reviewer"
                       ? "bg-slate-800 text-slate-300 border border-slate-700"
                       : "bg-blue-900/80 text-blue-300 border border-blue-700/50"

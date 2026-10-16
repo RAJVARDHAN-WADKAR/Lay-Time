@@ -10,6 +10,7 @@ import { Select, Input } from "@/components/ui/inputs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/lib/utils/formatters";
 import { useToast } from "@/lib/hooks/useToast";
+import { useAuth } from "@/lib/context/AuthContext";
 import Link from "next/link";
 import {
   UploadCloud,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 
 export default function DocumentsPage() {
+  const { canUploadDocuments, canDeleteDocuments } = useAuth();
   const { success, error, info } = useToast();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -123,80 +125,82 @@ export default function DocumentsPage() {
       </div>
 
       {/* TOP SECTION: Upload Document matching Section 15 */}
-      <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="p-5 pb-3 border-b border-slate-100">
-          <CardTitle className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-            <UploadCloud className="h-4 w-4 text-blue-600" />
-            <span>Upload Document</span>
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-500">
-            Upload supporting maritime documents for voyage files and claims
-          </CardDescription>
-        </CardHeader>
+      {canUploadDocuments() && (
+        <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
+          <CardHeader className="p-5 pb-3 border-b border-slate-100">
+            <CardTitle className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <UploadCloud className="h-4 w-4 text-blue-600" />
+              <span>Upload Document</span>
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              Upload supporting maritime documents for voyage files and claims
+            </CardDescription>
+          </CardHeader>
 
-        <CardContent className="p-5">
-          <form onSubmit={handleUpload} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-left">
-            {/* File Selector */}
-            <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-              <label className="font-bold text-slate-700 block">Choose File</label>
-              <div className="relative">
-                <input
-                  type="file"
-                  onChange={handleFileChange}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-300 rounded-xl p-1 bg-slate-50/50"
-                />
+          <CardContent className="p-5">
+            <form onSubmit={handleUpload} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-left">
+              {/* File Selector */}
+              <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                <label className="font-bold text-slate-700 block">Choose File</label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    onChange={handleFileChange}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-300 rounded-xl p-1 bg-slate-50/50"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Document Type */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700 block">Document Type</label>
-              <Select
-                value={docType}
-                onChange={(e) => setDocType(e.target.value as any)}
-                className="h-9 text-xs bg-white"
-              >
-                <option value="SOF">SOF (Statement of Facts)</option>
-                <option value="Charterparty">Charterparty</option>
-                <option value="Timesheet">Timesheet</option>
-                <option value="NOR">NOR (Notice of Readiness)</option>
-                <option value="Notice">Notice</option>
-                <option value="Other">Other supporting documents</option>
-              </Select>
-            </div>
+              {/* Document Type */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Document Type</label>
+                <Select
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value as any)}
+                  className="h-9 text-xs bg-white"
+                >
+                  <option value="SOF">SOF (Statement of Facts)</option>
+                  <option value="Charterparty">Charterparty</option>
+                  <option value="Timesheet">Timesheet</option>
+                  <option value="NOR">NOR (Notice of Readiness)</option>
+                  <option value="Notice">Notice</option>
+                  <option value="Other">Other supporting documents</option>
+                </Select>
+              </div>
 
-            {/* Link to Claim */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700 block">Link to Claim (Optional)</label>
-              <Select
-                value={selectedClaimId}
-                onChange={(e) => setSelectedClaimId(e.target.value)}
-                className="h-9 text-xs bg-white"
-              >
-                <option value="">General (No specific claim)</option>
-                {claims.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.id} — {c.shipName}
-                  </option>
-                ))}
-              </Select>
-            </div>
+              {/* Link to Claim */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Link to Claim (Optional)</label>
+                <Select
+                  value={selectedClaimId}
+                  onChange={(e) => setSelectedClaimId(e.target.value)}
+                  className="h-9 text-xs bg-white"
+                >
+                  <option value="">General (No specific claim)</option>
+                  {claims.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.id} — {c.shipName}
+                    </option>
+                  ))}
+                </Select>
+              </div>
 
-            {/* Upload Button */}
-            <div className="flex items-end">
-              <Button
-                type="submit"
-                isLoading={isUploading}
-                disabled={!selectedFile}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 rounded-xl flex items-center justify-center space-x-1.5 shadow-xs"
-              >
-                <UploadCloud className="h-4 w-4" />
-                <span>Upload</span>
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              {/* Upload Button */}
+              <div className="flex items-end">
+                <Button
+                  type="submit"
+                  isLoading={isUploading}
+                  disabled={!selectedFile}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 rounded-xl flex items-center justify-center space-x-1.5 shadow-xs"
+                >
+                  <UploadCloud className="h-4 w-4" />
+                  <span>Upload</span>
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* DOCUMENT TABLE matching Section 15 */}
       <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
@@ -273,13 +277,15 @@ export default function DocumentsPage() {
                           >
                             <Download className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleDelete(doc.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition"
-                            title="Delete Document"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canDeleteDocuments && (
+                            <button
+                              onClick={() => handleDelete(doc.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 transition"
+                              title="Delete Document"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

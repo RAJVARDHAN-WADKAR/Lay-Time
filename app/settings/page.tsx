@@ -10,6 +10,7 @@ import { Input, Select } from "@/components/ui/inputs";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/context/AuthContext";
 import { useToast } from "@/lib/hooks/useToast";
+import Link from "next/link";
 import {
   Settings as SettingsIcon,
   User,
@@ -21,10 +22,11 @@ import {
   Trash2,
   ShieldCheck,
   Sparkles,
+  AlertOctagon,
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const { currentUser, setUser } = useAuth();
+  const { currentUser, setUser, canAccessSettings, role, isLoading: authLoading } = useAuth();
   const { success, info } = useToast();
 
   // Profile Form State
@@ -64,6 +66,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
+      if (!canAccessSettings) {
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       const stg = await getSettings();
       setCalcSettings(stg);
@@ -77,8 +83,44 @@ export default function SettingsPage() {
       }
       setIsLoading(false);
     }
-    load();
-  }, []);
+    if (!authLoading) {
+      load();
+    }
+  }, [authLoading, canAccessSettings]);
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mx-auto" />
+          <p className="text-xs text-slate-500 font-medium">Verifying authorization permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canAccessSettings) {
+    return (
+      <div className="max-w-2xl mx-auto my-12 bg-white rounded-2xl border border-rose-200 shadow-xl p-8 text-center space-y-4">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-inner">
+          <AlertOctagon className="h-7 w-7" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            System settings are strictly restricted to users with the <strong>Admin</strong> role. Your current active role is <strong>{role}</strong>.
+          </p>
+        </div>
+        <div>
+          <Link href="/dashboard">
+            <Button variant="outline" size="sm" className="text-xs">
+              Return to Dashboard
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const handleSaveAll = async () => {
     // 1. Save Profile

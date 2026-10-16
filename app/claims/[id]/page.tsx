@@ -21,6 +21,7 @@ import { ClaimOwnerComparisonTab } from "@/components/claims/ClaimOwnerCompariso
 import { ClaimChasersTab } from "@/components/claims/ClaimChasersTab";
 import { ClaimMissingDocsTab } from "@/components/claims/ClaimMissingDocsTab";
 import { ClaimRacTab } from "@/components/claims/ClaimRacTab";
+import { ClaimNegotiationsTab } from "@/components/claims/ClaimNegotiationsTab";
 import Link from "next/link";
 import {
   Ship,
@@ -47,7 +48,8 @@ import {
   Send,
   Upload,
   Check,
-  Save
+  Save,
+  Handshake
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { exportToCSV } from "@/lib/utils/exportCsv";
@@ -69,6 +71,7 @@ export default function ClaimDetailPage() {
     | "sof"
     | "documents"
     | "calculations"
+    | "negotiations"
     | "rac"
     | "ownerComparison"
     | "timebar"
@@ -104,7 +107,20 @@ export default function ClaimDetailPage() {
   const [correctingDisc, setCorrectingDisc] = useState<Discrepancy | null>(null);
   const [correctionInput, setCorrectionInput] = useState("");
 
-  const { canEditClaim, isReadOnly } = useAuth();
+  const {
+    canEditClaim,
+    isReadOnly,
+    role,
+    canViewSoF,
+    canViewDocuments,
+    canViewLaytime,
+    canViewRac,
+    canViewOwnersClaim,
+    canViewPayments,
+    canViewAuditLog,
+    canViewReports,
+    negotiationHistoryScope
+  } = useAuth();
 
   const loadClaim = async () => {
     setIsLoading(true);
@@ -182,6 +198,25 @@ export default function ClaimDetailPage() {
   const handleExportPdf = () => {
     if (!claim || !calculationResult) return;
     exportClaimPdf(claim, calculationResult);
+  };
+
+  useEffect(() => {
+    if (!claim) return;
+    if (activeTab === "calculations" && !canViewLaytime) setActiveTab("overview");
+    if ((activeTab === "ports" || activeTab === "sof") && !canViewSoF(claim.claimStatus)) setActiveTab("overview");
+    if (activeTab === "documents" && !canViewDocuments) setActiveTab("overview");
+    if (activeTab === "negotiations" && negotiationHistoryScope === "none") setActiveTab("overview");
+    if (activeTab === "rac" && !canViewRac) setActiveTab("overview");
+    if (activeTab === "ownerComparison" && !canViewOwnersClaim) setActiveTab("overview");
+    if (activeTab === "payments" && !canViewPayments) setActiveTab("overview");
+    if (activeTab === "activity" && !canViewAuditLog) setActiveTab("overview");
+    if (activeTab === "reports" && !canViewReports) setActiveTab("overview");
+  }, [role, claim?.claimStatus, activeTab]);
+
+  const handleUpdateClaimData = async (updates: Partial<Claim>) => {
+    if (!claim) return;
+    const updated = await updateClaim(claim.id, updates);
+    setClaim(updated);
   };
 
   if (isLoading) {
@@ -281,23 +316,25 @@ export default function ClaimDetailPage() {
         </div>
       </div>
 
-      {/* 13 Navigation Tabs Bar */}
+      {/* Navigation Tabs Bar Filtered by Zero-Trust RBAC Matrix */}
+      {/* Client users see strictly only Claim Summary (Overview) and Negotiations */}
       <div className="flex border-b border-slate-200 space-x-1 sm:space-x-2 overflow-x-auto text-xs font-bold scrollbar-none pb-0">
         {[
-          { id: "overview", label: "Overview", icon: Layers },
-          { id: "claimInfo", label: "Claim Info", icon: FileText },
-          { id: "voyage", label: "Voyage", icon: Calendar },
-          { id: "ports", label: `Ports & Berths (${claim.ports?.length || 0})`, icon: Anchor },
-          { id: "sof", label: `Statement of Facts (${claim.activities?.length || 0})`, icon: Clock },
-          { id: "documents", label: `Documents (${claim.documentLinks?.length || 4})`, icon: FileSpreadsheet },
-          { id: "calculations", label: "Calculation", icon: Calculator },
-          { id: "rac", label: "RAC Review", icon: Briefcase },
-          { id: "ownerComparison", label: "Owner vs Internal", icon: Scale },
-          { id: "timebar", label: "Time-Bar", icon: AlertTriangle },
-          { id: "payments", label: "Payments", icon: DollarSign },
-          { id: "activity", label: "Activity / Status", icon: History },
-          { id: "reports", label: "Reports", icon: Download }
-        ].map((t) => {
+          { id: "overview", label: role === "Client" ? "Claim Summary" : "Overview", icon: Layers, show: true },
+          { id: "negotiations", label: "Negotiations", icon: Handshake, show: true },
+          { id: "claimInfo", label: "Claim Info", icon: FileText, show: role !== "Client" },
+          { id: "voyage", label: "Voyage", icon: Calendar, show: role !== "Client" },
+          { id: "ports", label: `Ports & Berths (${claim.ports?.length || 0})`, icon: Anchor, show: role !== "Client" && canViewSoF(claim.claimStatus) },
+          { id: "sof", label: `Statement of Facts (${claim.activities?.length || 0})`, icon: Clock, show: role !== "Client" && canViewSoF(claim.claimStatus) },
+          { id: "documents", label: `Documents (${claim.documentLinks?.length || 4})`, icon: FileSpreadsheet, show: role !== "Client" && canViewDocuments },
+          { id: "calculations", label: "Calculation", icon: Calculator, show: role !== "Client" && canViewLaytime },
+          { id: "rac", label: "RAC Review", icon: Briefcase, show: role !== "Client" && canViewRac },
+          { id: "ownerComparison", label: "Owner vs Internal", icon: Scale, show: role !== "Client" && canViewOwnersClaim },
+          { id: "timebar", label: "Time-Bar", icon: AlertTriangle, show: role !== "Client" && role !== "Admin" && role !== "Finance" },
+          { id: "payments", label: "Payments", icon: DollarSign, show: role !== "Client" && canViewPayments },
+          { id: "activity", label: "Activity / Status", icon: History, show: role !== "Client" && canViewAuditLog },
+          { id: "reports", label: "Reports", icon: Download, show: role !== "Client" && canViewReports }
+        ].filter((t) => t.show).map((t) => {
           const Icon = t.icon;
           const isActive = activeTab === t.id;
           return (
@@ -614,16 +651,18 @@ export default function ClaimDetailPage() {
                 <h3 className="text-sm font-bold text-slate-900">Attached Claim Documents</h3>
                 <p className="text-slate-500 text-xs">Mandatory documentation, OCR extractions, and version archives.</p>
               </div>
-              <Button
-                size="sm"
-                onClick={() => {
-                  info("File upload simulated: Added additional bunker receipt.");
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Upload className="w-3.5 h-3.5 mr-1" />
-                Upload New Document
-              </Button>
+              {!isReadOnly && userCanEdit && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    info("File upload simulated: Added additional bunker receipt.");
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Upload className="w-3.5 h-3.5 mr-1" />
+                  Upload New Document
+                </Button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -655,7 +694,16 @@ export default function ClaimDetailPage() {
 
       {/* TAB 7: CALCULATION */}
       {activeTab === "calculations" && calculationResult && (
-        <ClaimCalculationsTab calculationResult={calculationResult} />
+        <ClaimCalculationsTab
+          calculationResult={calculationResult}
+          claim={claim}
+          onUpdateClaim={handleUpdateClaimData}
+        />
+      )}
+
+      {/* TAB: NEGOTIATIONS */}
+      {activeTab === "negotiations" && (
+        <ClaimNegotiationsTab claim={claim} canEdit={userCanEdit} />
       )}
 
       {/* TAB 8: RAC REVIEW */}
@@ -843,26 +891,28 @@ export default function ClaimDetailPage() {
               ))}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex gap-2">
-              <Input
-                value={newAuditNote}
-                onChange={(e) => setNewAuditNote(e.target.value)}
-                placeholder="Append internal operational note to audit history..."
-                className="text-xs"
-              />
-              <Button
-                size="sm"
-                onClick={() => {
-                  if (!newAuditNote.trim()) return;
-                  success("Audit note logged successfully!");
-                  setNewAuditNote("");
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0"
-              >
-                <Send className="w-3.5 h-3.5 mr-1" />
-                Post Note
-              </Button>
-            </div>
+            {!isReadOnly && role !== "Client" && (
+              <div className="pt-3 border-t border-slate-100 flex gap-2">
+                <Input
+                  value={newAuditNote}
+                  onChange={(e) => setNewAuditNote(e.target.value)}
+                  placeholder="Append internal operational note to audit history..."
+                  className="text-xs"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (!newAuditNote.trim()) return;
+                    success("Audit note logged successfully!");
+                    setNewAuditNote("");
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5 mr-1" />
+                  Post Note
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

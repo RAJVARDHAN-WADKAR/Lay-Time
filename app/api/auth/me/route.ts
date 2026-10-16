@@ -1,28 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest, AUTH_COOKIE_NAME } from "@/lib/auth/session";
-import { getUserById } from "@/lib/db/queries";
+import { requireUser } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = getCurrentUserFromRequest(request);
-    if (!session) {
-      return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth.error) {
+      return auth.error;
     }
 
-    const user = getUserById(session.userId);
-    if (!user) {
-      return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
-    }
-
-    if (user.status === "Inactive") {
-      return NextResponse.json({ authenticated: false, error: "Account deactivated" }, { status: 403 });
-    }
+    const { user } = auth;
 
     return NextResponse.json({
       authenticated: true,
-      user
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        clientId: user.assignedClientId || user.clientId || undefined,
+        clientName: user.clientName,
+        status: user.status,
+        createdBy: user.createdBy,
+        tokenVersion: user.tokenVersion
+      }
     });
   } catch (error: any) {
+    console.error("GET /api/auth/me error:", error);
     return NextResponse.json({ error: "Session check error" }, { status: 500 });
   }
 }

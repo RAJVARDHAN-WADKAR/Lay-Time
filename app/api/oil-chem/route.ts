@@ -37,6 +37,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const { getCurrentUserFromRequest } = await import("@/lib/auth/session");
+    const session = getCurrentUserFromRequest(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = normalizeRole(session.role);
+    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
+      return NextResponse.json(
+        { error: "Forbidden: Reviewers have read-only access and cannot run calculations." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const result = calculateOilChemPumping(body);
 

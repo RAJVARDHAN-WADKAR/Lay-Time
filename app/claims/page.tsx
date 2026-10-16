@@ -8,8 +8,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { FileSpreadsheet, PlusCircle, RefreshCw, Ship } from "lucide-react";
+import { useAuth } from "@/lib/context/AuthContext";
 
 export default function ClaimsPage() {
+  const { canCreateClaim } = useAuth();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -65,12 +67,14 @@ export default function ClaimsPage() {
             <RefreshCw className="h-3.5 w-3.5 mr-1" />
             Refresh
           </Button>
-          <Link href="/claims/create">
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-9 px-4 rounded-xl shadow-xs flex items-center space-x-1.5">
-              <PlusCircle className="h-4 w-4" />
-              <span>Create Claim</span>
-            </Button>
-          </Link>
+          {canCreateClaim && (
+            <Link href="/claims/create">
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-9 px-4 rounded-xl shadow-xs flex items-center space-x-1.5">
+                <PlusCircle className="h-4 w-4" />
+                <span>Create Claim</span>
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 

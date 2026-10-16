@@ -1,55 +1,88 @@
-import { User } from "@/lib/types";
-import {
-  getStoreUsers,
-  updateStoreUser
-} from "@/lib/mock/clientStore";
+import { User, UserRole } from "@/lib/types";
 
 export async function getUsers(): Promise<User[]> {
-  return getStoreUsers();
+  const res = await fetch("/api/users", {
+    method: "GET",
+    headers: { "Cache-Control": "no-cache" }
+  });
+  if (!res.ok) {
+    throw new Error("Failed to load users");
+  }
+  const data = await res.json();
+  return data.users || [];
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const users = getStoreUsers();
-  return users.find((u) => u.id === id) || null;
+  const res = await fetch(`/api/users/${id}`, {
+    method: "GET",
+    headers: { "Cache-Control": "no-cache" }
+  });
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error("Failed to load user");
+  }
+  const data = await res.json();
+  return data.user || null;
 }
 
 export async function createUser(userData: {
   name: string;
   email: string;
-  role: User["role"];
+  role: UserRole;
   password?: string;
+  temporaryPassword?: string;
   username?: string;
+  clientId?: string;
+  clientName?: string;
   roleDescription?: string;
 }): Promise<User> {
-  const users = getStoreUsers();
-  const newUser: User = {
-    id: `usr-${Date.now()}`,
-    name: userData.name,
-    email: userData.email,
-    username: userData.username || userData.email.split("@")[0],
-    role: userData.role,
-    status: "Active",
-    createdAt: new Date().toISOString(),
-    roleDescription: userData.roleDescription || "System user"
-  };
-  users.push(newUser);
-  return newUser;
+  const res = await fetch("/api/users/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(userData)
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to create user");
+  }
+  return data.user;
 }
 
-export async function updateUser(id: string, updates: Partial<User>): Promise<User> {
-  return updateStoreUser(id, updates);
+export async function updateUser(id: string, updates: Partial<User> & { password?: string }): Promise<User> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates)
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to update user");
+  }
+  return data.user;
 }
 
 export async function deactivateUser(id: string): Promise<boolean> {
-  updateStoreUser(id, { status: "Inactive" });
+  const res = await fetch(`/api/users/${id}`, {
+    method: "DELETE"
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to deactivate user");
+  }
   return true;
 }
 
 export const deleteUser = deactivateUser;
 
-export async function toggleUserStatus(id: string): Promise<User> {
-  const user = await getUserById(id);
-  if (!user) throw new Error("User not found");
-  const newStatus = user.status === "Active" ? "Inactive" : "Active";
-  return updateUser(id, { status: newStatus });
+export async function resetUserPassword(id: string, newPassword?: string): Promise<{ temporaryPassword?: string }> {
+  const res = await fetch(`/api/users/${id}/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newPassword })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to reset password");
+  }
+  return { temporaryPassword: data.temporaryPassword };
 }

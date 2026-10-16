@@ -3,6 +3,65 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
+import {
+  normalizeRole,
+  isProcessor,
+  canViewClaims as canViewClaimsFn,
+  canViewAllClaims as canViewAllClaimsFn,
+  canCreateClaim as canCreateClaimFn,
+  canEditClaim as canEditClaimFn,
+  canDeleteClaim as canDeleteClaimFn,
+  canApproveClaim as canApproveClaimFn,
+  canSubmitClaim as canSubmitClaimFn,
+  canAssignClaim as canAssignClaimFn,
+  canViewSoF as canViewSoFFn,
+  canEditSoF as canEditSoFFn,
+  canViewDocuments as canViewDocumentsFn,
+  canUploadDocuments as canUploadDocumentsFn,
+  canDeleteDocuments as canDeleteDocumentsFn,
+  canViewLaytime as canViewLaytimeFn,
+  canEditLaytime as canEditLaytimeFn,
+  canRecalculateLaytime as canRecalculateLaytimeFn,
+  canOverrideCalculation as canOverrideCalculationFn,
+  canViewRac as canViewRacFn,
+  canEditRac as canEditRacFn,
+  canAuthorizeRac as canAuthorizeRacFn,
+  canSubmitRac as canSubmitRacFn,
+  canResolveRacFindings as canResolveRacFindingsFn,
+  canUploadOcr as canUploadOcrFn,
+  canInitiateNegotiation as canInitiateNegotiationFn,
+  canRequestNegotiation as canRequestNegotiationFn,
+  canLogCounterpartyOffers as canLogCounterpartyOffersFn,
+  canDraftOurOffer as canDraftOurOfferFn,
+  canApproveOurOffer as canApproveOurOfferFn,
+  canViewMinAcceptableAmount as canViewMinAcceptableAmountFn,
+  canSetMinAcceptableAmount as canSetMinAcceptableAmountFn,
+  canAcceptRejectCloseNegotiation as canAcceptRejectCloseNegotiationFn,
+  canClientApproveFinalOffer as canClientApproveFinalOfferFn,
+  getNegotiationHistoryScope as getNegotiationHistoryScopeFn,
+  canSettleClaim as canSettleClaimFn,
+  canViewInvoices as canViewInvoicesFn,
+  canCreateEditInvoices as canCreateEditInvoicesFn,
+  canViewPayments as canViewPaymentsFn,
+  canRecordPayments as canRecordPaymentsFn,
+  canEditPayments as canEditPaymentsFn,
+  canViewOwnersClaim as canViewOwnersClaimFn,
+  canEditBillableAmount as canEditBillableAmountFn,
+  canViewDashboard as canViewDashboardFn,
+  getDashboardScope as getDashboardScopeFn,
+  canViewReports as canViewReportsFn,
+  getReportsScope as getReportsScopeFn,
+  canViewClientsVessels as canViewClientsVesselsFn,
+  canCreateClientsVessels as canCreateClientsVesselsFn,
+  canEditClientsVessels as canEditClientsVesselsFn,
+  canDeleteClientsVessels as canDeleteClientsVesselsFn,
+  canManageUsers as canManageUsersFn,
+  canViewUsers as canViewUsersFn,
+  canAccessUsers as canAccessUsersFn,
+  canManageSettings as canManageSettingsFn,
+  canAccessSettings as canAccessSettingsFn,
+  canViewAuditLog as canViewAuditLogFn
+} from "@/lib/auth/permissions";
 
 const ANONYMOUS_USER: User = {
   id: "",
@@ -23,9 +82,61 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
-  canEditClaim: (claimAssignedTo?: string) => boolean;
+  canEditClaim: (claimAssignedTo?: string, claimClient?: string) => boolean;
   canEditRac: (racAssignedTo?: string) => boolean;
+  canViewClaims: boolean;
+  canViewAllClaims: boolean;
+  canCreateClaim: boolean;
+  canDeleteClaim: boolean;
+  canApproveClaim: boolean;
+  canSubmitClaim: boolean;
+  canSettleClaim: boolean;
+  canAssignClaim: boolean;
+  canViewSoF: (claimStatus?: string) => boolean;
+  canEditSoF: (claimAssignedTo?: string) => boolean;
+  canViewDocuments: boolean;
+  canUploadDocuments: (isClientRequested?: boolean) => boolean;
+  canDeleteDocuments: boolean;
+  canViewLaytime: boolean;
+  canEditLaytime: (claimAssignedTo?: string) => boolean;
+  canRecalculateLaytime: boolean;
+  canOverrideCalculation: boolean;
+  canViewRac: boolean;
+  canAuthorizeRac: boolean;
+  canSubmitRac: boolean;
+  canResolveRacFindings: boolean;
+  canUploadOcr: boolean;
+  canInitiateNegotiation: boolean;
+  canRequestNegotiation: boolean;
+  canLogCounterpartyOffers: (claimAssignedTo?: string) => boolean;
+  canDraftOurOffer: boolean;
+  canApproveOurOffer: boolean;
+  canViewMinAcceptableAmount: boolean;
+  canSetMinAcceptableAmount: boolean;
+  canAcceptRejectCloseNegotiation: boolean;
+  canClientApproveFinalOffer: boolean;
+  negotiationHistoryScope: "all" | "own" | "outcome" | "shared" | "none";
+  canViewInvoices: boolean;
+  canCreateEditInvoices: boolean;
+  canViewPayments: boolean;
+  canRecordPayments: boolean;
+  canEditPayments: boolean;
+  canViewOwnersClaim: boolean;
+  canEditBillableAmount: boolean;
+  canViewDashboard: boolean;
+  dashboardScope: "global" | "own" | "financial" | "none";
+  canViewReports: boolean;
+  reportsScope: "all" | "own" | "financial" | "none";
+  canViewClientsVessels: boolean;
+  canCreateClientsVessels: boolean;
+  canEditClientsVessels: boolean;
+  canDeleteClientsVessels: boolean;
+  canManageUsers: boolean;
+  canViewUsers: boolean;
   canAccessUsers: boolean;
+  canManageSettings: boolean;
+  canAccessSettings: boolean;
+  canViewAuditLog: boolean;
   isReadOnly: boolean;
   refreshSession: () => Promise<void>;
 }
@@ -129,25 +240,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const userRole = user ? normalizeRole(user.role) : "Reviewer";
+
   const canEditClaim = useCallback(
-    (claimAssignedTo?: string): boolean => {
+    (claimAssignedTo?: string, claimClient?: string): boolean => {
       if (!isAuthenticated || !user) return false;
-      if (user.role === "Admin" || user.role === "Supervisor") return true;
-      if (user.role === "Reviewer") return false;
-      if (user.role === "Claim Processor") {
-        if (!claimAssignedTo) return true;
-        const assignedLower = claimAssignedTo.toLowerCase();
-        const userEmailLower = (user.email || "").toLowerCase();
-        const userNameLower = (user.name || "").toLowerCase();
-        return (
-          assignedLower === userEmailLower ||
-          assignedLower === userNameLower ||
-          assignedLower.includes("rohit") ||
-          assignedLower.includes("sarah") ||
-          assignedLower.includes("processor")
-        );
-      }
-      return false;
+      return canEditClaimFn(user.role, user.email, claimAssignedTo, user.name, claimClient, user.clientName);
     },
     [isAuthenticated, user]
   );
@@ -155,35 +253,107 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canEditRac = useCallback(
     (racAssignedTo?: string): boolean => {
       if (!isAuthenticated || !user) return false;
-      if (user.role === "Admin" || user.role === "Supervisor") return true;
-      if (user.role === "Reviewer") return false;
-      if (user.role === "Claim Processor") {
-        if (!racAssignedTo) return true;
-        const assignedLower = racAssignedTo.toLowerCase();
-        const userEmailLower = (user.email || "").toLowerCase();
-        const userNameLower = (user.name || "").toLowerCase();
-        return (
-          assignedLower === userEmailLower ||
-          assignedLower === userNameLower ||
-          assignedLower.includes("rohit") ||
-          assignedLower.includes("sarah") ||
-          assignedLower.includes("processor")
-        );
-      }
-      return false;
+      return canEditRacFn(user.role, user.email, racAssignedTo, user.name);
     },
     [isAuthenticated, user]
   );
 
-  const canAccessUsers = isAuthenticated && user?.role === "Admin";
-  const isReadOnly = !isAuthenticated || user?.role === "Reviewer";
+  const canViewSoF = useCallback(
+    (claimStatus?: string): boolean => {
+      if (!isAuthenticated || !user) return false;
+      return canViewSoFFn(user.role, claimStatus);
+    },
+    [isAuthenticated, user]
+  );
+
+  const canEditSoF = useCallback(
+    (claimAssignedTo?: string): boolean => {
+      if (!isAuthenticated || !user) return false;
+      return canEditSoFFn(user.role, user.email, claimAssignedTo, user.name);
+    },
+    [isAuthenticated, user]
+  );
+
+  const canUploadDocuments = useCallback(
+    (isClientRequested?: boolean): boolean => {
+      if (!isAuthenticated || !user) return false;
+      return canUploadDocumentsFn(user.role, isClientRequested);
+    },
+    [isAuthenticated, user]
+  );
+
+  const canEditLaytime = useCallback(
+    (claimAssignedTo?: string): boolean => {
+      if (!isAuthenticated || !user) return false;
+      return canEditLaytimeFn(user.role, user.email, claimAssignedTo, user.name);
+    },
+    [isAuthenticated, user]
+  );
+
+  const canLogCounterpartyOffers = useCallback(
+    (claimAssignedTo?: string): boolean => {
+      if (!isAuthenticated || !user) return false;
+      return canLogCounterpartyOffersFn(user.role, user.email, claimAssignedTo, user.name);
+    },
+    [isAuthenticated, user]
+  );
+
+  const canViewClaims = isAuthenticated && canViewClaimsFn(user?.role);
+  const canViewAllClaims = isAuthenticated && canViewAllClaimsFn(user?.role);
+  const canCreateClaim = isAuthenticated && canCreateClaimFn(user?.role);
+  const canDeleteClaim = isAuthenticated && canDeleteClaimFn(user?.role);
+  const canApproveClaim = isAuthenticated && canApproveClaimFn(user?.role);
+  const canSubmitClaim = isAuthenticated && canSubmitClaimFn(user?.role);
+  const canSettleClaim = isAuthenticated && canSettleClaimFn(user?.role);
+  const canAssignClaim = isAuthenticated && canAssignClaimFn(user?.role);
+  const canViewDocuments = isAuthenticated && canViewDocumentsFn(user?.role);
+  const canDeleteDocuments = isAuthenticated && canDeleteDocumentsFn(user?.role);
+  const canViewLaytime = isAuthenticated && canViewLaytimeFn(user?.role);
+  const canRecalculateLaytime = isAuthenticated && canRecalculateLaytimeFn(user?.role);
+  const canOverrideCalculation = isAuthenticated && canOverrideCalculationFn(user?.role);
+  const canViewRac = isAuthenticated && canViewRacFn(user?.role);
+  const canAuthorizeRac = isAuthenticated && canAuthorizeRacFn(user?.role);
+  const canSubmitRac = isAuthenticated && canSubmitRacFn(user?.role);
+  const canResolveRacFindings = isAuthenticated && canResolveRacFindingsFn(user?.role);
+  const canUploadOcr = isAuthenticated && canUploadOcrFn(user?.role);
+  const canInitiateNegotiation = isAuthenticated && canInitiateNegotiationFn(user?.role);
+  const canRequestNegotiation = isAuthenticated && canRequestNegotiationFn(user?.role);
+  const canDraftOurOffer = isAuthenticated && canDraftOurOfferFn(user?.role);
+  const canApproveOurOffer = isAuthenticated && canApproveOurOfferFn(user?.role);
+  const canViewMinAcceptableAmount = isAuthenticated && canViewMinAcceptableAmountFn(user?.role);
+  const canSetMinAcceptableAmount = isAuthenticated && canSetMinAcceptableAmountFn(user?.role);
+  const canAcceptRejectCloseNegotiation = isAuthenticated && canAcceptRejectCloseNegotiationFn(user?.role);
+  const canClientApproveFinalOffer = isAuthenticated && canClientApproveFinalOfferFn(user?.role);
+  const negotiationHistoryScope = user ? getNegotiationHistoryScopeFn(user.role) : "none";
+  const canViewInvoices = isAuthenticated && canViewInvoicesFn(user?.role);
+  const canCreateEditInvoices = isAuthenticated && canCreateEditInvoicesFn(user?.role);
+  const canViewPayments = isAuthenticated && canViewPaymentsFn(user?.role);
+  const canRecordPayments = isAuthenticated && canRecordPaymentsFn(user?.role);
+  const canEditPayments = isAuthenticated && canEditPaymentsFn(user?.role);
+  const canViewOwnersClaim = isAuthenticated && canViewOwnersClaimFn(user?.role);
+  const canEditBillableAmount = isAuthenticated && canEditBillableAmountFn(user?.role);
+  const canViewDashboard = isAuthenticated && canViewDashboardFn(user?.role);
+  const dashboardScope = user ? getDashboardScopeFn(user.role) : "none";
+  const canViewReports = isAuthenticated && canViewReportsFn(user?.role);
+  const reportsScope = user ? getReportsScopeFn(user.role) : "none";
+  const canViewClientsVessels = isAuthenticated && canViewClientsVesselsFn(user?.role);
+  const canCreateClientsVessels = isAuthenticated && canCreateClientsVesselsFn(user?.role);
+  const canEditClientsVessels = isAuthenticated && canEditClientsVesselsFn(user?.role);
+  const canDeleteClientsVessels = isAuthenticated && canDeleteClientsVesselsFn(user?.role);
+  const canManageUsers = isAuthenticated && canManageUsersFn(user?.role);
+  const canViewUsers = isAuthenticated && canViewUsersFn(user?.role);
+  const canAccessUsers = isAuthenticated && canAccessUsersFn(user?.role);
+  const canManageSettings = isAuthenticated && canManageSettingsFn(user?.role);
+  const canAccessSettings = isAuthenticated && canAccessSettingsFn(user?.role);
+  const canViewAuditLog = isAuthenticated && canViewAuditLogFn(user?.role);
+  const isReadOnly = !isAuthenticated || userRole === "Reviewer";
 
   return (
     <AuthContext.Provider
       value={{
         currentUser: user || ANONYMOUS_USER,
         user,
-        role: user?.role || "Reviewer",
+        role: userRole,
         isAuthenticated,
         isMounted,
         isLoading,
@@ -192,7 +362,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser,
         canEditClaim,
         canEditRac,
+        canViewClaims,
+        canViewAllClaims,
+        canCreateClaim,
+        canDeleteClaim,
+        canApproveClaim,
+        canSubmitClaim,
+        canSettleClaim,
+        canAssignClaim,
+        canViewSoF,
+        canEditSoF,
+        canViewDocuments,
+        canUploadDocuments,
+        canDeleteDocuments,
+        canViewLaytime,
+        canEditLaytime,
+        canRecalculateLaytime,
+        canOverrideCalculation,
+        canViewRac,
+        canAuthorizeRac,
+        canSubmitRac,
+        canResolveRacFindings,
+        canUploadOcr,
+        canInitiateNegotiation,
+        canRequestNegotiation,
+        canLogCounterpartyOffers,
+        canDraftOurOffer,
+        canApproveOurOffer,
+        canViewMinAcceptableAmount,
+        canSetMinAcceptableAmount,
+        canAcceptRejectCloseNegotiation,
+        canClientApproveFinalOffer,
+        negotiationHistoryScope,
+        canViewInvoices,
+        canCreateEditInvoices,
+        canViewPayments,
+        canRecordPayments,
+        canEditPayments,
+        canViewOwnersClaim,
+        canEditBillableAmount,
+        canViewDashboard,
+        dashboardScope,
+        canViewReports,
+        reportsScope,
+        canViewClientsVessels,
+        canCreateClientsVessels,
+        canEditClientsVessels,
+        canDeleteClientsVessels,
+        canManageUsers,
+        canViewUsers,
         canAccessUsers,
+        canManageSettings,
+        canAccessSettings,
+        canViewAuditLog,
         isReadOnly,
         refreshSession
       }}

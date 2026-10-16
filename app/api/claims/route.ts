@@ -1,28 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest, canEditClaim } from "@/lib/auth/session";
-import { getClaims, createClaim } from "@/lib/db/queries";
+import { withApi } from "@/lib/api/withApi";
+import { getScopedClaims } from "@/lib/db/scoped";
+import { createClaim } from "@/lib/db/queries";
+import { z } from "zod";
 
-export async function GET(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    const searchParams = request.nextUrl.searchParams;
+const CreateClaimSchema = z.object({
+  claimName: z.string().min(1, "Claim name is required"),
+  accountName: z.string().optional(),
+  brokerName: z.string().optional(),
+  claimType: z.string().optional(),
+  shipName: z.string().optional(),
+  cpType: z.string().optional(),
+  voyageNumber: z.string().optional(),
+  demurrageRatePerDay: z.number().optional(),
+  claimFiledAmount: z.number().optional(),
+  charterpartyDate: z.string().optional(),
+  noticeReceivedDate: z.string().optional(),
+  claimReceivedDate: z.string().optional(),
+  assignedTo: z.string().optional(),
+  clientId: z.string().optional(),
+  ports: z.array(z.any()).optional(),
+  berths: z.array(z.any()).optional(),
+  activities: z.array(z.any()).optional()
+}).passthrough();
+
+// GET /api/claims: Scoped Claims Ledger
+export const GET = withApi({
+  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance", "Reviewer", "Client"],
+  handler: async ({ user, req }) => {
+    const searchParams = req.nextUrl.searchParams;
 
     const status = searchParams.get("status") || "All";
     const claimType = searchParams.get("claimType") || "All";
-    const client = searchParams.get("client") || "All";
     const search = searchParams.get("search") || "";
+    const sortBy = searchParams.get("sortBy") || "created_at";
+    const sortOrder = (searchParams.get("sortOrder") || "DESC").toUpperCase() as "ASC" | "DESC";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "100", 10);
     const offset = (page - 1) * limit;
 
-    const result = getClaims({
-      role: session?.role,
-      userEmail: session?.email,
-      userName: session?.name,
+    const result = getScopedClaims(user, {
       status,
       claimType,
-      client,
       search,
+      sortBy,
+      sortOrder,
       limit,
       offset
     });
@@ -33,32 +55,22 @@ export async function GET(request: NextRequest) {
       page,
       limit
     });
-  } catch (error: any) {
-    console.error("GET Claims API Error:", error);
-    return NextResponse.json({ error: "Failed to fetch claims" }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
-    }
+// POST /api/claims: Create a new claim (Supervisor & Processor only)
+export const POST = withApi({
+  roles: ["Supervisor", "Claim Processor", "Processor"],
+  schema: CreateClaimSchema,
+  handler: async ({ user, body }) => {
+    const newClaim = createClaim(body as any, user.name || user.email);
 
-    if (session.role === "Reviewer") {
-      return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const newClaim = createClaim(body, session.name || session.email);
-
-    return NextResponse.json({
-      success: true,
-      claim: newClaim
-    }, { status: 201 });
-  } catch (error: any) {
-    console.error("POST Claim API Error:", error);
-    return NextResponse.json({ error: "Failed to create claim" }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: true,
+        claim: newClaim
+      },
+      { status: 201 }
+    );
   }
-}
+});

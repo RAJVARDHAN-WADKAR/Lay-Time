@@ -5,6 +5,13 @@ export const SCHEMA_SQL = `
 
 PRAGMA foreign_keys = ON;
 
+-- 0. CLIENTS TABLE
+CREATE TABLE IF NOT EXISTS clients (
+  client_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
 -- 1. USERS TABLE
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -12,7 +19,11 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   username TEXT UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('Admin', 'Claim Processor', 'Supervisor', 'Reviewer')),
+  role TEXT NOT NULL CHECK(role IN ('ADMIN', 'SUPERVISOR', 'CLAIM_PROCESSOR', 'REVIEWER_CLIENT')),
+  client_id TEXT REFERENCES clients(client_id),
+  client_name TEXT,
+  created_by TEXT REFERENCES users(id),
+  token_version INTEGER NOT NULL DEFAULT 1,
   avatar TEXT,
   status TEXT NOT NULL DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
   role_description TEXT,
@@ -23,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- 2. CLAIMS TABLE
 CREATE TABLE IF NOT EXISTS claims (
   id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES clients(client_id),
   claim_name TEXT NOT NULL,
   account_name TEXT NOT NULL,
   broker_name TEXT NOT NULL,
@@ -372,6 +384,60 @@ CREATE TABLE IF NOT EXISTS rac_status_history (
 );
 
 -- =========================================================
+-- NEGOTIATIONS MODULE TABLES
+-- =========================================================
+
+-- 21. NEGOTIATION THREADS TABLE
+CREATE TABLE IF NOT EXISTS negotiation_threads (
+  id TEXT PRIMARY KEY,
+  claim_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'Open',
+  proposed_agreed_amount REAL,
+  proposed_currency TEXT DEFAULT 'USD',
+  proposed_by TEXT,
+  proposed_at TEXT,
+  supervisor_confirmed INTEGER NOT NULL DEFAULT 0,
+  supervisor_confirmed_by TEXT,
+  supervisor_confirmed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (claim_id) REFERENCES claims(id) ON DELETE CASCADE
+);
+
+-- 22. NEGOTIATION MESSAGES TABLE
+CREATE TABLE IF NOT EXISTS negotiation_messages (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  sender_role TEXT NOT NULL,
+  sender_name TEXT NOT NULL,
+  message_type TEXT NOT NULL CHECK(message_type IN ('text', 'counter_offer')),
+  content TEXT NOT NULL,
+  counter_offer_amount REAL,
+  currency TEXT,
+  counter_offer_status TEXT CHECK(counter_offer_status IN ('Pending', 'Accepted', 'Rejected', NULL)),
+  responded_by TEXT,
+  responded_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (thread_id) REFERENCES negotiation_threads(id) ON DELETE CASCADE,
+  FOREIGN KEY (sender_id) REFERENCES users(id)
+);
+
+-- 23. AUDIT LOGS TABLE
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  actor_id TEXT NOT NULL,
+  actor_email TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  details_json TEXT,
+  ip_address TEXT,
+  created_at TEXT NOT NULL
+);
+
+-- =========================================================
 -- PERFORMANCE INDEXES
 -- =========================================================
 CREATE INDEX IF NOT EXISTS idx_claims_account ON claims(account_name);
@@ -379,6 +445,10 @@ CREATE INDEX IF NOT EXISTS idx_claims_ship ON claims(ship_name);
 CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(claim_status);
 CREATE INDEX IF NOT EXISTS idx_claims_assigned ON claims(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_claims_created ON claims(created_at);
+CREATE INDEX IF NOT EXISTS idx_claims_client_id ON claims(client_id);
+
+CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id);
+CREATE INDEX IF NOT EXISTS idx_users_created_by ON users(created_by);
 
 CREATE INDEX IF NOT EXISTS idx_ports_claim ON ports(claim_id);
 CREATE INDEX IF NOT EXISTS idx_berths_port ON berths(port_id);
@@ -391,4 +461,9 @@ CREATE INDEX IF NOT EXISTS idx_rac_reference ON rac_cases(rac_reference);
 CREATE INDEX IF NOT EXISTS idx_rac_client ON rac_cases(client_name);
 CREATE INDEX IF NOT EXISTS idx_rac_status ON rac_cases(status);
 CREATE INDEX IF NOT EXISTS idx_rac_assigned ON rac_cases(assigned_to);
+
+CREATE INDEX IF NOT EXISTS idx_negotiation_threads_claim ON negotiation_threads(claim_id);
+CREATE INDEX IF NOT EXISTS idx_negotiation_messages_thread ON negotiation_messages(thread_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);
 `;

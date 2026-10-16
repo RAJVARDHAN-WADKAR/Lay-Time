@@ -24,12 +24,14 @@ export async function PUT(
 ) {
   try {
     const session = getCurrentUserFromRequest(request);
-    if (!session || session.role === "Reviewer") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = session ? normalizeRole(session.role) : null;
+    if (!session || session.role === "Reviewer" || userRoleNorm === "REVIEWER_CLIENT") {
+      return NextResponse.json({ error: "Forbidden: Reviewers and Clients cannot modify documents." }, { status: 403 });
     }
 
     const body = await request.json();
-    const updated = updateDocument(params.id, body, session.name || session.email);
+    const updated = updateDocument(params.id, body, session.name || session.email || "System");
 
     return NextResponse.json({ success: true, document: updated });
   } catch (error: any) {
@@ -43,7 +45,9 @@ export async function DELETE(
 ) {
   try {
     const session = getCurrentUserFromRequest(request);
-    if (!session || (session.role !== "Admin" && session.role !== "Supervisor")) {
+    const { normalizeRole } = await import("@/app/access/roles");
+    const userRoleNorm = session ? normalizeRole(session.role) : null;
+    if (!session || (userRoleNorm !== "ADMIN" && userRoleNorm !== "SUPERVISOR")) {
       return NextResponse.json({ error: "Forbidden: Only Admin or Supervisor can delete documents." }, { status: 403 });
     }
 

@@ -1,14 +1,14 @@
-# Laytime Calculation & RAC Management System - SRS & RAC Compliance Dossier
+# Laytime Calculation & RAC Management System - SRS & Security Compliance Dossier
 
 ## 1. System Overview & Architecture
 
-The **Laytime Calculation System** is an enterprise-grade maritime application built for post-fixture operations, demurrage calculation, statement of facts (SoF) event extraction, and Recoverable Additional Costs (RAC) claim management.
+The **Laytime Calculation System** is an enterprise-grade maritime application built for post-fixture operations, demurrage calculation, statement of facts (SoF) event extraction, recoverable additional costs (RAC) claim management, and commercial counterparty negotiations.
 
 ### Tech Stack & Runtime Architecture
 - **Framework**: Next.js 14 (App Router) + React 18 + TypeScript (Strict Mode)
 - **Styling**: Tailwind CSS + Lucide Icons + Responsive Data Tables
 - **Database**: SQLite (via `better-sqlite3`) in Write-Ahead Logging (`WAL`) mode with Foreign Key constraints enabled
-- **Authentication**: JWT-based session tokens stored in secure HTTP-only cookies + Bcryptjs salted password hashing
+- **Authentication**: JWT-based session tokens stored in secure HTTP-only cookies (`laytime_auth_token`), Edge Web Crypto middleware, database-backed `token_version` invalidation, Bcrypt temporary passwords.
 - **Mathematical Engines**:
   - Deterministic Maritime Laytime Engine (Dry Bulk, Container, Multi-berth, Multi-port, Multi-cargo)
   - Configurable RAC (Recoverable Additional Costs) Calculation Engine (Ruleset v1.0, Tariff basis, deductions, prorata allocation)
@@ -17,39 +17,43 @@ The **Laytime Calculation System** is an enterprise-grade maritime application b
 
 ---
 
-## 2. Role-Based Access Control (RBAC) Matrix
+## 2. Role-Based Access Control (RBAC) & Creation Matrix
 
-| Capability / Resource | Admin | Supervisor | Claim Processor | Reviewer |
-| :--- | :---: | :---: | :---: | :---: |
-| **Authentication & Profile** | Full | Full | Full | Full |
-| **Dashboard & Analytics** | Global View | Global View | Assigned Claims / RAC | Read-Only (All) |
-| **Claims Ledger - View** | All Claims | All Claims | Assigned Claims Only | All Claims |
-| **Claims - Create & Edit** | Full Edit | Full Edit | Assigned Claims Only | Blocked (403) |
-| **Claims - Delete** | Yes | Yes | No | No |
-| **RAC Module - View** | All Cases | All Cases | Assigned Cases Only | All Cases |
-| **RAC Module - Create & Edit**| Full Edit | Full Edit | Assigned Cases Only | Blocked (403) |
-| **RAC Workflow Authorization**| Authorize / Close | Authorize / Close | Submit for Review | View Only |
-| **SoF Event Discrepancies** | Reconcile / Override | Reconcile / Override | Assigned Claims Only | View Only |
-| **Pumping Warranty Audit** | Full Edit | Full Edit | Full Edit | View Only |
-| **User Management (`/users`)** | Full Management | Blocked | Blocked | Blocked |
-| **System Settings (`/settings`)**| Full Management | Blocked | Blocked | Blocked |
+| Capability / Resource | Admin | Supervisor | Claim Processor | Reviewer | Finance | Client (External) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Authentication & Profile** | Full | Full | Full | Full | Full | Full |
+| **Dashboard & Analytics** | Global View | Global View | Assigned Claims | Global View | Financial | Own Claims Only |
+| **Claims Ledger - View** | All Claims | All Claims | Assigned Claims | All Claims | All Claims | Own Claims Only |
+| **Claims - Create & Edit** | Read-Only | Full Edit | Assigned Claims | Blocked (403) | Blocked (403) | Blocked (403) |
+| **Claims - Delete** | Blocked (403) | Authorized | Blocked (403) | Blocked (403) | Blocked (403) | Blocked (403) |
+| **Statement of Facts (SoF)** | Blocked (403) | Full Edit | Assigned Claims | View Only | Blocked (403) | Blocked (403) |
+| **Laytime Calculations** | Blocked (403) | Full Edit | Assigned Claims | View Only | View Summary | Blocked (403) |
+| **Calculation Override** | Blocked (403) | Authorized (Reason) | Blocked (403) | Blocked (403) | Blocked (403) | Blocked (403) |
+| **Commercial Negotiations** | Oversight | Oversight / Confirm | Active Negotiator | Oversight | Blocked (403) | Active Counterparty |
+| **RAC Module - View** | Blocked (403) | All Cases | Assigned Cases | All Cases | Blocked (403) | Blocked (403) |
+| **RAC Module - Authorize** | Blocked (403) | Authorize / Close | Submit for Review | Blocked (403) | Blocked (403) | Blocked (403) |
+| **User Directory (`/users`)** | Subtree Mgmt | Subtree Mgmt | Subtree Mgmt | Blocked (307) | Blocked (307) | Blocked (307) |
+| **System Settings (`/settings`)**| Full Mgmt | Full Mgmt | Blocked (307) | Blocked (307) | Blocked (307) | Blocked (307) |
+| **Allowed Created Roles** | Admin, Supervisor, Reviewer | Claim Processor | Client | None (`[]`) | None (`[]`) | None (`[]`) |
 
 ### Pre-Seeded Test Credentials
-- **Admin**: `admin@laytime.com` / `Admin@123` (Name: *Capt. Alexander Drake*)
-- **Claim Processor**: `processor@laytime.com` / `Processor@123` (Name: *Sarah Jenkins*)
-- **Supervisor**: `supervisor@laytime.com` / `Supervisor@123` (Name: *Marcus Vance*)
-- **Reviewer**: `reviewer@laytime.com` / `Reviewer@123` (Name: *Elena Rostova*)
+- **Admin**: `rajvardhanwadkar76@gmail.com` / `Raj@123`
+- **Supervisor**: `swayamghatage3839@gmail.com` / `Swayam@123`
+- **Claim Processor**: `rohitmengane2975@gmail.com` / `Rohit@123`
+- **Reviewer**: `paraschougale558@gmail.com` / `Paras@123`
+- **Finance**: `anita.sharma@laytime.com` / `Finance@123`
+- **Client**: `client@trafigura.com` / `Client@123` (Linked to Client Account: `Trafigura`)
 
 ---
 
-## 3. SRS Requirements Compliance Matrix (Claims & Laytime)
+## 3. SRS Requirements Compliance Matrix
 
 | Req # | Requirement Name | Status | Implementation Details & File Reference |
 | :--- | :--- | :---: | :--- |
-| **REQ-01** | Real Authentication & RBAC | `IMPLEMENTED` | `lib/auth/*`, `middleware.ts`, `app/api/auth/*`. JWT in HTTP-only cookies, Bcrypt password hashing, session validation on all `/api/*` endpoints. |
-| **REQ-02** | Real Database Persistence | `IMPLEMENTED` | `lib/db/*`, `data/laytime.db`. SQLite WAL mode, foreign keys, parameterized SQL queries, 20 persistent tables. |
-| **REQ-03** | Claims Ledger (32+ Fields) | `IMPLEMENTED` | `components/claims/LedgerTable.tsx`, `lib/types/index.ts`. All 32 required fields, global search, filtering, presets, sorting, pagination, CSV export. Explicitly excludes bulk update per SRS. |
-| **REQ-04** | Claim Details View | `IMPLEMENTED` | `app/claims/[id]/page.tsx`. Comprehensive multi-tab layout (Overview, Ports, SoF, Calculations, Discrepancies, Owner Comparison, Chasers, Missing Docs). |
+| **REQ-01** | Real Authentication & RBAC | `IMPLEMENTED` | `lib/auth/*`, `middleware.ts`, `app/api/auth/*`. 8-hour JWT in HTTP-only cookies, Bcrypt password hashing, session validation on all `/api/*` endpoints. |
+| **REQ-02** | Real Database Persistence | `IMPLEMENTED` | `lib/db/*`, `data/laytime.db`. SQLite WAL mode, foreign keys, parameterized SQL queries, 24 persistent tables. |
+| **REQ-03** | Claims Ledger (32+ Fields) | `IMPLEMENTED` | `components/claims/LedgerTable.tsx`, `lib/types/index.ts`. All 32 required fields, global search, filtering, presets, sorting, pagination, CSV export. |
+| **REQ-04** | Claim Details View | `IMPLEMENTED` | `app/claims/[id]/page.tsx`. Multi-tab layout (Overview, Ports, SoF, Calculations, Discrepancies, Negotiations, Owner Comparison, Chasers, Missing Docs). |
 | **REQ-05** | Statement of Facts (SoF) Management | `IMPLEMENTED` | `components/claims/ClaimSoFTab.tsx`, `lib/db/queries.ts`. Event ordering, manual entry, PDF upload, OCR binding, % counted, prorata allocation, deduction classification. |
 | **REQ-06** | Real OCR Pipeline | `IMPLEMENTED` | `lib/ocr/processor.ts`, `app/api/ocr/route.ts`. Real PDF text extraction, maritime event regex parser, timestamp and port binding. |
 | **REQ-07** | Discrepancy & Validation Engine | `IMPLEMENTED` | `lib/calculations/discrepancies.ts`. Detects time overlaps, missing mandatory docs, inverted start/stop timestamps, low OCR confidence, and unassigned activities. |
@@ -72,6 +76,14 @@ The **Laytime Calculation System** is an enterprise-grade maritime application b
 | **REQ-24** | AI Assistant Maritime Prompting | `IMPLEMENTED` | `app/ai-assistant/page.tsx`. Maritime charterparty clause interpretation and laytime query assistant. |
 | **REQ-25** | Error Handling & Audit Trail | `IMPLEMENTED` | Parameterized SQL error handling, structured status history logging, and API standard error responses. |
 | **REQ-26** | Performance & Responsive Design | `IMPLEMENTED` | Next.js dynamic routing, SQLite WAL mode, database indexing, fully responsive layout across desktop, tablet, and mobile. |
+| **REQ-27** | Hierarchical User Management | `IMPLEMENTED` | `lib/auth/userHierarchy.ts`, `lib/auth/userHierarchyConstants.ts`. Strict `CREATE_MATRIX` enforcement, recursive `created_by` subtree isolation, self-deactivation blocking, and last-Admin protection. |
+| **REQ-28** | Row-Level Data Isolation (RLS) | `IMPLEMENTED` | `lib/db/scoped.ts`. Centralized data access layer with `claimScope(user)` parameterized SQL fragments. Processors restricted to assigned claims, Clients restricted to company claims. Cascading joins isolate ports, berths, SoF, calculations, and RAC. |
+| **REQ-29** | Client Restricted Data DTO | `IMPLEMENTED` | `lib/db/scoped.ts`. External Client users receive restricted claim DTO (claim reference, vessel, port, status, totalDemurrageClaimed, agreedAmount, shared documents). Excludes SoF, calculations, overrides, and RAC. |
+| **REQ-30** | Dynamic Token Versioning & Session Revocation | `IMPLEMENTED` | `lib/auth/session.ts`, `lib/db/queries.ts`. Database `token_version` checked on every API call. Automatic bumping on deactivation, role demotion, or password reset immediately rejects stale tokens with 401/403. |
+| **REQ-31** | Validation Wrapper (`withApi`) & CSRF Origin Check | `IMPLEMENTED` | `lib/api/withApi.ts`. High-order route wrapper validating Zod schemas, role permissions, CSRF origin verification on mutations, and returning consistent error envelopes. |
+| **REQ-32** | Client Commercial Negotiation Engine | `IMPLEMENTED` | `lib/db/negotiations.ts`, `app/api/claims/[id]/negotiations/*`. Append-only immutable messages (`PUT`/`DELETE` return 405), rate limiting (10 msg/min), Processor counter-offer accept/reject, Supervisor settlement confirmation committing `claims.agreed_amount`. |
+| **REQ-33** | Zero-Trust UI Rendering | `IMPLEMENTED` | `components/auth/RequireRole.tsx`, `components/auth/Can.tsx`. Server components read verified cookie role and omit HTML. Client components render based on verified `/api/auth/me` state without trusting browser localStorage. |
+| **REQ-34** | Strictly Read-Only Reviewer Role Boundary | `IMPLEMENTED` | `lib/auth/permissions.ts`, `middleware.ts`, `lib/api/withApi.ts`, route handlers. Reviewer role is strictly read-only: permitted inspection of claims, SoF, ports/berths, documents, stored laytime results, RAC cases, payments, invoices, negotiation history (oversight mode), clients/vessels, dashboards/reports, and audit log. Strictly blocked (403/307) from any creation, edit, deletion, calculation execution, recalculation, override, RAC analysis, OCR, payment recording, claim assignment, settlement, or report computation. |
 
 ---
 
@@ -90,53 +102,37 @@ The **Laytime Calculation System** is an enterprise-grade maritime application b
 
 ---
 
-## 5. Deep RAC Integration Across Claims & Laytime Modules
+## 5. SQLite Database Tables Reference
 
-Rather than keeping RAC strictly in an isolated silo, RAC is deeply and bi-directionally integrated across all operational workflows:
-
-1. **Claim Details View (`/claims/[id]`)**:
-   - Integrated **RAC Recoverables Tab** ([`ClaimRacTab.tsx`](file:///C:/Lay%20time/components/claims/ClaimRacTab.tsx)) displaying pure demurrage, linked RAC costs, combined voyage financial impact, agreed recoveries, and attached RAC records.
-   - Inline creation modal to attach new RAC dispute cases directly to the active voyage.
-2. **Claims Ledger Table (`/claims`)**:
-   - Added **RAC Dispute / RAC Hub** direct badge link column in [`LedgerTable.tsx`](file:///C:/Lay%20time/components/claims/LedgerTable.tsx).
-3. **Executive Dashboard (`/dashboard`)**:
-   - Embedded live RAC financial exposure banner ($Demurrage + RAC$) and active dispute case counts directly on the main dashboard.
-4. **Calculations Hub (`/calculations`)**:
-   - Unified 3-tab calculation workplace: **Standard Laytime Calculator**, **Oil & Chemical Cargo Calculator**, and **RAC Recoverable Costs Engine** ([`RacCalculator.tsx`](file:///C:/Lay%20time/components/calculations/RacCalculator.tsx)).
-5. **Reports Generator (`/reports`)**:
-   - Added **RAC Summary Report** and **Combined Demurrage + RAC Settlement Dossier** to the central report parameters.
-6. **RAC Case Details (`/rac/cases/[id]`)**:
-   - Added bidirectional link back to the parent Demurrage Claim (`CLM-...`).
-
----
-
-## 6. SQLite Database Tables Reference
-
-1. `users` - Corporate user credentials, roles, bcrypt hashes, status.
-2. `sessions` - Active authenticated session records and JWT identifiers.
-3. `claims` - Master claim records containing all 32+ commercial and operational fields.
-4. `ports` - Port records linked to claims (Load/Discharge, load rates, allowed laytime).
-5. `berths` - Berth allocations linked to ports (tonnages, load rates, berth names).
-6. `activities` - Statement of Facts (SoF) activities with start/stop times, % counted, and deductions.
-7. `deductions` - Itemized deduction records (weather, rain, crane breakdown, shifting).
-8. `calculations` - Computed laytime summaries, demurrage/despatch values, and port breakdowns.
-9. `discrepancies` - Detected operational and timestamp discrepancies.
-10. `owner_comparisons` - Reconciled owner vs internal laytime calculations and variances.
-11. `documents` - File attachments, categories, versions, OCR confidence, and file metadata.
-12. `document_revisions` - Version audit trail for uploaded files.
-13. `email_followups` - Scheduled and dispatched 30d/60d/90d/120d claim chasers.
-14. `incoming_emails` - Inbound correspondence and counterparty messages.
-15. `notifications` - System, timebar, OCR, and dispute notifications.
-16. `settings` - Global calculation assumptions, default rates, and working rules.
-17. `oil_chem_calculations` - Liquid tanker pumping warranty audits and ASTM 54B VCF factors.
-18. `rac_cases` - Master RAC dispute files (client, ship, dispute type, status, financials).
-19. `rac_calculations` - Configurable RAC formula inputs, parameter sets, and step breakdowns.
-20. `rac_status_history` - Audit trail of RAC state transitions with analyst sign-offs.
+1. `users` - Corporate user credentials, roles, client linkage, created_by pointer, token_version, status.
+2. `clients` - Company master records (`client_id`, `name`, `code`, `country`, `created_at`).
+3. `sessions` - Active authenticated session records and JWT identifiers.
+4. `claims` - Master claim records containing all 32+ commercial/operational fields, `client_id`, and `agreed_amount`.
+5. `ports` - Port records linked to claims (Load/Discharge, load rates, allowed laytime).
+6. `berths` - Berth allocations linked to ports (tonnages, load rates, berth names).
+7. `activities` - Statement of Facts (SoF) activities with start/stop times, % counted, and deductions.
+8. `deductions` - Itemized deduction records (weather, rain, crane breakdown, shifting).
+9. `calculations` - Computed laytime summaries, demurrage/despatch values, and port breakdowns.
+10. `discrepancies` - Detected operational and timestamp discrepancies.
+11. `owner_comparisons` - Reconciled owner vs internal laytime calculations and variances.
+12. `documents` - File attachments, categories, versions, OCR confidence, and file metadata.
+13. `document_revisions` - Version audit trail for uploaded files.
+14. `email_followups` - Scheduled and dispatched 30d/60d/90d/120d claim chasers.
+15. `incoming_emails` - Inbound correspondence and counterparty messages.
+16. `notifications` - System, timebar, OCR, dispute, and negotiation notifications.
+17. `settings` - Global calculation assumptions, default rates, and working rules.
+18. `oil_chem_calculations` - Liquid tanker pumping warranty audits and ASTM 54B VCF factors.
+19. `rac_cases` - Master RAC dispute files (client, ship, dispute type, status, financials).
+20. `rac_calculations` - Configurable RAC formula inputs, parameter sets, and step breakdowns.
+21. `rac_status_history` - Audit trail of RAC state transitions with analyst sign-offs.
+22. `negotiation_threads` - Commercial negotiation threads linked to claims (`status`, `proposed_agreed_amount`, `supervisor_confirmed`).
+23. `negotiation_messages` - Append-only negotiation dialogue and structured counter-offers (`message_type`, `offer_amount`, `counter_offer_status`).
+24. `audit_logs` - Enterprise security audit trail (`actor_id`, `actor_role`, `action`, `target_type`, `details`, `ip_address`).
 
 ---
 
 ## 6. Verification and Build Status
 
+- **Automated Security & Access Control Tests**: `79 / 79 Tests Passing (100%)` via `npm run test:auth`
 - **TypeScript Compilation**: `0 Errors` (Strict type checking enabled)
-- **Next.js Production Build**: `34 Static & Dynamic routes compiled successfully`
-- **Database Engine**: Better-SQLite3 WAL mode verified with 4 seeded test users and sample maritime datasets.
+- **Database Engine**: Better-SQLite3 WAL mode verified with 6 seeded test users, clients, claims, and negotiation threads.

@@ -39,7 +39,7 @@ export async function POST(
         ...body,
         claimId: params.id
       },
-      session.name || session.email
+      session.name || session.email || "System"
     );
 
     return NextResponse.json({ success: true, chaser: newChaser });
