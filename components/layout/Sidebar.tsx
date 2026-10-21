@@ -80,7 +80,6 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
   }, []);
 
   // Navigation Items adhering strictly to the Zero-Trust RBAC Matrix
-  // Client users see ONLY: My Claims and Notifications
   const isClient =
     role === "Client" ||
     (role === "REVIEWER_CLIENT" &&
@@ -90,31 +89,63 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
           (currentUser as any)?.assignedClientId
       ));
 
+  const normRole = (role || "").toUpperCase().replace(/[\s-]+/g, "_");
+  const isProcessor = normRole === "CLAIM_PROCESSOR" || normRole === "PROCESSOR";
+  const isAdmin = normRole === "ADMIN";
+  const isSupervisor = normRole === "SUPERVISOR" || normRole === "FINANCE";
+
+  const roleDashboardHref = isClient
+    ? "/dashboard/reviewer-client"
+    : isAdmin
+    ? "/dashboard/admin"
+    : isSupervisor
+    ? "/dashboard/supervisor"
+    : isProcessor
+    ? "/dashboard/claim-processor"
+    : "/dashboard/reviewer-client";
+
+  const roleDashboardLabel = isClient
+    ? "Client Portal"
+    : isAdmin
+    ? "Admin Console"
+    : isSupervisor
+    ? "Supervisor Dashboard"
+    : isProcessor
+    ? "Analyst Workbench"
+    : "Reviewer Dashboard";
+
   const navItems: NavItem[] = isClient
     ? [
+        {
+          href: roleDashboardHref,
+          label: roleDashboardLabel,
+          icon: LayoutDashboard
+        },
         {
           href: "/claims",
           label: "My Claims",
           icon: FileSpreadsheet
         },
+        {
+          href: "/documents",
+          label: "Documents",
+          icon: FileText
+        },
         { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount }
       ]
     : [
         ...(canViewDashboard
-          ? [{ href: "/dashboard", label: role === "Finance" ? "Financial Dashboard" : "Dashboard", icon: LayoutDashboard }]
+          ? [{ href: roleDashboardHref, label: roleDashboardLabel, icon: LayoutDashboard }]
           : []),
         {
           href: "/claims",
-          label:
-            role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR"
-              ? "Assigned Claims"
-              : "Claims Ledger",
+          label: isProcessor ? "Assigned Claims" : "Claims Ledger",
           icon: FileSpreadsheet
         },
         ...(canCreateClaim
           ? [{ href: "/claims/create", label: "Create Claim", icon: PlusCircle }]
           : []),
-        ...(canViewLaytime && role !== "Reviewer" && role !== "REVIEWER_CLIENT"
+        ...(canCreateClaim
           ? [{ href: "/calculator", label: "Laytime Calculator", icon: Calculator }]
           : []),
         ...(canViewDocuments
@@ -124,39 +155,30 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
           ? [{ href: "/ocr", label: "OCR & SoF", icon: ScanText }]
           : []),
         ...(canViewRac
-          ? [{ href: "/rac", label: "RAC Review", icon: Briefcase }]
+          ? [{ href: "/rac", label: isSupervisor ? "RAC Portfolio" : "RAC Review", icon: Briefcase }]
           : []),
-        ...(role !== "Admin" && role !== "ADMIN" && role !== "Finance"
+        ...(!isAdmin && normRole !== "FINANCE"
           ? [{ href: "/timebar", label: "Time-Bar Monitor", icon: Clock }]
           : []),
-        ...(canViewDashboard
+        // Analytics: Removed for Claim Processor (Workbench only)
+        ...(canViewDashboard && !isProcessor
           ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
           : []),
-        ...(canViewReports
-          ? [{ href: "/reports", label: role === "Finance" ? "Financial Reports" : "Reports", icon: FileBarChart }]
+        // Reports: Removed for Claim Processor (Workbench only)
+        ...(canViewReports && !isProcessor
+          ? [{ href: "/reports", label: isAdmin ? "Audit Reports" : "Reports", icon: FileBarChart }]
           : []),
         { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount },
-        ...(role === "Admin" ||
-        role === "ADMIN" ||
-        role === "Supervisor" ||
-        role === "SUPERVISOR" ||
-        role === "Claim Processor" ||
-        role === "CLAIM_PROCESSOR" ||
-        role === "Processor"
+        ...(canAccessUsers
           ? [
               {
                 href: "/users",
-                label:
-                  role === "Supervisor" || role === "SUPERVISOR"
-                    ? "Team & Users"
-                    : role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR"
-                    ? "Client Directory"
-                    : "User Management",
+                label: isSupervisor ? "Team & Users" : "User Management",
                 icon: Users
               }
             ]
           : []),
-        ...(role === "Admin" || role === "ADMIN" || role === "Supervisor" || role === "SUPERVISOR"
+        ...(canAccessSettings
           ? [{ href: "/settings", label: "Company Settings", icon: Settings }]
           : [])
       ];
@@ -176,7 +198,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
       {/* Brand Header */}
       <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between">
         <Link
-          href="/dashboard"
+          href={roleDashboardHref}
           className="flex items-center space-x-3 group"
           onClick={onCloseMobile}
         >

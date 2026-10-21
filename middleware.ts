@@ -6,7 +6,18 @@ import { UserRole } from "@/lib/types";
 const AUTH_COOKIE_NAME = "laytime_auth_token";
 
 // Project route-to-roles map for edge middleware
+// Note: More specific prefixes must come BEFORE more general prefixes
 const ROUTE_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
+  // 1. Role-specific Separate Dashboards (Strict 1-to-1 role matching)
+  { prefix: "/dashboard/admin", allowedRoles: ["ADMIN"] },
+  { prefix: "/dashboard/supervisor", allowedRoles: ["SUPERVISOR"] },
+  { prefix: "/dashboard/claim-processor", allowedRoles: ["CLAIM_PROCESSOR"] },
+  { prefix: "/dashboard/reviewer-client", allowedRoles: ["REVIEWER_CLIENT"] },
+  { prefix: "/dashboard/reviewer", allowedRoles: ["REVIEWER_CLIENT"] },
+  { prefix: "/dashboard/client", allowedRoles: ["REVIEWER_CLIENT"] },
+  { prefix: "/dashboard", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+
+  // 2. Application Feature Screens
   { prefix: "/settings", allowedRoles: ["ADMIN"] },
   { prefix: "/users", allowedRoles: ["ADMIN", "SUPERVISOR"] },
   { prefix: "/claims/create", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
@@ -16,9 +27,9 @@ const ROUTE_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
   { prefix: "/ai-assistant", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
   { prefix: "/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
   { prefix: "/timebar", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
-  { prefix: "/analytics", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
-  { prefix: "/reports", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
-  { prefix: "/dashboard", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  // Access Removed for CLAIM_PROCESSOR on macro Analytics & Reports (Analyst workbench only)
+  { prefix: "/analytics", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT"] },
+  { prefix: "/reports", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT"] },
   { prefix: "/documents", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] }
 ];
 
@@ -65,6 +76,15 @@ function roleMatches(userRole: any, allowedRoles: string[]): boolean {
   return allowedRoles.some((r) => normalizeRole(r) === normUser);
 }
 
+function getRoleDashboardUrl(role?: string, isClient?: boolean): string {
+  if (isClient) return "/dashboard/reviewer-client";
+  const norm = normalizeRole(role);
+  if (norm === "ADMIN") return "/dashboard/admin";
+  if (norm === "SUPERVISOR") return "/dashboard/supervisor";
+  if (norm === "CLAIM_PROCESSOR") return "/dashboard/claim-processor";
+  return "/dashboard/reviewer-client";
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -88,31 +108,22 @@ export async function middleware(request: NextRequest) {
 
   const session = token ? await verifyEdgeToken(token) : null;
   const isAuthenticated = !!session;
+  const isClient = Boolean(session?.assignedClientId || session?.role === "Client");
 
-  // 3. Root URL redirect
+  // 3. Root URL redirect to dedicated role dashboard
   if (pathname === "/") {
     if (isAuthenticated) {
-      if (session?.role === "Admin") {
-        return NextResponse.redirect(new URL("/users", request.url));
-      }
-      if (session?.role === "Client") {
-        return NextResponse.redirect(new URL("/claims", request.url));
-      }
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      const targetDashboard = getRoleDashboardUrl(session?.role, isClient);
+      return NextResponse.redirect(new URL(targetDashboard, request.url));
     }
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // 4. Login Page Handling
+  // 4. Login Page Handling: redirect already logged-in users to their role dashboard
   if (pathname === "/login") {
     if (isAuthenticated) {
-      if (session?.role === "Admin") {
-        return NextResponse.redirect(new URL("/users", request.url));
-      }
-      if (session?.role === "Client") {
-        return NextResponse.redirect(new URL("/claims", request.url));
-      }
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      const targetDashboard = getRoleDashboardUrl(session?.role, isClient);
+      return NextResponse.redirect(new URL(targetDashboard, request.url));
     }
     return NextResponse.next();
   }
@@ -173,14 +184,44 @@ export async function middleware(request: NextRequest) {
       return redirectResponse;
     }
 
+    // Exact /dashboard URL: immediately redirect to the user's separate role dashboard
+    if (pathname === "/dashboard") {
+      const targetDashboard = getRoleDashboardUrl(session?.role, isClient);
+      return NextResponse.redirect(new URL(targetDashboard, request.url));
+    }
+
+    // External Client Restrictions: client can only access client-allowed screens
+    if (isClient) {
+      const clientBlockedPrefixes = [
+        "/rac",
+        "/calculator",
+        "/calculations",
+        "/ocr",
+        "/timebar",
+        "/analytics",
+        "/reports",
+        "/users",
+        "/settings",
+        "/dashboard/admin",
+        "/dashboard/supervisor",
+        "/dashboard/claim-processor"
+      ];
+
+      const isBlocked = clientBlockedPrefixes.some(
+        (p) => pathname === p || pathname.startsWith(`${p}/`)
+      );
+
+      if (isBlocked) {
+        return NextResponse.redirect(new URL("/dashboard/reviewer-client", request.url));
+      }
+    }
+
     // Edge route-to-roles map enforcement
     for (const rule of ROUTE_ROLES_MAP) {
       if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
-        if (session.assignedClientId && rule.prefix === "/rac") {
-          return NextResponse.redirect(new URL("/claims", request.url));
-        }
-        if (!roleMatches(session.role, rule.allowedRoles)) {
-          const fallback = session.assignedClientId || session.role === "Client" ? "/claims" : "/dashboard";
+        if (!roleMatches(session?.role, rule.allowedRoles)) {
+          // If accessing an unauthorized role dashboard or screen, redirect to their own separate dashboard
+          const fallback = getRoleDashboardUrl(session?.role, isClient);
           return NextResponse.redirect(new URL(fallback, request.url));
         }
       }

@@ -19,7 +19,7 @@ export const supervisorRole: RoleDefinition = {
     clients: ["view", "create", "edit"],
     vessels: ["view", "create", "edit"],
     users: ["view"],
-    settings: ["view"],
+    settings: [],
     dashboard: ["view"],
     analytics: ["view"],
     reports: ["view", "export"],

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { getUsers, createUser, updateUser, deactivateUser, resetUserPassword } from "@/lib/api/users";
 import { User, UserRole } from "@/lib/types";
 import { CREATE_MATRIX } from "@/lib/auth/userHierarchyConstants";
@@ -28,7 +28,7 @@ import {
 
 export default function UsersPage() {
   const router = useRouter();
-  const { user: currentAuthUser, role, canAccessUsers, isLoading: authLoading } = useAuth();
+  const { user: currentAuthUser, role, canAccessUsers, canManageUsers, isLoading: authLoading } = useAuth();
   const { success, error, info } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -64,7 +64,7 @@ export default function UsersPage() {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await getUsers();
@@ -74,13 +74,13 @@ export default function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [error]);
 
   useEffect(() => {
     if (!authLoading) {
       fetchUsers();
     }
-  }, [authLoading]);
+  }, [authLoading, fetchUsers]);
 
   // Set default role when opening Add modal
   const handleOpenAddModal = () => {
@@ -335,33 +335,39 @@ export default function UsersPage() {
                         </td>
 
                         <td className="py-3 px-4 text-center">
-                          {!isSelf ? (
-                            <div className="flex items-center justify-center space-x-2">
-                              <button
-                                onClick={() => setEditingUser(u)}
-                                className="p-1 text-slate-400 hover:text-blue-600 transition cursor-pointer"
-                                title="Edit User"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleResetPassword(u.id)}
-                                className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
-                                title="Reset Password & Revoke Sessions"
-                              >
-                                <KeyRound className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setDeletingUserId(u.id)}
-                                className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                title="Deactivate User"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                          {canManageUsers ? (
+                            !isSelf ? (
+                              <div className="flex items-center justify-center space-x-2">
+                                <button
+                                  onClick={() => setEditingUser(u)}
+                                  className="p-1 text-slate-400 hover:text-blue-600 transition cursor-pointer"
+                                  title="Edit User"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleResetPassword(u.id)}
+                                  className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
+                                  title="Reset Password & Revoke Sessions"
+                                >
+                                  <KeyRound className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setDeletingUserId(u.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                                  title="Deactivate User"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-medium italic">
+                                Self (Protected)
+                              </span>
+                            )
                           ) : (
                             <span className="text-[11px] text-slate-400 font-medium italic">
-                              Self (Protected)
+                              View Only
                             </span>
                           )}
                         </td>

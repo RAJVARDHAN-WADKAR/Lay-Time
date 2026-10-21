@@ -32,7 +32,7 @@ interface HeaderProps {
 export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, role, logout } = useAuth();
+  const { currentUser, role, logout, canCreateClaim, canAccessSettings } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -72,6 +72,12 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   // Compute current page title and breadcrumbs
   const getPageInfo = () => {
     if (pathname === "/dashboard") return { title: "Dashboard", crumb: "Operations" };
+    if (pathname === "/dashboard/admin") return { title: "Admin Console", crumb: "System Administration" };
+    if (pathname === "/dashboard/supervisor") return { title: "Supervisor Dashboard", crumb: "Operations Oversight" };
+    if (pathname === "/dashboard/claim-processor") return { title: "Processor Dashboard", crumb: "Analyst Workbench" };
+    if (pathname === "/dashboard/reviewer-client") return { title: "Portal & Compliance", crumb: "Reviewer & Client Portal" };
+    if (pathname === "/dashboard/reviewer") return { title: "Reviewer Dashboard", crumb: "Compliance Oversight" };
+    if (pathname === "/dashboard/client") return { title: "Client Portal", crumb: "Counterparty Claims" };
     if (pathname === "/claims") return { title: "Claims Ledger", crumb: "Claims" };
     if (pathname === "/claims/create") return { title: "Create Claim", crumb: "Claims > New Claim Wizard" };
     if (pathname.startsWith("/claims/")) return { title: "Claim Details", crumb: "Claims > File Inspection" };
@@ -142,7 +148,7 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
         {/* Right: Quick Action + Role Switcher + Notification + User */}
         <div className="flex items-center space-x-2 sm:space-x-3">
           {/* Create Claim CTA */}
-          {role !== "Reviewer" && (
+          {canCreateClaim && (
             <Link href="/claims/create" className="hidden sm:inline-flex">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 px-3.5 shadow-xs rounded-xl flex items-center space-x-1.5">
                 <PlusCircle className="h-4 w-4" />
@@ -257,14 +263,35 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
 
                 <div className="py-1">
                   <Link
-                    href="/settings"
+                    href={
+                      role === "Admin" || role === "ADMIN"
+                        ? "/dashboard/admin"
+                        : role === "Supervisor" || role === "SUPERVISOR"
+                        ? "/dashboard/supervisor"
+                        : role === "Claim Processor" || role === "CLAIM_PROCESSOR" || role === "Processor"
+                        ? "/dashboard/claim-processor"
+                        : "/dashboard/reviewer-client"
+                    }
                     onClick={() => setIsProfileOpen(false)}
                     className="flex items-center space-x-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 font-medium"
                   >
-                    <Settings className="h-4 w-4 text-slate-400" />
-                    <span>Settings</span>
+                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                    <span>My Dashboard</span>
                   </Link>
                 </div>
+
+                {canAccessSettings && (
+                  <div className="py-1">
+                    <Link
+                      href="/settings"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center space-x-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 font-medium"
+                    >
+                      <Settings className="h-4 w-4 text-slate-400" />
+                      <span>Settings</span>
+                    </Link>
+                  </div>
+                )}
 
                 <div className="border-t border-slate-100 pt-1">
                   <button

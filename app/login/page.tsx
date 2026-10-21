@@ -27,22 +27,28 @@ const DEV_ACCOUNTS = [
     desc: "Full access + User Management"
   },
   {
-    role: "Claim Processor",
-    email: "rohitmengane2975@gmail.com",
-    badgeColor: "bg-blue-950/80 text-blue-300 border-blue-700/50 hover:border-blue-500",
-    desc: "Assigned claims & SOF processing"
-  },
-  {
     role: "Supervisor",
     email: "swayamghatage3839@gmail.com",
     badgeColor: "bg-amber-950/80 text-amber-300 border-amber-700/50 hover:border-amber-500",
     desc: "All claims, overrides & settlement"
   },
   {
+    role: "Claim Processor",
+    email: "rohitmengane2975@gmail.com",
+    badgeColor: "bg-blue-950/80 text-blue-300 border-blue-700/50 hover:border-blue-500",
+    desc: "Assigned claims & SOF processing"
+  },
+  {
     role: "Reviewer",
     email: "paraschougale558@gmail.com",
     badgeColor: "bg-emerald-950/80 text-emerald-300 border-emerald-700/50 hover:border-emerald-500",
     desc: "Read-only inspection across all views"
+  },
+  {
+    role: "Client",
+    email: "client@trafigura.com",
+    badgeColor: "bg-cyan-950/80 text-cyan-300 border-cyan-700/50 hover:border-cyan-500",
+    desc: "Charterer portal: own claims & offer approvals"
   }
 ];
 

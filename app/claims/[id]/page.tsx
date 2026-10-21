@@ -108,6 +108,7 @@ export default function ClaimDetailPage() {
   const [correctionInput, setCorrectionInput] = useState("");
 
   const {
+    currentUser,
     canEditClaim,
     isReadOnly,
     role,
@@ -121,6 +122,15 @@ export default function ClaimDetailPage() {
     canViewReports,
     negotiationHistoryScope
   } = useAuth();
+
+  const isClient =
+    role === "Client" ||
+    (role === "REVIEWER_CLIENT" &&
+      Boolean(
+        currentUser?.clientId ||
+          (currentUser as any)?.client_id ||
+          (currentUser as any)?.assignedClientId
+      ));
 
   const loadClaim = async () => {
     setIsLoading(true);
@@ -317,23 +327,23 @@ export default function ClaimDetailPage() {
       </div>
 
       {/* Navigation Tabs Bar Filtered by Zero-Trust RBAC Matrix */}
-      {/* Client users see strictly only Claim Summary (Overview) and Negotiations */}
+      {/* Client users see strictly only Claim Summary (Overview), Negotiations, and Documents */}
       <div className="flex border-b border-slate-200 space-x-1 sm:space-x-2 overflow-x-auto text-xs font-bold scrollbar-none pb-0">
         {[
-          { id: "overview", label: role === "Client" ? "Claim Summary" : "Overview", icon: Layers, show: true },
+          { id: "overview", label: isClient ? "Claim Summary" : "Overview", icon: Layers, show: true },
           { id: "negotiations", label: "Negotiations", icon: Handshake, show: true },
-          { id: "claimInfo", label: "Claim Info", icon: FileText, show: role !== "Client" },
-          { id: "voyage", label: "Voyage", icon: Calendar, show: role !== "Client" },
-          { id: "ports", label: `Ports & Berths (${claim.ports?.length || 0})`, icon: Anchor, show: role !== "Client" && canViewSoF(claim.claimStatus) },
-          { id: "sof", label: `Statement of Facts (${claim.activities?.length || 0})`, icon: Clock, show: role !== "Client" && canViewSoF(claim.claimStatus) },
-          { id: "documents", label: `Documents (${claim.documentLinks?.length || 4})`, icon: FileSpreadsheet, show: role !== "Client" && canViewDocuments },
-          { id: "calculations", label: "Calculation", icon: Calculator, show: role !== "Client" && canViewLaytime },
-          { id: "rac", label: "RAC Review", icon: Briefcase, show: role !== "Client" && canViewRac },
-          { id: "ownerComparison", label: "Owner vs Internal", icon: Scale, show: role !== "Client" && canViewOwnersClaim },
-          { id: "timebar", label: "Time-Bar", icon: AlertTriangle, show: role !== "Client" && role !== "Admin" && role !== "Finance" },
-          { id: "payments", label: "Payments", icon: DollarSign, show: role !== "Client" && canViewPayments },
-          { id: "activity", label: "Activity / Status", icon: History, show: role !== "Client" && canViewAuditLog },
-          { id: "reports", label: "Reports", icon: Download, show: role !== "Client" && canViewReports }
+          { id: "documents", label: `Documents (${claim.documentLinks?.length || 4})`, icon: FileSpreadsheet, show: canViewDocuments },
+          { id: "claimInfo", label: "Claim Info", icon: FileText, show: !isClient },
+          { id: "voyage", label: "Voyage", icon: Calendar, show: !isClient },
+          { id: "ports", label: `Ports & Berths (${claim.ports?.length || 0})`, icon: Anchor, show: !isClient && canViewSoF(claim.claimStatus) },
+          { id: "sof", label: `Statement of Facts (${claim.activities?.length || 0})`, icon: Clock, show: !isClient && canViewSoF(claim.claimStatus) },
+          { id: "calculations", label: "Calculation", icon: Calculator, show: !isClient && canViewLaytime },
+          { id: "rac", label: "RAC Review", icon: Briefcase, show: !isClient && canViewRac },
+          { id: "ownerComparison", label: "Owner vs Internal", icon: Scale, show: !isClient && canViewOwnersClaim },
+          { id: "timebar", label: "Time-Bar", icon: AlertTriangle, show: !isClient && role !== "Admin" && role !== "ADMIN" && role !== "Finance" },
+          { id: "payments", label: "Payments", icon: DollarSign, show: !isClient && canViewPayments },
+          { id: "activity", label: "Activity / Status", icon: History, show: !isClient && canViewAuditLog },
+          { id: "reports", label: "Reports", icon: Download, show: !isClient && canViewReports }
         ].filter((t) => t.show).map((t) => {
           const Icon = t.icon;
           const isActive = activeTab === t.id;

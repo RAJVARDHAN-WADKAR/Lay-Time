@@ -106,30 +106,28 @@ export function ClaimCalculationsTab({
               </span>
             )}
 
-            <Can roles={["Supervisor"]}>
-              {onUpdateClaim && (
-                <div className="pt-2 flex justify-end space-x-1.5">
+            {canOverrideCalculation && onUpdateClaim && (
+              <div className="pt-2 flex justify-end space-x-1.5">
+                <Button
+                  size="sm"
+                  onClick={() => setIsOverrideModalOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] h-7 px-2.5 rounded-lg"
+                >
+                  <Edit3 className="h-3 w-3 mr-1" />
+                  {claim?.isOverridden ? "Edit Override" : "Override with Reason"}
+                </Button>
+                {claim?.isOverridden && (
                   <Button
                     size="sm"
-                    onClick={() => setIsOverrideModalOpen(true)}
-                    className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] h-7 px-2.5 rounded-lg"
+                    variant="outline"
+                    onClick={handleResetOverride}
+                    className="text-[11px] h-7 px-2 text-slate-600 hover:bg-slate-100"
                   >
-                    <Edit3 className="h-3 w-3 mr-1" />
-                    {claim?.isOverridden ? "Edit Override" : "Override with Reason"}
+                    Reset
                   </Button>
-                  {claim?.isOverridden && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleResetOverride}
-                      className="text-[11px] h-7 px-2 text-slate-600 hover:bg-slate-100"
-                    >
-                      Reset
-                    </Button>
-                  )}
-                </div>
-              )}
-            </Can>
+                )}
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">

@@ -40,7 +40,7 @@ const WORKFLOW_STEPS: RacStatus[] = [
 export default function RacCaseDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { currentUser, role, canEditRac } = useAuth();
+  const { currentUser, role, canEditRac, canAuthorizeRac } = useAuth();
   const caseId = params.id as string;
 
   const [racCase, setRacCase] = useState<RacCase | null>(null);
@@ -152,7 +152,7 @@ export default function RacCaseDetailPage() {
             </Button>
           )}
 
-          {(role === "Admin" || role === "Supervisor") && (racCase.status === "Submitted" || racCase.status === "Under Review") && (
+          {canAuthorizeRac && (racCase.status === "Submitted" || racCase.status === "Under Review") && (
             <>
               <Button
                 size="sm"
@@ -176,7 +176,7 @@ export default function RacCaseDetailPage() {
             </>
           )}
 
-          {(role === "Admin" || role === "Supervisor") && racCase.status === "Reviewed" && (
+          {canAuthorizeRac && racCase.status === "Reviewed" && (
             <Button
               size="sm"
               onClick={() => handleStatusTransition("Closed")}

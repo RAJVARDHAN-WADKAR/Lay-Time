@@ -145,7 +145,7 @@ export function LedgerTable({
   };
 
   const { success } = useToast();
-  const { canDeleteClaim } = useAuth();
+  const { canDeleteClaim, canCreateClaim } = useAuth();
 
   // Unique clients for dropdown
   const uniqueClients = useMemo(() => {
@@ -523,7 +523,7 @@ export function LedgerTable({
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
-                        <Can roles={["Supervisor"]}>
+                        {canDeleteClaim && (
                           <button
                             onClick={() => setDeletingId(c.id)}
                             className="h-7 w-7 p-0 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
@@ -531,7 +531,7 @@ export function LedgerTable({
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                        </Can>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -545,8 +545,8 @@ export function LedgerTable({
               icon={FileSpreadsheet}
               title="No claims found"
               description="Create your first claim to start calculating laytime, tracking timebars, and reconciling demurrage."
-              actionText="Create New Claim"
-              actionHref="/claims/create"
+              actionText={canCreateClaim ? "Create New Claim" : undefined}
+              actionHref={canCreateClaim ? "/claims/create" : undefined}
             />
           </div>
         )}

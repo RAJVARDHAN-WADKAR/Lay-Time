@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Claim, RacCase, RacType, RacStatus } from "@/lib/types";
 import { getRacCases, createRacCase } from "@/lib/api/rac";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -58,7 +58,7 @@ export function ClaimRacTab({ claim, canEdit = true }: ClaimRacTabProps) {
     deadlineDays: 60,
   });
 
-  const fetchClaimRacCases = async () => {
+  const fetchClaimRacCases = useCallback(async () => {
     setIsLoading(true);
     try {
       const cases = await getRacCases({ claimId: claim.id });
@@ -68,11 +68,11 @@ export function ClaimRacTab({ claim, canEdit = true }: ClaimRacTabProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [claim.id]);
 
   useEffect(() => {
     fetchClaimRacCases();
-  }, [claim.id]);
+  }, [fetchClaimRacCases]);
 
   const totalRacAmount = racCases.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
   const agreedRacAmount = racCases.reduce((sum, c) => sum + (c.agreedAmount || 0), 0);

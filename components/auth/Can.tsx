@@ -10,15 +10,15 @@ interface CanProps {
   children: React.ReactNode;
 }
 
-function normalizeRole(role?: string): UserRole {
-  if (!role) return "Reviewer";
-  if (role === "Claim Processor" || role === "Processor") return "Claim Processor";
-  if (role === "Admin") return "Admin";
-  if (role === "Supervisor") return "Supervisor";
-  if (role === "Finance") return "Finance";
-  if (role === "Reviewer") return "Reviewer";
-  if (role === "Client") return "Client";
-  return "Reviewer";
+function normalizeRole(role?: string): string {
+  if (!role) return "REVIEWER_CLIENT";
+  const upper = role.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (upper === "ADMIN") return "ADMIN";
+  if (upper === "SUPERVISOR") return "SUPERVISOR";
+  if (upper === "CLAIM_PROCESSOR" || upper === "PROCESSOR") return "CLAIM_PROCESSOR";
+  if (upper === "REVIEWER" || upper === "CLIENT" || upper === "REVIEWER_CLIENT") return "REVIEWER_CLIENT";
+  if (upper === "FINANCE") return "SUPERVISOR";
+  return "REVIEWER_CLIENT";
 }
 
 /**

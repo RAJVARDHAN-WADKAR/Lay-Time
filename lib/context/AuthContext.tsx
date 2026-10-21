@@ -346,7 +346,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canManageSettings = isAuthenticated && canManageSettingsFn(user?.role);
   const canAccessSettings = isAuthenticated && canAccessSettingsFn(user?.role);
   const canViewAuditLog = isAuthenticated && canViewAuditLogFn(user?.role);
-  const isReadOnly = !isAuthenticated || userRole === "Reviewer";
+  const isReadOnly = !isAuthenticated || userRole === "REVIEWER_CLIENT" || user?.role === "Reviewer" || user?.role === "Client";
 
   return (
     <AuthContext.Provider

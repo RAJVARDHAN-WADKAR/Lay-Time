@@ -5,7 +5,7 @@ export const claimProcessorRole: RoleDefinition = {
   purpose: "Claim preparer responsible for voyage analysis, Statement of Facts reconciliation, calculations, drafting negotiations, and logging RAC findings on assigned claims.",
   scope: "own assigned claims only",
   permissions: {
-    claims: ["view", "create", "edit", "approve"],
+    claims: ["view", "create", "edit"],
     sof: ["view", "create", "edit"],
     ports: ["view", "create", "edit"],
     berths: ["view", "create", "edit"],

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Claim, EmailFollowup } from "@/lib/types";
 import { getClaimChasers, sendClaimChaser } from "@/lib/api/claims";
 import { Card } from "@/components/ui/card";
@@ -25,7 +25,7 @@ export function ClaimChasersTab({ claim, canEdit }: ClaimChasersTabProps) {
 
   const daysAwaiting = claim.daysAwaitingPayment || claim.daysOpen || 18;
 
-  const loadChasers = async () => {
+  const loadChasers = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getClaimChasers(claim.id);
@@ -35,11 +35,11 @@ export function ClaimChasersTab({ claim, canEdit }: ClaimChasersTabProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [claim.id]);
 
   useEffect(() => {
     loadChasers();
-  }, [claim.id]);
+  }, [loadChasers]);
 
   useEffect(() => {
     // Auto-populate email template
@@ -64,7 +64,7 @@ export function ClaimChasersTab({ claim, canEdit }: ClaimChasersTabProps) {
         `STRICTLY URGENT & CONFIDENTIAL\n\nRE: FORMAL DEMAND - OUTSTANDING DEMURRAGE CLAIM ${claim.id} (${claim.shipName})\nAMOUNT: ${formatCurrency(claim.claimFiledAmount)}\nDAYS OVERDUE: ${daysAwaiting} DAYS\n\nTake notice that as the outstanding demurrage has exceeded 120 days without commercial resolution, this file has been referred to Legal Counsel for arbitration proceedings pursuant to Charterparty Clause 24.\n\nDemand is hereby made for immediate payment in full within 48 hours.\n\nYours faithfully,\nLegal & Commercial Directorate`
       );
     }
-  }, [selectedTemplate, claim]);
+  }, [selectedTemplate, claim, daysAwaiting]);
 
   const handleDispatch = async () => {
     setIsDispatching(true);

@@ -30,7 +30,7 @@ interface ClaimNegotiationsTabProps {
 }
 
 export function ClaimNegotiationsTab({ claim }: ClaimNegotiationsTabProps) {
-  const { user, role } = useAuth();
+  const { user, role, canSettleClaim } = useAuth();
   const { success, error, info } = useToast();
 
   const [thread, setThread] = useState<NegotiationThread | null>(null);
@@ -266,7 +266,7 @@ export function ClaimNegotiationsTab({ claim }: ClaimNegotiationsTabProps) {
                 </div>
               </div>
 
-              {(role === "Supervisor" || role === "Admin") && (
+              {canSettleClaim && (
                 <Button
                   size="sm"
                   onClick={handleSupervisorConfirm}

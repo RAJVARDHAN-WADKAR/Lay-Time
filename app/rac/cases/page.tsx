@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { getRacCases, updateRacCase, deleteRacCase } from "@/lib/api/rac";
 import { RacCase, RacStatus, RacType } from "@/lib/types";
@@ -53,7 +53,7 @@ export default function RacCasesPage() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
-  const loadCases = async () => {
+  const loadCases = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getRacCases({
@@ -68,11 +68,11 @@ export default function RacCasesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, typeFilter, clientFilter, search]);
 
   useEffect(() => {
     loadCases();
-  }, [statusFilter, typeFilter, clientFilter]);
+  }, [loadCases]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
