@@ -21,8 +21,8 @@ export const claimProcessorRole: RoleDefinition = {
     users: [],
     settings: [],
     dashboard: ["view"],
-    analytics: ["view"],
-    reports: ["view", "export"],
+    analytics: [],
+    reports: [],
     auditLog: []
   },
   hiddenFields: [
@@ -32,6 +32,7 @@ export const claimProcessorRole: RoleDefinition = {
   ],
   visibleScreens: [
     "/dashboard",
+    "/dashboard/claim-processor",
     "/claims",
     "/claims/create",
     "/calculator",
@@ -39,7 +40,8 @@ export const claimProcessorRole: RoleDefinition = {
     "/ocr",
     "/rac",
     "/timebar",
-    "/documents"
+    "/documents",
+    "/ai-assistant"
   ],
   menuItems: [
     "Dashboard",

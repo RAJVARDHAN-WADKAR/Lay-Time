@@ -35,8 +35,17 @@ yarn-error.log*
 next-env.d.ts
 
 # sqlite
+data/*.db
+data/*.db.bak
+data/*.db-shm
+data/*.db-wal
+*.db
+*.db.bak
 *.db-shm
 *.db-wal
+
+# local env
+.env.local
 
 # dist
 /dist

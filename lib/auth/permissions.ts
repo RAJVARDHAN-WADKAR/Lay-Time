@@ -59,20 +59,21 @@ export function canEditClaim(
   claimAssignedTo?: string,
   userName?: string,
   claimClient?: string,
-  userClient?: string
+  userClient?: string,
+  userId?: string
 ): boolean {
   const r = accessNormalizeRole(roleFromUnknown(userRole));
   if (r === "SUPERVISOR") return true;
   if (r === "CLAIM_PROCESSOR") {
-    if (!claimAssignedTo) return true;
-    const assignedLower = claimAssignedTo.toLowerCase();
-    const emailLower = (userEmail || "").toLowerCase();
-    const nameLower = (userName || "").toLowerCase();
+    if (!claimAssignedTo || !claimAssignedTo.trim()) return false;
+    const assignedLower = claimAssignedTo.trim().toLowerCase();
+    const emailLower = (userEmail || "").trim().toLowerCase();
+    const nameLower = (userName || "").trim().toLowerCase();
+    const idLower = (userId || "").trim().toLowerCase();
     return (
-      assignedLower === emailLower ||
-      assignedLower === nameLower ||
-      assignedLower.includes("rohit") ||
-      assignedLower.includes("processor")
+      (emailLower !== "" && assignedLower === emailLower) ||
+      (nameLower !== "" && assignedLower === nameLower) ||
+      (idLower !== "" && assignedLower === idLower)
     );
   }
   return false;

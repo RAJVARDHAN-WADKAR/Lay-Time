@@ -13,8 +13,6 @@ const ROUTE_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
   { prefix: "/dashboard/supervisor", allowedRoles: ["SUPERVISOR"] },
   { prefix: "/dashboard/claim-processor", allowedRoles: ["CLAIM_PROCESSOR"] },
   { prefix: "/dashboard/reviewer-client", allowedRoles: ["REVIEWER_CLIENT"] },
-  { prefix: "/dashboard/reviewer", allowedRoles: ["REVIEWER_CLIENT"] },
-  { prefix: "/dashboard/client", allowedRoles: ["REVIEWER_CLIENT"] },
   { prefix: "/dashboard", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
 
   // 2. Application Feature Screens
@@ -26,7 +24,7 @@ const ROUTE_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
   { prefix: "/ocr", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
   { prefix: "/ai-assistant", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
   { prefix: "/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
-  { prefix: "/timebar", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/timebar", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
   // Access Removed for CLAIM_PROCESSOR on macro Analytics & Reports (Analyst workbench only)
   { prefix: "/analytics", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT"] },
   { prefix: "/reports", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT"] },

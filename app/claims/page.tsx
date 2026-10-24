@@ -14,12 +14,28 @@ export default function ClaimsPage() {
   const { canCreateClaim } = useAuth();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const fetchClaims = async () => {
     setIsLoading(true);
     const data = await getClaims();
     setClaims(data);
     setIsLoading(false);
+  };
+
+  const handleSyncTracker = async () => {
+    try {
+      setIsSyncing(true);
+      const res = await fetch("/api/tracker/sync", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        await fetchClaims();
+      }
+    } catch (e) {
+      console.error("Failed to sync tracker CSV:", e);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -63,6 +79,17 @@ export default function ClaimsPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncTracker}
+            isLoading={isSyncing}
+            className="text-xs h-9 bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
+            title="Re-synchronize database with LaytimeServicesTracker.csv"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
+            Sync Tracker CSV
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchClaims} isLoading={isLoading} className="text-xs h-9 bg-white">
             <RefreshCw className="h-3.5 w-3.5 mr-1" />
             Refresh

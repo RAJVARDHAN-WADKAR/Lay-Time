@@ -55,7 +55,17 @@ export function calculateDashboardMetrics(claims: Claim[], unreadNotifCount: num
   let claimsAwaitingDocs = 0;
   let pendingActions = 0;
 
-  const statusMap: Record<ClaimStatus, { count: number; value: number }> = {
+  const statusMap: Record<string, { count: number; value: number }> = {
+    "2. Nil Demurrage (No Claim)": { count: 0, value: 0 },
+    "3. Pending Info from Owners": { count: 0, value: 0 },
+    "4. Calculation Sent to Owners": { count: 0, value: 0 },
+    "5. Claim Filed": { count: 0, value: 0 },
+    "6. Waiting Charterers Response": { count: 0, value: 0 },
+    "7. Agreed": { count: 0, value: 0 },
+    "8. Disputed": { count: 0, value: 0 },
+    "9. Legal": { count: 0, value: 0 },
+    "10. Claim Closed": { count: 0, value: 0 },
+    "11. Commercial Write Off": { count: 0, value: 0 },
     Submitted: { count: 0, value: 0 },
     Incomplete: { count: 0, value: 0 },
     Review: { count: 0, value: 0 },
@@ -75,40 +85,52 @@ export function calculateDashboardMetrics(claims: Claim[], unreadNotifCount: num
       const billable = Math.max(Number(c.billableAmount) || filed, 0);
 
       totalDemurrageOwed += filed;
-      totalDemurrageReceived += received;
+      totalDemurrageReceived += received || agreed;
       totalDaysOpen += Number(c.daysOpen) || 0;
 
-      const remainingExposure = Math.max(billable - received, 0);
+      const remainingExposure = Math.max(filed - (received || agreed), 0);
       totalExposure += remainingExposure;
 
-      if (c.claimStatus === "Disputed" || c.claimStatus === "Incomplete") {
+      const isDisputed = c.claimStatus === "Disputed" || c.claimStatus === "8. Disputed" || c.claimStatus === "9. Legal" || c.claimStatus === "Incomplete";
+      const isSettled = c.claimStatus === "Settled" || c.claimStatus === "7. Agreed" || c.claimStatus === "10. Claim Closed";
+      const isTimebarred = c.claimStatus === "Timebarred" || Boolean(c.timebarred);
+
+      if (isDisputed) {
         amountUnderContention += filed;
       } else if (c.claimStatus === "Review" && agreed > 0 && filed > agreed) {
         amountUnderContention += filed - agreed;
       }
 
-      if (c.claimStatus === "Settled") {
+      if (isSettled) {
         settledClaimsCount++;
-      } else if (c.claimStatus === "Timebarred") {
+      } else if (isTimebarred) {
         timebarredClaimsCount++;
-      } else {
+      } else if (c.claimStatus !== "11. Commercial Write Off") {
         openClaimsCount++;
       }
 
-      if (c.claimStatus === "Review" || c.claimStatus === "Submitted") {
+      if (
+        c.claimStatus === "Review" ||
+        c.claimStatus === "Submitted" ||
+        c.claimStatus === "3. Pending Info from Owners" ||
+        c.claimStatus === "4. Calculation Sent to Owners" ||
+        c.claimStatus === "6. Waiting Charterers Response"
+      ) {
         claimsAwaitingAction++;
         pendingActions++;
       }
 
-      if (c.claimStatus === "Incomplete" || !c.documentLinks || c.documentLinks.length === 0) {
+      if (c.claimStatus === "Incomplete" || c.claimStatus === "3. Pending Info from Owners") {
         claimsAwaitingDocs++;
       }
 
       // Status map
-      if (c.claimStatus && statusMap[c.claimStatus]) {
-        statusMap[c.claimStatus].count += 1;
-        statusMap[c.claimStatus].value += filed;
+      const st = c.claimStatus || "Submitted";
+      if (!statusMap[st]) {
+        statusMap[st] = { count: 0, value: 0 };
       }
+      statusMap[st].count += 1;
+      statusMap[st].value += filed;
 
       // Client map
       const clientKey = c.accountName || "Other";
@@ -127,7 +149,7 @@ export function calculateDashboardMetrics(claims: Claim[], unreadNotifCount: num
           monthMap[monthKey] = { filed: 0, received: 0, agreed: 0 };
         }
         monthMap[monthKey].filed += filed;
-        monthMap[monthKey].received += received;
+        monthMap[monthKey].received += received || agreed;
         monthMap[monthKey].agreed += agreed;
       }
     }
@@ -138,22 +160,32 @@ export function calculateDashboardMetrics(claims: Claim[], unreadNotifCount: num
   const averageDemurragePerClaim =
     totalClaimsCount > 0 ? Math.round(totalDemurrageOwed / totalClaimsCount) : 0;
 
-  const statusColors: Record<ClaimStatus, string> = {
-    Submitted: "#3b82f6", // blue
-    Incomplete: "#f59e0b", // amber
-    Review: "#8b5cf6", // purple
-    Settled: "#10b981", // emerald
-    Disputed: "#ef4444", // rose/red
-    Timebarred: "#6b7280", // gray
+  const statusColors: Record<string, string> = {
+    "2. Nil Demurrage (No Claim)": "#64748b",
+    "3. Pending Info from Owners": "#f59e0b",
+    "4. Calculation Sent to Owners": "#6366f1",
+    "5. Claim Filed": "#3b82f6",
+    "6. Waiting Charterers Response": "#8b5cf6",
+    "7. Agreed": "#10b981",
+    "8. Disputed": "#ef4444",
+    "9. Legal": "#dc2626",
+    "10. Claim Closed": "#475569",
+    "11. Commercial Write Off": "#94a3b8",
+    Submitted: "#3b82f6",
+    Incomplete: "#f59e0b",
+    Review: "#8b5cf6",
+    Settled: "#10b981",
+    Disputed: "#ef4444",
+    Timebarred: "#6b7280",
   };
 
-  const statusDistribution = (Object.keys(statusMap) as ClaimStatus[])
+  const statusDistribution = Object.keys(statusMap)
     .filter((status) => statusMap[status].count > 0)
     .map((status) => ({
-      status,
+      status: status as ClaimStatus,
       count: statusMap[status].count,
       value: statusMap[status].value,
-      color: statusColors[status],
+      color: statusColors[status] || "#3b82f6",
     }));
 
   const demurrageTrend = Object.keys(monthMap)

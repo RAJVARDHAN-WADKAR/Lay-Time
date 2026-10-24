@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   username TEXT UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('ADMIN', 'SUPERVISOR', 'CLAIM_PROCESSOR', 'REVIEWER_CLIENT')),
+  role TEXT NOT NULL CHECK(role IN ('ADMIN', 'SUPERVISOR', 'CLAIM_PROCESSOR', 'REVIEWER_CLIENT', 'Admin', 'Supervisor', 'Claim Processor', 'Processor', 'Reviewer', 'Client', 'Finance')),
   client_id TEXT REFERENCES clients(client_id),
   client_name TEXT,
   created_by TEXT REFERENCES users(id),
@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS claims (
   claim_agreed_date TEXT,
   charterparty_date TEXT,
   days_awaiting_payment INTEGER DEFAULT 0,
+  invoice_number TEXT,
+  tax_year TEXT,
+  bl_quantity TEXT,
+  owners_claim_amount REAL DEFAULT 0,
+  claim_timebar_date TEXT,
+  claim_filed_date TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

@@ -28,8 +28,10 @@ export const adminRole: RoleDefinition = {
   hiddenFields: [],
   visibleScreens: [
     "/dashboard",
-    "/users",
+    "/dashboard/admin",
     "/settings",
+    "/users",
+    "/ai-assistant",
     "/claims",
     "/rac",
     "/analytics",

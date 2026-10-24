@@ -1,6 +1,5 @@
 import { UserRole } from "@/lib/types";
-
-export const JWT_SECRET = process.env.JWT_SECRET || "laytime_secure_jwt_secret_key_2024_shipping_demurrage";
+import { getJwtSecret } from "./jwt-secret";
 
 export interface SessionPayload {
   userId: string;
@@ -63,7 +62,7 @@ export async function verifyEdgeToken(token: string): Promise<SessionPayload | n
     const data = encoder.encode(`${headerB64}.${payloadB64}`);
     const key = await crypto.subtle.importKey(
       "raw",
-      encoder.encode(JWT_SECRET),
+      encoder.encode(getJwtSecret()),
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["verify"]

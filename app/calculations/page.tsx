@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { getClaims, getClaimById, getSettings, updateClaim } from "@/lib/api";
 import { Claim, CalculationAssumptions, DeductionItem, SoFActivity } from "@/lib/types";
@@ -62,7 +62,7 @@ export default function CalculationsPage() {
     remarks: "",
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     const [allClaims, stg] = await Promise.all([getClaims(), getSettings()]);
     setClaims(allClaims);
@@ -76,7 +76,7 @@ export default function CalculationsPage() {
       setSelectedClaimId("");
     }
     setIsLoading(false);
-  };
+  }, [selectedClaimId, scratchpadMode]);
 
   useEffect(() => {
     loadData();
@@ -84,7 +84,7 @@ export default function CalculationsPage() {
     const handleStorage = () => loadData();
     window.addEventListener("demurrage_storage_change", handleStorage);
     return () => window.removeEventListener("demurrage_storage_change", handleStorage);
-  }, []);
+  }, [loadData]);
 
   const handleClaimChange = async (id: string) => {
     setSelectedClaimId(id);

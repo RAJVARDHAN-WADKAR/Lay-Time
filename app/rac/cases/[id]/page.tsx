@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
 import { getRacCaseById, updateRacCase } from "@/lib/api/rac";
@@ -49,7 +49,7 @@ export default function RacCaseDetailPage() {
   const [statusRemarks, setStatusRemarks] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const loadCase = async () => {
+  const loadCase = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getRacCaseById(caseId);
@@ -59,11 +59,11 @@ export default function RacCaseDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [caseId]);
 
   useEffect(() => {
     loadCase();
-  }, [caseId]);
+  }, [loadCase]);
 
   const handleStatusTransition = async (newStatus: RacStatus) => {
     if (!racCase) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { getRacCases } from "@/lib/api/rac";
 import { RacCase, RacStatus, RacType } from "@/lib/types";
@@ -54,7 +54,7 @@ export default function RacDashboardPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
 
-  const loadCases = async () => {
+  const loadCases = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getRacCases({
@@ -68,11 +68,11 @@ export default function RacDashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientFilter, statusFilter, typeFilter]);
 
   useEffect(() => {
     loadCases();
-  }, [clientFilter, statusFilter, typeFilter]);
+  }, [loadCases]);
 
   // Calculations
   const totalCases = cases.length;

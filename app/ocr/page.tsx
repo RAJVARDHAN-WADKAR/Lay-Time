@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { getClaims, getClaimById, updateActivity } from "@/lib/api";
 import { Claim, SoFActivity, Discrepancy } from "@/lib/types";
 import { detectDiscrepancies } from "@/lib/calculations/discrepancies";
@@ -51,18 +51,21 @@ export default function OcrSoFReviewPage() {
   const { canEditClaim, isReadOnly } = useAuth();
   const { success, info } = useToast();
 
-  useEffect(() => {
-    async function loadInitial() {
-      setIsLoading(true);
-      const allClaims = await getClaims();
-      setClaims(allClaims);
-      const target = allClaims.find((c) => c.id === selectedClaimId) || allClaims[3] || allClaims[0];
-      setClaim(target);
-      if (target) setSelectedClaimId(target.id);
-      setIsLoading(false);
+  const loadInitial = useCallback(async () => {
+    setIsLoading(true);
+    const allClaims = await getClaims();
+    setClaims(allClaims);
+    const target = allClaims.find((c) => c.id === selectedClaimId) || allClaims[3] || allClaims[0];
+    setClaim(target);
+    if (target && target.id !== selectedClaimId) {
+      setSelectedClaimId(target.id);
     }
+    setIsLoading(false);
+  }, [selectedClaimId]);
+
+  useEffect(() => {
     loadInitial();
-  }, []);
+  }, [loadInitial]);
 
   const handleClaimChange = async (id: string) => {
     setSelectedClaimId(id);

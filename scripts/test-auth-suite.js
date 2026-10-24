@@ -1167,6 +1167,231 @@ async function runTestSuite() {
     assert(revAiPage.status === 307 || revAiPage.status === 302, `Reviewer redirected away from /ai-assistant (status ${revAiPage.status})`);
   }
 
+  // TEST 12: Dedicated Dashboard Landing and Wrong-Role URL Redirections
+  console.log("\n--- 12. Testing Dedicated Dashboard Landing & Cross-Dashboard Redirection ---");
+  {
+    // 12.1 Each role lands on its own dashboard from /dashboard
+    // Admin -> /dashboard/admin
+    const adminDashRes = await fetch(`${BASE_URL}/dashboard`, {
+      headers: { Cookie: `laytime_auth_token=${adminActor.token}` },
+      redirect: "manual"
+    });
+    assert(adminDashRes.status === 307 || adminDashRes.status === 302, `Admin /dashboard redirects (status ${adminDashRes.status})`);
+    const adminLoc = adminDashRes.headers.get("location") || "";
+    assert(adminLoc.includes("/dashboard/admin"), `Admin redirected to /dashboard/admin: ${adminLoc}`);
+
+    // Supervisor -> /dashboard/supervisor
+    const supDashRes = await fetch(`${BASE_URL}/dashboard`, {
+      headers: { Cookie: `laytime_auth_token=${supervisorActor.token}` },
+      redirect: "manual"
+    });
+    assert(supDashRes.status === 307 || supDashRes.status === 302, `Supervisor /dashboard redirects (status ${supDashRes.status})`);
+    const supLoc = supDashRes.headers.get("location") || "";
+    assert(supLoc.includes("/dashboard/supervisor"), `Supervisor redirected to /dashboard/supervisor: ${supLoc}`);
+
+    // Processor -> /dashboard/claim-processor
+    const procDashRes = await fetch(`${BASE_URL}/dashboard`, {
+      headers: { Cookie: `laytime_auth_token=${processorActor.token}` },
+      redirect: "manual"
+    });
+    assert(procDashRes.status === 307 || procDashRes.status === 302, `Processor /dashboard redirects (status ${procDashRes.status})`);
+    const procLoc = procDashRes.headers.get("location") || "";
+    assert(procLoc.includes("/dashboard/claim-processor"), `Processor redirected to /dashboard/claim-processor: ${procLoc}`);
+
+    // External Client -> /dashboard/reviewer-client
+    const cliDashRes = await fetch(`${BASE_URL}/dashboard`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` },
+      redirect: "manual"
+    });
+    assert(cliDashRes.status === 307 || cliDashRes.status === 302, `Client /dashboard redirects (status ${cliDashRes.status})`);
+    const cliLoc = cliDashRes.headers.get("location") || "";
+    assert(cliLoc.includes("/dashboard/reviewer-client"), `Client redirected to /dashboard/reviewer-client: ${cliLoc}`);
+
+    // 12.2 Wrong-role URLs redirect to user's own dashboard
+    // Admin blocked from /dashboard/supervisor -> redirects to /dashboard/admin
+    const adminWrongRes = await fetch(`${BASE_URL}/dashboard/supervisor`, {
+      headers: { Cookie: `laytime_auth_token=${adminActor.token}` },
+      redirect: "manual"
+    });
+    assert(adminWrongRes.status === 307 || adminWrongRes.status === 302, `Admin blocked from /dashboard/supervisor (status ${adminWrongRes.status})`);
+    const adminWrongLoc = adminWrongRes.headers.get("location") || "";
+    assert(adminWrongLoc.includes("/dashboard/admin"), `Admin redirected back to /dashboard/admin: ${adminWrongLoc}`);
+
+    // Supervisor blocked from /dashboard/admin -> redirects to /dashboard/supervisor
+    const supWrongRes = await fetch(`${BASE_URL}/dashboard/admin`, {
+      headers: { Cookie: `laytime_auth_token=${supervisorActor.token}` },
+      redirect: "manual"
+    });
+    assert(supWrongRes.status === 307 || supWrongRes.status === 302, `Supervisor blocked from /dashboard/admin (status ${supWrongRes.status})`);
+    const supWrongLoc = supWrongRes.headers.get("location") || "";
+    assert(supWrongLoc.includes("/dashboard/supervisor"), `Supervisor redirected back to /dashboard/supervisor: ${supWrongLoc}`);
+
+    // Processor blocked from /dashboard/admin -> redirects to /dashboard/claim-processor
+    const procWrongRes = await fetch(`${BASE_URL}/dashboard/admin`, {
+      headers: { Cookie: `laytime_auth_token=${processorActor.token}` },
+      redirect: "manual"
+    });
+    assert(procWrongRes.status === 307 || procWrongRes.status === 302, `Processor blocked from /dashboard/admin (status ${procWrongRes.status})`);
+    const procWrongLoc = procWrongRes.headers.get("location") || "";
+    assert(procWrongLoc.includes("/dashboard/claim-processor"), `Processor redirected back to /dashboard/claim-processor: ${procWrongLoc}`);
+
+    // Client blocked from /dashboard/claim-processor -> redirects to /dashboard/reviewer-client
+    const cliWrongRes = await fetch(`${BASE_URL}/dashboard/claim-processor`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` },
+      redirect: "manual"
+    });
+    assert(cliWrongRes.status === 307 || cliWrongRes.status === 302, `Client blocked from /dashboard/claim-processor (status ${cliWrongRes.status})`);
+    const cliWrongLoc = cliWrongRes.headers.get("location") || "";
+    assert(cliWrongLoc.includes("/dashboard/reviewer-client"), `Client redirected back to /dashboard/reviewer-client: ${cliWrongLoc}`);
+  }
+
+  // TEST 13: Processor Cannot Edit Unassigned or Other Processor's Claim
+  console.log("\n--- 13. Testing Processor Claim Isolation & Edit Restrictions ---");
+  {
+    // Processor cannot edit unassigned claim
+    const procEditUnassigned = await fetch(`${BASE_URL}/api/claims/CLM-2024-003`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${processorActor.token}`
+      },
+      body: JSON.stringify({ claimNotes: "Unauthorized processor edit attempt" })
+    });
+    assert(
+      procEditUnassigned.status === 403,
+      `Processor cannot edit unassigned claim CLM-2024-003 (status ${procEditUnassigned.status})`
+    );
+
+    // Processor cannot edit another processor's claim (CLM-2024-005 assigned to Marcus Aurelius)
+    const procEditOther = await fetch(`${BASE_URL}/api/claims/CLM-2024-005`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${processorActor.token}`
+      },
+      body: JSON.stringify({ claimNotes: "Unauthorized edit on other claim" })
+    });
+    assert(
+      procEditOther.status === 403,
+      `Processor cannot edit claim outside their assignment CLM-2024-005 (status ${procEditOther.status})`
+    );
+  }
+
+  // TEST 14: External Client Data Scope Isolation
+  console.log("\n--- 14. Testing External Client Strict Data Isolation ---");
+  {
+    // Client cannot read another client's claim
+    const cliOtherClaimRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-002`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      cliOtherClaimRes.status === 404 || cliOtherClaimRes.status === 403,
+      `Client cannot read another client's claim CLM-2024-002 (status ${cliOtherClaimRes.status})`
+    );
+
+    // Client cannot read missing-docs for another client's claim
+    const cliOtherDocsRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-002/missing-docs`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      cliOtherDocsRes.status === 403 || cliOtherDocsRes.status === 404,
+      `Client cannot read missing-docs for another client's claim (status ${cliOtherDocsRes.status})`
+    );
+
+    // Client cannot access oil-chem calculations for another client's claim
+    const cliOtherOilChem = await fetch(`${BASE_URL}/api/oil-chem?claimId=CLM-2024-002`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(
+      cliOtherOilChem.status === 403 || cliOtherOilChem.status === 404,
+      `Client cannot read oil-chem data for another client's claim (status ${cliOtherOilChem.status})`
+    );
+
+    // Client scoped notifications: only own client's or system wide
+    const cliNotifsRes = await fetch(`${BASE_URL}/api/notifications`, {
+      headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
+    });
+    assert(cliNotifsRes.status === 200, `Client can fetch notifications (status ${cliNotifsRes.status})`);
+    const cliNotifsData = await cliNotifsRes.json();
+    assert(Array.isArray(cliNotifsData.notifications), "Client notifications is an array");
+    const containsOtherClientClaim = cliNotifsData.notifications.some(
+      (n) => n.claimId === "CLM-2024-002" || n.claimId === "CLM-2024-003"
+    );
+    assert(!containsOtherClientClaim, "Client notifications do not leak other clients' claims");
+  }
+
+  // TEST 15: Reviewer Mutation Lockdown (POST/PUT/DELETE)
+  console.log("\n--- 15. Testing Reviewer Complete Mutation Lockdown ---");
+  {
+    // Reviewer cannot POST notifications
+    const revPostNotif = await fetch(`${BASE_URL}/api/notifications`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${reviewerActor.token}`
+      },
+      body: JSON.stringify({ title: "Spam", message: "Reviewer spam" })
+    });
+    assert(revPostNotif.status === 403, `Reviewer cannot POST notifications (status ${revPostNotif.status})`);
+
+    // Reviewer cannot PUT notifications
+    const revPutNotif = await fetch(`${BASE_URL}/api/notifications`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${reviewerActor.token}`
+      },
+      body: JSON.stringify({ id: "notif-001" })
+    });
+    assert(revPutNotif.status === 403, `Reviewer cannot PUT notifications (status ${revPutNotif.status})`);
+
+    // Reviewer cannot POST oil-chem calculations
+    const revPostOilChem = await fetch(`${BASE_URL}/api/oil-chem`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${reviewerActor.token}`
+      },
+      body: JSON.stringify({ cargoName: "Crude Oil", quantityMetricTons: 50000 })
+    });
+    assert(revPostOilChem.status === 403, `Reviewer cannot POST oil-chem calculations (status ${revPostOilChem.status})`);
+  }
+
+  // TEST 16: Unauthenticated Requests to Every API Route Return 401
+  console.log("\n--- 16. Testing Unauthenticated Access Rejection (401) on All API Endpoints ---");
+  {
+    const apiEndpoints = [
+      { url: "/api/claims", method: "GET" },
+      { url: "/api/dashboard", method: "GET" },
+      { url: "/api/documents", method: "GET" },
+      { url: "/api/notifications", method: "GET" },
+      { url: "/api/oil-chem", method: "GET" },
+      { url: "/api/rac", method: "GET" },
+      { url: "/api/reports", method: "GET" },
+      { url: "/api/settings", method: "GET" },
+      { url: "/api/users", method: "GET" },
+      { url: "/api/ai-assistant", method: "POST", body: { prompt: "test" } },
+      { url: "/api/calculations", method: "GET" },
+      { url: "/api/invoices", method: "GET" },
+      { url: "/api/payments", method: "GET" },
+      { url: "/api/clients", method: "GET" },
+      { url: "/api/ocr", method: "GET" },
+      { url: "/api/claims/CLM-2024-001/missing-docs", method: "GET" }
+    ];
+
+    for (const ep of apiEndpoints) {
+      const res = await fetch(`${BASE_URL}${ep.url}`, {
+        method: ep.method,
+        headers: { "Content-Type": "application/json" },
+        body: ep.body ? JSON.stringify(ep.body) : undefined
+      });
+      assert(
+        res.status === 401,
+        `Unauthenticated ${ep.method} ${ep.url} returns 401 (status ${res.status})`
+      );
+    }
+  }
+
   console.log("\n=========================================================");
   console.log(`TEST SUITE RESULTS: ${passedTests} / ${totalTests} TESTS PASSED (${Math.round((passedTests / totalTests) * 100)}%)`);
   console.log("=========================================================");

@@ -15,7 +15,12 @@ interface SupervisorApprovalQueueProps {
 
 export function SupervisorApprovalQueue({ claims }: SupervisorApprovalQueueProps) {
   const pendingApprovals = claims.filter(
-    (c) => c.claimStatus === "Review" || c.claimStatus === "Incomplete"
+    (c) =>
+      c.claimStatus === "7. Agreed" ||
+      c.claimStatus === "4. Calculation Sent to Owners" ||
+      c.claimStatus === "8. Disputed" ||
+      c.claimStatus === "Review" ||
+      c.claimStatus === "Incomplete"
   );
 
   return (
@@ -27,7 +32,7 @@ export function SupervisorApprovalQueue({ claims }: SupervisorApprovalQueueProps
             <span>Supervisor Approval Queue</span>
           </CardTitle>
           <CardDescription className="text-xs text-slate-500">
-            Claims requiring supervisory review and settlement confirmation
+            Claims requiring supervisory sign-off, calculation authorization & settlement
           </CardDescription>
         </div>
         <Link href="/claims">
@@ -40,20 +45,25 @@ export function SupervisorApprovalQueue({ claims }: SupervisorApprovalQueueProps
       <CardContent className="p-5">
         {pendingApprovals.length > 0 ? (
           <div className="space-y-3">
-            {pendingApprovals.slice(0, 4).map((c) => (
+            {pendingApprovals.slice(0, 5).map((c) => (
               <div
                 key={c.id}
                 className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
               >
                 <div>
                   <div className="font-bold text-slate-900">{c.shipName}</div>
-                  <div className="text-[10px] text-slate-400 font-mono">{c.id}</div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    {c.id} • {c.accountName} • {c.counterpartyName || c.brokerName || "Voyage"}
+                  </div>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <span className="font-extrabold text-slate-900">{formatCurrency(c.claimFiledAmount)}</span>
+                  <StatusBadge status={c.claimStatus} />
+                  <span className="font-extrabold text-slate-900">
+                    {formatCurrency(c.agreedAmount || c.claimFiledAmount)}
+                  </span>
                   <Link href={`/claims/${c.id}`}>
                     <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] text-purple-700 hover:bg-purple-50 border-purple-200">
-                      Review
+                      Sign Off
                     </Button>
                   </Link>
                 </div>

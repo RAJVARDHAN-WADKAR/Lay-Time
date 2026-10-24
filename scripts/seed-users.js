@@ -15,13 +15,24 @@ db.pragma("foreign_keys = OFF");
 
 console.log("Ensuring users table supports the 6-Role matrix...");
 
-// Check if migration is needed to allow all roles ('Admin', 'Supervisor', 'Claim Processor', 'Processor', 'Finance', 'Reviewer', 'Client')
+// Ensure all necessary columns exist on the users table
 try {
-  // Check columns
   const cols = db.pragma("table_info(users)").map((c) => c.name);
+  if (!cols.includes("client_id")) {
+    db.exec("ALTER TABLE users ADD COLUMN client_id TEXT");
+    console.log("✓ Added client_id column to users table");
+  }
   if (!cols.includes("client_name")) {
     db.exec("ALTER TABLE users ADD COLUMN client_name TEXT");
     console.log("✓ Added client_name column to users table");
+  }
+  if (!cols.includes("created_by")) {
+    db.exec("ALTER TABLE users ADD COLUMN created_by TEXT");
+    console.log("✓ Added created_by column to users table");
+  }
+  if (!cols.includes("token_version")) {
+    db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1");
+    console.log("✓ Added token_version column to users table");
   }
 
   // Check if inserting a temporary Finance test row works or fails CHECK constraint
@@ -40,15 +51,18 @@ try {
           username TEXT UNIQUE,
           password_hash TEXT NOT NULL,
           role TEXT NOT NULL,
+          client_id TEXT,
           client_name TEXT,
+          created_by TEXT,
+          token_version INTEGER NOT NULL DEFAULT 1,
           avatar TEXT,
           status TEXT NOT NULL DEFAULT 'Active',
           role_description TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
-        INSERT INTO users_migrated (id, name, email, username, password_hash, role, avatar, status, role_description, created_at, updated_at)
-          SELECT id, name, email, username, password_hash, role, avatar, status, role_description, created_at, updated_at FROM users;
+        INSERT INTO users_migrated (id, name, email, username, password_hash, role, client_name, avatar, status, role_description, created_at, updated_at)
+          SELECT id, name, email, username, password_hash, role, client_name, avatar, status, role_description, created_at, updated_at FROM users;
         DROP TABLE users;
         ALTER TABLE users_migrated RENAME TO users;
       `);
@@ -65,13 +79,20 @@ db.pragma("foreign_keys = ON");
 
 console.log("Seeding/updating the 6 role matrix accounts in database...");
 
+const adminPassword = process.env.DEMO_ADMIN_PASSWORD || "Raj@123";
+const processorPassword = process.env.DEMO_PROCESSOR_PASSWORD || "Rohit@123";
+const supervisorPassword = process.env.DEMO_SUPERVISOR_PASSWORD || "Swayam@123";
+const reviewerPassword = process.env.DEMO_REVIEWER_PASSWORD || "Paras@123";
+const financePassword = process.env.DEMO_FINANCE_PASSWORD || "Finance@123";
+const clientPassword = process.env.DEMO_CLIENT_PASSWORD || "Client@123";
+
 const users = [
   {
     id: "usr-001",
     name: "Rajvardhan Wadkar",
     email: "rajvardhanwadkar76@gmail.com",
     username: "rajvardhan.wadkar",
-    password: "Raj@123",
+    password: adminPassword,
     role: "Admin",
     roleDescription: "Principal Administrator & Master Mariner. System users and company settings management."
   },
@@ -80,7 +101,7 @@ const users = [
     name: "Rohit Mengane",
     email: "rohitmengane2975@gmail.com",
     username: "rohit.mengane",
-    password: "Rohit@123",
+    password: processorPassword,
     role: "Claim Processor",
     roleDescription: "Senior Demurrage Analyst. Manages primary assigned claims, SoF logging, and RAC cases."
   },
@@ -89,7 +110,7 @@ const users = [
     name: "Swayam Ghatage",
     email: "swayamghatage3839@gmail.com",
     username: "swayam.ghatage",
-    password: "Swayam@123",
+    password: supervisorPassword,
     role: "Supervisor",
     roleDescription: "Operations Supervisor & Lead. Claim approvals, overrides, negotiations, and settlements."
   },
@@ -98,7 +119,7 @@ const users = [
     name: "Paras Chougale",
     email: "paraschougale558@gmail.com",
     username: "paras.chougale",
-    password: "Paras@123",
+    password: reviewerPassword,
     role: "Reviewer",
     roleDescription: "Legal Counsel & External Auditor. Read-only compliance inspection mode across all claims."
   },
@@ -107,7 +128,7 @@ const users = [
     name: "Anita Sharma",
     email: "anita.sharma@laytime.com",
     username: "anita.sharma",
-    password: "Finance@123",
+    password: financePassword,
     role: "Finance",
     roleDescription: "Financial Controller. Invoice generation, payments recording, and financial dashboard metrics."
   },
@@ -116,7 +137,7 @@ const users = [
     name: "Trafigura Commercial",
     email: "client@trafigura.com",
     username: "client.trafigura",
-    password: "Client@123",
+    password: clientPassword,
     role: "Client",
     clientId: "client-trafigura",
     clientName: "Trafigura Trading Pte Ltd",
@@ -140,8 +161,8 @@ const now = new Date().toISOString();
 for (const u of users) {
   const hash = bcrypt.hashSync(u.password, 10);
   const existing = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR id = ?").get(u.email, u.id);
-  const cBy = (u as any).createdBy || createdByMap[u.id] || null;
-  const cId = (u as any).clientId || null;
+  const cBy = u.createdBy || createdByMap[u.id] || null;
+  const cId = u.clientId || null;
 
   if (existing) {
     db.prepare(`
@@ -162,6 +183,20 @@ for (const u of users) {
 // Ensure claims and rac cases are assigned to Rohit Mengane for processor testing
 db.prepare("UPDATE claims SET assigned_to = ? WHERE assigned_to = 'Sarah Jenkins'").run("Rohit Mengane");
 db.prepare("UPDATE rac_cases SET assigned_to = ? WHERE assigned_to = 'Sarah Jenkins'").run("Rohit Mengane");
+
+console.log("\n=======================================================");
+console.log("             DEMO USER CREDENTIALS SEEDED");
+console.log("=======================================================");
+console.log("  Role            | Email                         | Password");
+console.log("  ----------------+-------------------------------+------------");
+users.forEach((u) => {
+  console.log(`  ${u.role.padEnd(16)}| ${u.email.padEnd(30)}| ${u.password}`);
+});
+console.log("=======================================================");
+console.log("  SECURITY NOTICE: These demo credentials are for evaluation");
+console.log("  purposes only. In production, rotate all passwords and configure");
+console.log("  proper environment secrets (DEMO_*_PASSWORD or .env.local).");
+console.log("=======================================================\n");
 
 console.log("Database user accounts successfully migrated and verified for all 6 roles.");
 db.close();

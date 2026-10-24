@@ -11,10 +11,9 @@ import { KPICard } from "@/components/ui/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RecentClaimsTable } from "@/components/dashboard/shared/RecentClaimsTable";
-import { OperationalTasks } from "@/components/dashboard/shared/OperationalTasks";
+import { AccountPortfolioCards } from "@/components/dashboard/shared/AccountPortfolioCards";
 import { AdminSecurityAudit } from "@/components/roles/admin/AdminSecurityAudit";
 import { AdminUserSummary } from "@/components/roles/admin/AdminUserSummary";
-import { RoleAccessControlMatrix, AccessItem } from "@/components/dashboard/shared/RoleAccessControlMatrix";
 import { useAuth } from "@/lib/context/AuthContext";
 import {
   Users,
@@ -22,160 +21,10 @@ import {
   Settings,
   FileBarChart,
   FileSpreadsheet,
-  FileText,
-  Bell,
-  ArrowRight,
-  ShieldCheck,
-  Activity,
-  Layers,
   Database,
-  CheckCircle2,
-  XCircle,
-  KeyRound,
-  ShieldAlert
+  ShieldCheck,
+  RefreshCw
 } from "lucide-react";
-
-const ADMIN_GRANTED_ACCESS: AccessItem[] = [
-  {
-    id: "adm-g1",
-    name: "User Account Administration",
-    category: "Admin",
-    description: "Full authority to create, edit, deactivate user accounts, reset passwords, and manage RBAC roles.",
-    status: "granted",
-    badge: "Full CRUD"
-  },
-  {
-    id: "adm-g2",
-    name: "Company Settings & Global Configuration",
-    category: "Admin",
-    description: "Configure charterparty defaults, laytime rules (OOD/AOD, SHEX/SHINC), grace periods, and system parameters.",
-    status: "granted",
-    badge: "System Owner"
-  },
-  {
-    id: "adm-g3",
-    name: "Client & Vessel Master Records",
-    category: "Admin",
-    description: "Full CRUD control over corporate clients, charterer counterparty entities, and vessel fleet particulars.",
-    status: "granted",
-    badge: "Master Data"
-  },
-  {
-    id: "adm-g4",
-    name: "Global Claims Ledger Oversight",
-    category: "Claims",
-    description: "Unrestricted company-wide view of all voyage files, port records, and historical demurrage claims.",
-    status: "granted",
-    badge: "Read All"
-  },
-  {
-    id: "adm-g5",
-    name: "Claim Reassignment & Administrative Cleanup",
-    category: "Claims",
-    description: "Reassign orphaned claims between analysts and perform administrative soft-deletion of test or duplicate entries.",
-    status: "granted",
-    badge: "Maintenance"
-  },
-  {
-    id: "adm-g6",
-    name: "Document Repository & Evidence Archive",
-    category: "Documents",
-    description: "Inspect uploaded contracts, Statement of Facts, pumping logs, and compliance evidence documents.",
-    status: "granted",
-    badge: "Archival"
-  },
-  {
-    id: "adm-g7",
-    name: "RAC Portfolio Inspection",
-    category: "RAC",
-    description: "View all Recoverable Additional Cost cases, deductions, port expenditure breakdowns, and recovery statuses.",
-    status: "granted",
-    badge: "Oversight"
-  },
-  {
-    id: "adm-g8",
-    name: "System Analytics & Executive PDF Reports",
-    category: "Commercial",
-    description: "Access high-level financial metrics, demurrage recovery rate charts, and export compliance audit reports.",
-    status: "granted",
-    badge: "Reporting"
-  },
-  {
-    id: "adm-g9",
-    name: "Immutable Security & Audit Trail",
-    category: "Admin",
-    description: "Inspect time-stamped system event logs, authentication history, token revocations, and operational modifications.",
-    status: "granted",
-    badge: "Audit Log"
-  }
-];
-
-const ADMIN_REMOVED_ACCESS: AccessItem[] = [
-  {
-    id: "adm-r1",
-    name: "Claim Creation & Operational Editing",
-    category: "Claims",
-    description: "Cannot register new claims or modify voyage parameters, cargo quantities, or port logs.",
-    status: "removed",
-    reason: "Separation of Duties: IT administrators must not initiate or alter commercial claims data."
-  },
-  {
-    id: "adm-r2",
-    name: "Laytime Calculations Execution",
-    category: "Calculations",
-    description: "Cannot execute laytime calculation math, modify time sheets, or recalculate demurrage/despatch.",
-    status: "removed",
-    reason: "Math and timeline entries are restricted to qualified Claim Processors and Supervisors."
-  },
-  {
-    id: "adm-r3",
-    name: "Calculation Overrides",
-    category: "Calculations",
-    description: "Cannot override calculated demurrage amounts or bypass mathematical deductions.",
-    status: "removed",
-    reason: "Overriding calculated laytime is strictly restricted to the Operations Supervisor with written justification."
-  },
-  {
-    id: "adm-r4",
-    name: "Claim Approval & Settlement",
-    category: "Commercial",
-    description: "Cannot approve claims for issuance or finalize commercial settlement agreements.",
-    status: "removed",
-    reason: "Zero-Trust policy: Financial approvals require operational supervisor credentials."
-  },
-  {
-    id: "adm-r5",
-    name: "Commercial Negotiation Proposals",
-    category: "Commercial",
-    description: "Cannot submit settlement offers, draft counter-proposals, or accept counterparty deals.",
-    status: "removed",
-    reason: "Commercial negotiations are handled exclusively by operational negotiators and charterer counterparties."
-  },
-  {
-    id: "adm-r6",
-    name: "Invoicing & Payment Processing",
-    category: "Commercial",
-    description: "Cannot issue financial demurrage invoices, record payments, or post adjustments.",
-    status: "removed",
-    reason: "Financial transactions require operational supervisory review."
-  },
-  {
-    id: "adm-r7",
-    name: "OCR Timesheet Upload & SoF Entry",
-    category: "Documents",
-    description: "Cannot upload timesheet scans to OCR or transcribe Statement of Facts events.",
-    status: "removed",
-    reason: "Document transcription is reserved for analyst processing queues."
-  },
-  {
-    id: "adm-r8",
-    name: "RAC Finding Authorization & Closure",
-    category: "RAC",
-    description: "Cannot authorize ancillary port claims, reject surveyor findings, or close RAC cases.",
-    status: "removed",
-    reason: "RAC determinations require maritime operational authority."
-  }
-];
 
 export function AdminDashboard() {
   const { currentUser } = useAuth();
@@ -185,24 +34,25 @@ export function AdminDashboard() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        setIsLoading(true);
-        const [cls, usrs, notifs, docs] = await Promise.all([
-          getClaims().catch(() => []),
-          getUsers().catch(() => []),
-          getNotifications().catch(() => []),
-          getDocuments().catch(() => [])
-        ]);
-        setClaims(cls);
-        setUsers(usrs);
-        setNotifications(notifs);
-        setDocuments(docs);
-      } finally {
-        setIsLoading(false);
-      }
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const [cls, usrs, notifs, docs] = await Promise.all([
+        getClaims().catch(() => []),
+        getUsers().catch(() => []),
+        getNotifications().catch(() => []),
+        getDocuments().catch(() => [])
+      ]);
+      setClaims(cls);
+      setUsers(usrs);
+      setNotifications(notifs);
+      setDocuments(docs);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -263,6 +113,15 @@ export function AdminDashboard() {
               <span>Audit Reports</span>
             </Button>
           </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={loadData}
+            className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
+            title="Refresh dashboard data"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
         </div>
       </div>
 
@@ -302,7 +161,10 @@ export function AdminDashboard() {
         />
       </div>
 
-      {/* 3. Role Governance & Security Cards */}
+      {/* 3. Client Account Portfolios Breakdown */}
+      <AccountPortfolioCards claims={claims} />
+
+      {/* 4. Role Distribution & User Governance */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
           <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl p-5 h-full flex flex-col justify-between">
@@ -369,22 +231,12 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {/* 4. Recent Claims Table */}
+      {/* 5. Company-Wide Claims Activity Overview */}
       <RecentClaimsTable
         claims={claims}
         title="Company-Wide Claims Activity"
-        subtitle="Oversight of voyage files across all operational teams"
+        subtitle="Master oversight of voyage files across all accounts and operational teams"
         viewAllHref="/claims"
-      />
-
-      {/* 5. Comprehensive Admin Role Access Control & Security Matrix */}
-      <RoleAccessControlMatrix
-        roleName="Administrator"
-        roleCode="ADMIN"
-        roleScope="Company-Wide Master Access"
-        purpose="System owner within the company with complete administrative governance over user accounts, company configuration, clients & vessels, with read-only oversight across claims and audit logs. Strictly restricted from operational claim modifications, laytime calculation execution, and financial settlements."
-        grantedPermissions={ADMIN_GRANTED_ACCESS}
-        removedPermissions={ADMIN_REMOVED_ACCESS}
       />
     </div>
   );

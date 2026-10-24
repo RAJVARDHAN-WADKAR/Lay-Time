@@ -8,12 +8,13 @@ import { Claim, NotificationRecord, DocumentRecord, RacCase } from "@/lib/types"
 import { calculateDashboardMetrics } from "@/lib/mock/aggregate";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { KPIGrid } from "@/components/dashboard/shared/KPIGrid";
+import { TrackerPipeline } from "@/components/dashboard/shared/TrackerPipeline";
+import { AccountPortfolioCards } from "@/components/dashboard/shared/AccountPortfolioCards";
 import { ClaimOverviewChart } from "@/components/dashboard/shared/ClaimOverviewChart";
 import { RecentClaimsTable } from "@/components/dashboard/shared/RecentClaimsTable";
 import { OperationalTasks } from "@/components/dashboard/shared/OperationalTasks";
 import { SupervisorApprovalQueue } from "@/components/roles/supervisor/SupervisorApprovalQueue";
 import { SupervisorExposureSummary } from "@/components/roles/supervisor/SupervisorExposureSummary";
-import { RoleAccessControlMatrix, AccessItem } from "@/components/dashboard/shared/RoleAccessControlMatrix";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/context/AuthContext";
 import {
@@ -22,140 +23,9 @@ import {
   Users,
   ShieldCheck,
   ArrowRight,
-  TrendingUp,
-  Clock,
-  Layers,
-  CheckCircle2,
-  XCircle,
   Calculator,
-  Scale
+  RefreshCw
 } from "lucide-react";
-
-const SUPERVISOR_GRANTED_ACCESS: AccessItem[] = [
-  {
-    id: "sup-g1",
-    name: "Full Claim Operational Lifecycle",
-    category: "Claims",
-    description: "Authority to create, edit, assign, reassign, approve, delete, and settle all voyage demurrage claims.",
-    status: "granted",
-    badge: "Full Authority"
-  },
-  {
-    id: "sup-g2",
-    name: "Laytime Calculation Override",
-    category: "Calculations",
-    description: "Sole authority to override calculated demurrage amounts with mandatory commercial or operational justification.",
-    status: "granted",
-    badge: "Exclusive"
-  },
-  {
-    id: "sup-g3",
-    name: "Laytime Calculation Execution & Approval",
-    category: "Calculations",
-    description: "Execute, recalculate, adjust weather deductions, and formally approve complex laytime calculations.",
-    status: "granted",
-    badge: "Approve Math"
-  },
-  {
-    id: "sup-g4",
-    name: "Statement of Facts & Ports Approval",
-    category: "Claims",
-    description: "Create, edit, and approve Statement of Facts timelines, port logs, berth tonnages, and deduction rules.",
-    status: "granted",
-    badge: "SoF Sign-off"
-  },
-  {
-    id: "sup-g5",
-    name: "RAC Portfolio Authorization & Closure",
-    category: "RAC",
-    description: "Review, authorize, contest deductions, and formally close Recoverable Additional Cost cases.",
-    status: "granted",
-    badge: "RAC Lead"
-  },
-  {
-    id: "sup-g6",
-    name: "Commercial Negotiation Authority",
-    category: "Commercial",
-    description: "Initiate negotiations, set confidential minimum acceptable amounts, approve our offers, and confirm settlements.",
-    status: "granted",
-    badge: "Settlement Lead"
-  },
-  {
-    id: "sup-g7",
-    name: "Invoicing & Payment Approval",
-    category: "Commercial",
-    description: "Create, edit, approve demurrage billing invoices, and record/approve received counterparty payments.",
-    status: "granted",
-    badge: "Financial Ops"
-  },
-  {
-    id: "sup-g8",
-    name: "OCR Verification & Approval",
-    category: "Documents",
-    description: "Upload timesheets to OCR, verify parsed timestamps, correct discrepancies, and approve imported events.",
-    status: "granted",
-    badge: "OCR Lead"
-  },
-  {
-    id: "sup-g9",
-    name: "Evidence Document Management",
-    category: "Documents",
-    description: "Upload, categorize, delete, and approve contractual evidence documents across all claims.",
-    status: "granted",
-    badge: "Full Archive"
-  },
-  {
-    id: "sup-g10",
-    name: "Operational Team Directory",
-    category: "Admin",
-    description: "Inspect operational team accounts, assigned active workloads, and user roles (read-only access to /users).",
-    status: "granted",
-    badge: "Directory View"
-  },
-  {
-    id: "sup-g11",
-    name: "Executive Analytics & Reports Export",
-    category: "Commercial",
-    description: "Access exposure analytics, loss prevention trends, and generate official signed PDF/CSV statements.",
-    status: "granted",
-    badge: "Export Reports"
-  }
-];
-
-const SUPERVISOR_REMOVED_ACCESS: AccessItem[] = [
-  {
-    id: "sup-r1",
-    name: "User Provisioning & Role Modification",
-    category: "Admin",
-    description: "Cannot create new user accounts, assign roles, or modify employee privilege tiers.",
-    status: "removed",
-    reason: "Zero-Trust RBAC: User provisioning and security assignments are restricted strictly to IT Administration."
-  },
-  {
-    id: "sup-r2",
-    name: "Account Deactivation & Password Resets",
-    category: "Admin",
-    description: "Cannot deactivate user accounts or initiate password resets for employees.",
-    status: "removed",
-    reason: "Identity management security policies require Administrator authorization."
-  },
-  {
-    id: "sup-r3",
-    name: "Company Global Settings & Defaults",
-    category: "Admin",
-    description: "Cannot alter global laytime calculation engine rules, currency conversions, or system configurations.",
-    status: "removed",
-    reason: "Global charterparty engine assumptions are centrally managed by IT and Legal Administration."
-  },
-  {
-    id: "sup-r4",
-    name: "Master Client & Vessel Entity Deletion",
-    category: "Admin",
-    description: "Cannot delete registered corporate client entities or vessel fleet master records.",
-    status: "removed",
-    reason: "Master entity integrity protection prevents operational deletion of counterparty databases."
-  }
-];
 
 export function SupervisorDashboard() {
   const { currentUser } = useAuth();
@@ -163,6 +33,8 @@ export function SupervisorDashboard() {
   const [racCases, setRacCases] = useState<RacCase[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [selectedStage, setSelectedStage] = useState<string>("");
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -194,9 +66,17 @@ export function SupervisorDashboard() {
     [notifications]
   );
 
+  const filteredClaims = useMemo(() => {
+    return claims.filter((c) => {
+      if (selectedStage && c.claimStatus !== selectedStage) return false;
+      if (selectedAccount && c.accountName !== selectedAccount) return false;
+      return true;
+    });
+  }, [claims, selectedStage, selectedAccount]);
+
   const metrics = useMemo(() => {
-    return calculateDashboardMetrics(claims, unreadCount);
-  }, [claims, unreadCount]);
+    return calculateDashboardMetrics(filteredClaims, unreadCount);
+  }, [filteredClaims, unreadCount]);
 
   const totalRacOutstanding = racCases.reduce((sum, c) => sum + (c.outstandingAmount || 0), 0);
   const totalCombinedExposure = metrics.totalExposure + totalRacOutstanding;
@@ -209,7 +89,7 @@ export function SupervisorDashboard() {
           <div className="flex items-center space-x-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-amber-50 text-amber-900 border border-amber-300 uppercase flex items-center space-x-1">
               <ShieldCheck className="h-3 w-3" />
-              <span>Dedicated Supervisor Dashboard</span>
+              <span>Operations Supervisor Dashboard</span>
             </span>
             <span className="text-xs text-slate-500">
               Welcome back, <strong className="text-slate-800">{currentUser?.name || "Operations Lead"}</strong>
@@ -231,77 +111,77 @@ export function SupervisorDashboard() {
               <span>Create Claim</span>
             </Button>
           </Link>
+          <Link href="/calculator">
+            <Button variant="outline" size="sm" className="text-xs font-semibold h-9 px-3.5 bg-white rounded-xl flex items-center space-x-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer">
+              <Calculator className="h-4 w-4 text-blue-600" />
+              <span>Laytime Engine</span>
+            </Button>
+          </Link>
           <Link href="/rac">
             <Button variant="outline" size="sm" className="text-xs font-semibold h-9 px-3.5 bg-white rounded-xl flex items-center space-x-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer">
               <Briefcase className="h-4 w-4 text-indigo-600" />
               <span>RAC Dashboard</span>
             </Button>
           </Link>
-          <Link href="/users">
-            <Button variant="outline" size="sm" className="text-xs font-semibold h-9 px-3.5 bg-white rounded-xl flex items-center space-x-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer">
-              <Users className="h-4 w-4 text-slate-600" />
-              <span>Team Directory</span>
-            </Button>
-          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={loadData}
+            className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
+            title="Refresh tracker data"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
         </div>
       </div>
 
       {/* 2. Four Summary KPI Cards */}
-      <KPIGrid metrics={metrics} claims={claims} />
+      <KPIGrid metrics={metrics} claims={filteredClaims} />
 
-      {/* 3. Integrated RAC Banner */}
-      <div className="bg-linear-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-900/60 rounded-2xl p-4 sm:p-5 text-white shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-indigo-600/30 text-indigo-400 rounded-xl border border-indigo-500/30">
-              <Briefcase className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-sm font-bold text-white">Recoverable Additional Costs (RAC) Exposure</h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">
-                  {racCases.length} Active RAC Cases
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Total Combined Maritime Exposure: <strong className="text-white">{formatCurrency(totalCombinedExposure)}</strong> (Demurrage + Port Costs)
-              </p>
-            </div>
-          </div>
+      {/* 3. Maritime Claim Lifecycle Pipeline (10 Tracker Stages) */}
+      <TrackerPipeline
+        claims={claims}
+        selectedStage={selectedStage}
+        onSelectStage={(stage) => setSelectedStage(stage)}
+      />
 
-          <div className="flex items-center space-x-2.5 shrink-0">
-            <Link
-              href="/rac"
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm"
-            >
-              <span>RAC Dashboard</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-            <Link
-              href="/rac/cases"
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-semibold transition"
-            >
-              <span>View RAC Cases</span>
-            </Link>
-          </div>
+      {/* 4. Client Portfolios & Account Exposure */}
+      <AccountPortfolioCards
+        claims={claims}
+        selectedAccount={selectedAccount}
+        onSelectAccount={(account) => setSelectedAccount(account)}
+      />
+
+      {/* Active Filter Indicators */}
+      {(selectedStage || selectedAccount) && (
+        <div className="flex items-center space-x-2 text-xs bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-xl">
+          <span className="font-semibold">Active Filter:</span>
+          {selectedStage && <span className="bg-white px-2 py-0.5 rounded border border-blue-300 font-bold">Stage: {selectedStage}</span>}
+          {selectedAccount && <span className="bg-white px-2 py-0.5 rounded border border-blue-300 font-bold">Account: {selectedAccount}</span>}
+          <button
+            onClick={() => { setSelectedStage(""); setSelectedAccount(""); }}
+            className="text-xs text-blue-600 underline font-semibold ml-2 hover:text-blue-900 cursor-pointer"
+          >
+            Clear Filters
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* 4. Supervisor Approval Queue & Exposure Summary */}
+      {/* 5. Supervisor Approval Queue & Exposure Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SupervisorApprovalQueue claims={claims} />
         <SupervisorExposureSummary claims={claims} racCases={racCases} />
       </div>
 
-      {/* 5. Claims Overview Chart */}
-      <ClaimOverviewChart claims={claims} metrics={metrics} isMounted={isMounted} />
+      {/* 6. Claims Overview Trend Chart */}
+      <ClaimOverviewChart claims={filteredClaims} metrics={metrics} isMounted={isMounted} />
 
-      {/* 6. Recent Claims & Operational Queue */}
+      {/* 7. Recent Claims & Operational Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <RecentClaimsTable
-            claims={claims}
-            title="Operational Claims Ledger"
+            claims={filteredClaims}
+            title={selectedStage ? `Claims: ${selectedStage}` : "Operational Claims Ledger"}
             subtitle="Master queue of ongoing and settled maritime demurrage files"
             viewAllHref="/claims"
           />
@@ -310,16 +190,6 @@ export function SupervisorDashboard() {
           <OperationalTasks metrics={metrics} />
         </div>
       </div>
-
-      {/* 7. Comprehensive Supervisor Role Access Control Matrix */}
-      <RoleAccessControlMatrix
-        roleName="Operations Supervisor"
-        roleCode="SUPERVISOR"
-        roleScope="Company-Wide Operational Authority"
-        purpose="Claims manager and chief approver with comprehensive operational authority over claims, Statement of Facts, laytime calculations, calculation overrides, RAC portfolios, negotiations, and settlements. Excluded from administrative user provisioning and global system settings."
-        grantedPermissions={SUPERVISOR_GRANTED_ACCESS}
-        removedPermissions={SUPERVISOR_REMOVED_ACCESS}
-      />
     </div>
   );
 }

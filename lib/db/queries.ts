@@ -319,6 +319,12 @@ function mapRowToClaim(row: any, includeRelations = false): Claim {
     claimAgreedDate: row.claim_agreed_date,
     charterpartyDate: row.charterparty_date,
     daysAwaitingPayment: row.days_awaiting_payment,
+    invoiceNumber: row.invoice_number || undefined,
+    taxYear: row.tax_year || undefined,
+    blQuantity: row.bl_quantity || undefined,
+    ownersClaimAmount: row.owners_claim_amount || 0,
+    claimTimebarDate: row.claim_timebar_date || undefined,
+    claimFiledDate: row.claim_filed_date || undefined,
     clientId: row.client_id || row.clientId,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -433,7 +439,8 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     "receivedClaimAmount", "agreedAmount", "billableAmount", "paymentReceived", "paymentConcluded",
     "layday", "cancellingDate", "voyageEndDate", "instructionReceivedDate", "noticeReceivedDate",
     "claimReceivedDate", "noticeTimebarDays", "claimTimebarDays", "timebarred", "claimAgreedDate",
-    "charterpartyDate", "daysAwaitingPayment"
+    "charterpartyDate", "daysAwaitingPayment", "invoiceNumber", "taxYear", "blQuantity",
+    "ownersClaimAmount", "claimTimebarDate", "claimFiledDate"
   ];
 
   const dbFieldMap: Record<string, string> = {
@@ -470,7 +477,13 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     timebarred: "timebarred",
     claimAgreedDate: "claim_agreed_date",
     charterpartyDate: "charterparty_date",
-    daysAwaitingPayment: "days_awaiting_payment"
+    daysAwaitingPayment: "days_awaiting_payment",
+    invoiceNumber: "invoice_number",
+    taxYear: "tax_year",
+    blQuantity: "bl_quantity",
+    ownersClaimAmount: "owners_claim_amount",
+    claimTimebarDate: "claim_timebar_date",
+    claimFiledDate: "claim_filed_date"
   };
 
   for (const f of fields) {

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
+import { getVisibleScreens, normalizeRole } from "@/app/access/roles";
 import { getNotifications } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -79,109 +80,152 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
     };
   }, []);
 
-  // Navigation Items adhering strictly to the Zero-Trust RBAC Matrix
-  const isClient =
-    role === "Client" ||
-    (role === "REVIEWER_CLIENT" &&
-      Boolean(
+  // Navigation Items adhering strictly to the Single Source of Truth RBAC Role Definitions
+  const userContext = useMemo(
+    () => ({
+      role: normalizeRole(role),
+      userId: currentUser?.id,
+      email: currentUser?.email,
+      clientId:
         currentUser?.clientId ||
-          (currentUser as any)?.client_id ||
-          (currentUser as any)?.assignedClientId
-      ));
+        (currentUser as any)?.client_id ||
+        (currentUser as any)?.assignedClientId
+    }),
+    [role, currentUser]
+  );
 
-  const normRole = (role || "").toUpperCase().replace(/[\s-]+/g, "_");
-  const isProcessor = normRole === "CLAIM_PROCESSOR" || normRole === "PROCESSOR";
-  const isAdmin = normRole === "ADMIN";
-  const isSupervisor = normRole === "SUPERVISOR" || normRole === "FINANCE";
+  const visibleScreens = useMemo(
+    () => getVisibleScreens(role, userContext),
+    [role, userContext]
+  );
+
+  const isClient = Boolean(userContext.clientId || role === "Client");
+  const normRole = normalizeRole(role);
 
   const roleDashboardHref = isClient
     ? "/dashboard/reviewer-client"
-    : isAdmin
+    : normRole === "ADMIN"
     ? "/dashboard/admin"
-    : isSupervisor
+    : normRole === "SUPERVISOR"
     ? "/dashboard/supervisor"
-    : isProcessor
+    : normRole === "CLAIM_PROCESSOR"
     ? "/dashboard/claim-processor"
     : "/dashboard/reviewer-client";
 
   const roleDashboardLabel = isClient
     ? "Client Portal"
-    : isAdmin
+    : normRole === "ADMIN"
     ? "Admin Console"
-    : isSupervisor
+    : normRole === "SUPERVISOR"
     ? "Supervisor Dashboard"
-    : isProcessor
+    : normRole === "CLAIM_PROCESSOR"
     ? "Analyst Workbench"
     : "Reviewer Dashboard";
 
-  const navItems: NavItem[] = isClient
-    ? [
-        {
-          href: roleDashboardHref,
-          label: roleDashboardLabel,
-          icon: LayoutDashboard
-        },
-        {
-          href: "/claims",
-          label: "My Claims",
-          icon: FileSpreadsheet
-        },
-        {
-          href: "/documents",
-          label: "Documents",
-          icon: FileText
-        },
-        { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount }
-      ]
-    : [
-        ...(canViewDashboard
-          ? [{ href: roleDashboardHref, label: roleDashboardLabel, icon: LayoutDashboard }]
-          : []),
-        {
-          href: "/claims",
-          label: isProcessor ? "Assigned Claims" : "Claims Ledger",
-          icon: FileSpreadsheet
-        },
-        ...(canCreateClaim
-          ? [{ href: "/claims/create", label: "Create Claim", icon: PlusCircle }]
-          : []),
-        ...(canCreateClaim
-          ? [{ href: "/calculator", label: "Laytime Calculator", icon: Calculator }]
-          : []),
-        ...(canViewDocuments
-          ? [{ href: "/documents", label: "Documents", icon: FileText }]
-          : []),
-        ...(canUploadOcr
-          ? [{ href: "/ocr", label: "OCR & SoF", icon: ScanText }]
-          : []),
-        ...(canViewRac
-          ? [{ href: "/rac", label: isSupervisor ? "RAC Portfolio" : "RAC Review", icon: Briefcase }]
-          : []),
-        ...(!isAdmin && normRole !== "FINANCE"
-          ? [{ href: "/timebar", label: "Time-Bar Monitor", icon: Clock }]
-          : []),
-        // Analytics: Removed for Claim Processor (Workbench only)
-        ...(canViewDashboard && !isProcessor
-          ? [{ href: "/analytics", label: "Analytics", icon: BarChart3 }]
-          : []),
-        // Reports: Removed for Claim Processor (Workbench only)
-        ...(canViewReports && !isProcessor
-          ? [{ href: "/reports", label: isAdmin ? "Audit Reports" : "Reports", icon: FileBarChart }]
-          : []),
-        { href: "/notifications", label: "Notifications", icon: Bell, badge: unreadCount },
-        ...(canAccessUsers
-          ? [
-              {
-                href: "/users",
-                label: isSupervisor ? "Team & Users" : "User Management",
-                icon: Users
-              }
-            ]
-          : []),
-        ...(canAccessSettings
-          ? [{ href: "/settings", label: "Company Settings", icon: Settings }]
-          : [])
-      ];
+  const allPossibleItems: {
+    screen: string;
+    href: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+  }[] = useMemo(
+    () => [
+      {
+        screen: roleDashboardHref,
+        href: roleDashboardHref,
+        label: roleDashboardLabel,
+        icon: LayoutDashboard
+      },
+      {
+        screen: "/claims",
+        href: "/claims",
+        label: isClient
+          ? "My Claims"
+          : normRole === "CLAIM_PROCESSOR"
+          ? "Assigned Claims"
+          : "Claims Ledger",
+        icon: FileSpreadsheet
+      },
+      {
+        screen: "/claims/create",
+        href: "/claims/create",
+        label: "Create Claim",
+        icon: PlusCircle
+      },
+      {
+        screen: "/calculator",
+        href: "/calculator",
+        label: "Laytime Calculator",
+        icon: Calculator
+      },
+      {
+        screen: "/documents",
+        href: "/documents",
+        label: "Documents",
+        icon: FileText
+      },
+      {
+        screen: "/ocr",
+        href: "/ocr",
+        label: "OCR & SoF",
+        icon: ScanText
+      },
+      {
+        screen: "/rac",
+        href: "/rac",
+        label: normRole === "SUPERVISOR" ? "RAC Portfolio" : "RAC Review",
+        icon: Briefcase
+      },
+      {
+        screen: "/timebar",
+        href: "/timebar",
+        label: "Time-Bar Monitor",
+        icon: Clock
+      },
+      {
+        screen: "/analytics",
+        href: "/analytics",
+        label: "Analytics",
+        icon: BarChart3
+      },
+      {
+        screen: "/reports",
+        href: "/reports",
+        label: normRole === "ADMIN" ? "Audit Reports" : "Reports",
+        icon: FileBarChart
+      },
+      {
+        screen: "/notifications",
+        href: "/notifications",
+        label: "Notifications",
+        icon: Bell,
+        badge: unreadCount
+      },
+      {
+        screen: "/users",
+        href: "/users",
+        label: normRole === "SUPERVISOR" ? "Team & Users" : "User Management",
+        icon: Users
+      },
+      {
+        screen: "/settings",
+        href: "/settings",
+        label: "Company Settings",
+        icon: Settings
+      }
+    ],
+    [roleDashboardHref, roleDashboardLabel, isClient, normRole, unreadCount]
+  );
+
+  const navItems: NavItem[] = useMemo(() => {
+    return allPossibleItems.filter((item) => {
+      if (item.screen === "/notifications") return true;
+      return (
+        visibleScreens.includes(item.screen) ||
+        visibleScreens.some((s) => item.screen.startsWith(s))
+      );
+    });
+  }, [allPossibleItems, visibleScreens]);
 
   const handleLogout = async () => {
     await logout();

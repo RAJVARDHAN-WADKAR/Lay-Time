@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getDocuments, uploadDocument, deleteDocument, getClaims } from "@/lib/api";
 import { DocumentRecord, Claim } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -35,7 +35,7 @@ export default function DocumentsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setIsLoading(true);
     const [docs, cls] = await Promise.all([getDocuments(), getClaims()]);
     setDocuments(docs);
@@ -44,7 +44,7 @@ export default function DocumentsPage() {
       setSelectedClaimId(cls[0].id);
     }
     setIsLoading(false);
-  };
+  }, [selectedClaimId]);
 
   useEffect(() => {
     fetchAll();
@@ -52,7 +52,7 @@ export default function DocumentsPage() {
     const handleStorage = () => fetchAll();
     window.addEventListener("demurrage_storage_change", handleStorage);
     return () => window.removeEventListener("demurrage_storage_change", handleStorage);
-  }, []);
+  }, [fetchAll]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

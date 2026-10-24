@@ -1,148 +1,141 @@
-# Demurrage Claim Management & Laytime Calculation System
+# Demurrage Claim Management & Laytime System ("Lay-Time")
 
-A complete, polished, fully-interactive frontend application for maritime Demurrage Claim Management and Laytime Calculation built with Next.js (App Router), React, TypeScript, Tailwind CSS, Recharts, TanStack Table, React Hook Form, and jsPDF.
-
-> **Note**: This is a **frontend-only deliverable powered by typed mock data and local state**. No external backend, database, OCR engine, or live LLM provider is connected. All data operations are cleanly routed through the `@/lib/api/*` abstraction layer so a real backend can be swapped in with zero component rework.
+An enterprise-grade maritime Demurrage Claim Management and Laytime Calculation System built with Next.js 14 (App Router), TypeScript, SQLite (`better-sqlite3`), and JWT authentication.
 
 ---
 
-## 1. Features Overview
+## 1. System Architecture
 
-### ⚓ Master Claims Ledger (`/claims`)
-- **TanStack Table** with 32+ typed fields covering commercial, operational, date, and financial parameters.
-- Multi-column sorting, global search filtering, and pagination (10, 25, 50 rows).
-- **Inline Editing**: Quick editing of claim status, agreed amounts, received amounts, and notes directly writing to state.
-- **Column Visibility Presets**: Standard View, Financial Focus, Dates & Timebar Focus, and Full Column View.
-- **CSV Export**: One-click download of all currently filtered/visible columns and rows.
+The project is a unified, self-contained Next.js 14 full-stack application backed by an embedded SQLite database and cryptographically signed JWT sessions.
 
-### 📊 Operations Dashboard (`/dashboard`)
-- Dynamic KPI metrics derived in real-time from the claims dataset:
-  - Total Demurrage Owed ($)
-  - Demurrage Received ($)
-  - Total Outstanding Exposure ($)
-  - Amount Under Contention ($)
-  - Average Processing Time (days)
-  - Average Demurrage Per Claim ($)
-- **Interactive Recharts Visualizations**:
-  - Claim Status Distribution (Donut Chart)
-  - Demurrage & Collections Trend (Area Chart)
-  - Counterparty Exposure Breakdown (Horizontal Bar Chart)
-- Real-time client-side filter controls (Client, Claim Type, Status, Date Range).
+- **Frontend & API**: Next.js 14 App Router (`app/` with React Server & Client Components, Route Handlers under `app/api/**`).
+- **Database**: SQLite embedded database using `better-sqlite3` located at `data/laytime.db` (auto-created and seeded on first run).
+- **Authentication & Security**: Zero-trust, role-based access control (RBAC) enforced at Edge middleware (`middleware.ts`), backend API handlers (`withApi`, `requireUser`), and UI component trees (`app/access/roles/*`).
+- **Calculation Engines**: Pure TypeScript maritime laytime calculation, Statement of Facts (SoF) event reconciliation, Oil/Chem pumping warranty engine, and RAC (Root-Cause Analysis) financial auditing.
 
-### 📝 Multi-Step Claim Creation (`/claims/create`)
-- **Step 1 — General Information**: Full Zod schema validation, voyage terms, and timebars.
-- **Step 2 — Ports & Berths**: Dynamic repeatable multi-berth allocations with automatic prorata derivation and manual overrides.
-- **Step 3 — Statement of Facts**: Preset & custom maritime event logs, duration computing, and deduction categorization.
-- **Step 4 — Review & Publish**: Summary verification before publishing to the active ledger.
-
-### 📄 Voyage Documents & Simulated OCR (`/documents`, `/ocr`)
-- Drag-and-drop PDF uploader with size/type validation.
-- Simulated pipeline status transitions: `Uploaded -> OCR Processing... -> OCR Completed` (or `OCR Failed` for test files).
-- Pre-canned messy OCR samples with original vs user-corrected field comparisons and confidence ratings.
-
-### ⚠️ Deterministic Discrepancy Detection Engine
-- Pure client-side TypeScript verification engine detecting:
-  - Start time after stop time
-  - Missing berth or port associations
-  - Duplicate operational entries
-  - Invalid chronological operational sequence
-  - Impossible duration limits (>30 days or <=0)
-  - Low OCR confidence ratings (<80%)
-- Interactive warning cards with quick "Correct Value" resolution modals.
-
-### 📐 Pure Laytime Calculation Engine (`/calculations`, `lib/calculations/`)
-- Decoupled, unit-testable pure TypeScript calculation engine:
-  - `Gross Elapsed Time - Allowable Deductions = Net Laytime Used`
-  - `Net Laytime Used vs Allowed Laytime = Time Exceeded (Demurrage) / Time Saved (Despatch)`
-  - Deduction categories (Weather, Rain, Shifting, Waiting for berth, Breakdown, Strike, etc.)
-  - Timebar calculation logic with configurable notice and claim deadlines.
-  - Multi-level hierarchy: Berth Summary -> Port Summary -> Claim Master Summary.
-  - Interactive manual override capabilities with visual badges.
-
-### 📥 Client-Side PDF Report Generation (`/reports`)
-- Downloadable PDF reports generated via `jspdf` & `jspdf-autotable`:
-  - **Master Claim Report**: Executive summary, commercial particulars, financial breakdown, and complete SoF log.
-  - **Port Operations Report**: Port-by-port laytime reconciliation and pumping rates.
-  - **Berth & Deductions Audit**: Detailed weather and breakdown deductions.
-
-### 🤖 Grounded AI Claim Assistant (`/ai-assistant`)
-- Conversational chat interface grounded in the active claims and calculations state.
-- Pattern-matched query parsing with source-citation lines.
-- Deterministic fallback: *"Insufficient information available in the provided claim documents."*
-
-### 👥 Role-Based Access Control (Mock Switcher)
-- Lightweight presentation-layer role switcher in top header:
-  - **Admin**: Full access + User Management screen (`/users`).
-  - **Supervisor**: Full editing access across all claims.
-  - **Claim Processor**: Only permitted to edit claims assigned to them.
-  - **Reviewer**: Read-only mode across all ledger and calculation views.
+> **Optional / Unused Backend Note**: The root directory contains an optional NestJS backend prototype (`backend/`) and `docker-compose.yml`. This is an **unused, standalone optional service** kept for external architectural reference. The active, production-ready system is fully powered by the internal Next.js API routes and SQLite database.
 
 ---
 
-## 2. Tech Stack
+## 2. Four Defined System Roles & Access Matrix
 
-- **Framework**: Next.js 14 (App Router) + React 18
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Data Table**: TanStack Table v8
-- **Charts**: Recharts
-- **Forms**: React Hook Form + Zod
-- **Icons**: Lucide React
-- **PDF Export**: jsPDF + jsPDF-AutoTable
+Access permissions, visible screens, tabs, buttons, and data scopes are strictly defined in `app/access/roles/*`:
+
+| Feature / Screen | ADMIN | SUPERVISOR | CLAIM_PROCESSOR | REVIEWER_CLIENT |
+|---|:---:|:---:|:---:|:---:|
+| **Dedicated Dashboard** | `/dashboard/admin` | `/dashboard/supervisor` | `/dashboard/claim-processor` | `/dashboard/reviewer-client` |
+| **Data Scope** | Company-wide | Company-wide | Own assigned claims only | Own client claims (External Client) or Company-wide read-only (Internal Reviewer) |
+| **Claims Ledger (`/claims`)** | View & Cleanup | Full CRUD, Assign & Settle | View & Edit Assigned Only | Read-only |
+| **Create Claim (`/claims/create`)** | ❌ Restricted | ✅ Allowed | ✅ Allowed (auto-assigned) | ❌ Restricted |
+| **Laytime Calculator (`/calculator`)** | ❌ Restricted | ✅ Allowed | ✅ Allowed | ❌ Restricted |
+| **OCR Studio (`/ocr`)** | ❌ Restricted | ✅ Allowed | ✅ Allowed | ❌ Restricted |
+| **RAC Portfolio (`/rac`)** | View only | Manage & Authorize | Log findings on assigned | Read-only (Internal Reviewer); ❌ Blocked (Client) |
+| **Time-Bar Monitor (`/timebar`)** | ❌ Restricted | ✅ Allowed | ✅ Allowed | Read-only (Client/Reviewer) |
+| **Macro Analytics (`/analytics`)** | ✅ Allowed | ✅ Allowed | ❌ Restricted (Workbench only) | Read-only |
+| **Financial Reports (`/reports`)** | Audit Reports | Operational Reports | ❌ Restricted (Workbench only) | Read-only |
+| **Documents (`/documents`)** | Manage | Manage | Upload on assigned | Upload requested documents (Client) / Read-only (Reviewer) |
+| **User Management (`/users`)** | Full CRUD | View team | ❌ Restricted | ❌ Restricted |
+| **System Settings (`/settings`)** | Full CRUD | ❌ Restricted | ❌ Restricted | ❌ Restricted |
+
+### Role Responsibilities:
+1. **ADMIN**: System administration, user lifecycle management, company-wide audit trails, and configuration settings. Prohibited from operational claim editing.
+2. **SUPERVISOR**: Operations lead, claim approvals, calculation overrides, processor assignments, settlements, and company-wide financial reporting.
+3. **CLAIM_PROCESSOR**: Demurrage analyst workbench, timebar tracking, voyage Statement of Facts reconciliation, and drafting negotiations on assigned claims only.
+4. **REVIEWER_CLIENT**: Dual-mode read-only role:
+   - *External Client* (with `clientId`): Dedicated counterparty portal showing only their company's claims, negotiations, and requested document uploads.
+   - *Internal Reviewer*: Legal and compliance inspection portal with read-only audit access across company claims.
 
 ---
 
-## 3. Project Architecture & Backend Seam
+## 3. Dedicated Role Dashboards & Folders
 
-All data operations are centralized in `lib/api/*` with simulated async network latency.
+Each role has its own dedicated dashboard component, route, and folder structure:
+- `components/roles/admin/` & `components/dashboard/admin/AdminDashboard.tsx` (`/dashboard/admin`)
+- `components/roles/supervisor/` & `components/dashboard/supervisor/SupervisorDashboard.tsx` (`/dashboard/supervisor`)
+- `components/roles/claim-processor/` & `components/dashboard/claim-processor/ClaimProcessorDashboard.tsx` (`/dashboard/claim-processor`)
+- `components/roles/reviewer-client/` & `components/dashboard/reviewer-client/ReviewerClientDashboard.tsx` (`/dashboard/reviewer-client`)
+- Shared widgets: `components/dashboard/shared/` (`RoleAccessControlMatrix.tsx`, etc.)
 
-```
-app/
-  dashboard/          # Operations metrics & Recharts
-  claims/             # TanStack Table Claims Ledger
-  claims/[id]/        # Tabbed Claim Detail view
-  claims/create/      # 4-Step Claim Creation Wizard
-  documents/          # Upload & OCR Pipeline
-  ocr/                # SoF Review & Discrepancy Hub
-  calculations/       # Pure Laytime Calculation Engine
-  reports/            # Client-Side PDF Generator
-  ai-assistant/       # Grounded Mock AI Assistant
-  users/              # Admin-Only User Management
-  settings/           # Assumptions & Business Rules
-components/
-  ui/                 # Design tokens (Badge, Button, Card, Modal, Inputs)
-  layout/             # Sidebar, Header, RoleSwitcher, DemoBadge
-  claims/             # Step forms, Overview tab, SoF tab, Ports tab
-lib/
-  api/                # Centralized Backend Seam (Async mock CRUD)
-  calculations/       # Pure unit-testable laytime, deduction & timebar functions
-  context/            # AuthContext & Role Switcher
-  mock/               # Seed dataset, Aggregator, AI Grounding
-  types/              # Comprehensive TypeScript interfaces
-  utils/              # Formatters, CSV exporter, PDF generator, cn merger
+Root navigation (`/`) and general `/dashboard` automatically redirect each authenticated user to their role-specific dashboard. Unauthorized cross-dashboard navigation is blocked at the Edge and redirected to the user's authorized home.
+
+---
+
+## 4. Environment Variables
+
+Create a `.env.local` file in the project root:
+
+```env
+# Application Environment
+NODE_ENV=development
+PORT=3000
+
+# Authentication & Session Security (minimum 32 characters)
+JWT_SECRET=your_secure_random_jwt_secret_key_minimum_32_characters
+
+# Database Path (defaults to data/laytime.db)
+DATABASE_PATH=data/laytime.db
+
+# Optional Demo Password Overrides
+DEMO_ADMIN_PASSWORD=Raj@123
+DEMO_PROCESSOR_PASSWORD=Rohit@123
+DEMO_SUPERVISOR_PASSWORD=Swayam@123
+DEMO_REVIEWER_PASSWORD=Paras@123
+DEMO_CLIENT_PASSWORD=Client@123
 ```
 
+> **SECURITY NOTICE**: Demo credentials are provided for local testing and evaluation. In production environments, set a unique, cryptographically strong `JWT_SECRET` and change all default passwords.
+
 ---
 
-## 4. Getting Started
+## 5. Quickstart & Commands
 
-### Installation
+### Prerequisites
+- Node.js 18+ or 20+
+- npm 9+
 
+### Install Dependencies
 ```bash
 npm install
 ```
 
-### Run Development Server
+### Seed Authentication & Database
+The application automatically creates and seeds `data/laytime.db` on first boot. To explicitly seed users and verify all role matrix accounts:
+```bash
+npm run db:seed-auth
+```
 
+### Run Development Server
 ```bash
 npm run dev
 ```
-
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Build for Production
-
+### Run Verification & Tests
 ```bash
+# 1. Typecheck
+npx tsc --noEmit
+
+# 2. Lint
+npm run lint
+
+# 3. Production Build
 npm run build
-npm start
+
+# 4. Access Matrix Agreement Audit
+node scripts/check-access.js
+
+# 5. Automated End-to-End Auth & Security Test Suite
+npm run test:auth
 ```
+
+---
+
+## 6. Pre-Configured Demo Accounts
+
+| Role | Email | Password | Scope & Screen |
+|---|---|---|---|
+| **Admin** | `rajvardhanwadkar76@gmail.com` | `Raj@123` | Global admin oversight, `/users`, `/settings` |
+| **Claim Processor** | `rohitmengane2975@gmail.com` | `Rohit@123` | Analyst workbench, assigned claims only |
+| **Supervisor** | `swayamghatage3839@gmail.com` | `Swayam@123` | Full claim management, approvals, assignment |
+| **Reviewer** | `paraschougale558@gmail.com` | `Paras@123` | Legal compliance audit, read-only oversight |
+| **External Client** | `client@trafigura.com` | `Client@123` | Trafigura counterparty portal, own claims only |

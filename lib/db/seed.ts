@@ -11,13 +11,24 @@ export function seedDatabase(db: Database.Database) {
 
   console.log("Seeding database with initial production-style dataset...");
 
+  const now = new Date().toISOString();
+
+  // 0. SEED DEFAULT CLIENTS
+  const insertClient = db.prepare(`
+    INSERT OR IGNORE INTO clients (client_id, name, created_at)
+    VALUES (?, ?, ?)
+  `);
+  insertClient.run("client-trafigura", "Trafigura Trading Pte Ltd", now);
+  insertClient.run("client-sokana3", "Sokana3", now);
+  insertClient.run("client-eastport", "Eastport USA LLC", now);
+  insertClient.run("client-peregrine", "Peregrine Tankers", now);
+  insertClient.run("client-norstar", "Norstar", now);
+
   // 1. SEED USERS WITH BCRYPT HASHED PASSWORDS
   const insertUser = db.prepare(`
-    INSERT INTO users (id, name, email, username, password_hash, role, avatar, status, role_description, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (id, name, email, username, password_hash, role, client_id, client_name, created_by, avatar, status, role_description, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-
-  const now = new Date().toISOString();
 
   const users = [
     {
@@ -27,6 +38,9 @@ export function seedDatabase(db: Database.Database) {
       username: "rajvardhan.wadkar",
       password: "Raj@123",
       role: "Admin",
+      clientId: null,
+      clientName: null,
+      createdBy: null,
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
       roleDescription: "Principal Administrator & Master Mariner. Unrestricted global access."
     },
@@ -37,6 +51,9 @@ export function seedDatabase(db: Database.Database) {
       username: "rohit.mengane",
       password: "Rohit@123",
       role: "Claim Processor",
+      clientId: null,
+      clientName: null,
+      createdBy: "usr-003",
       avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
       roleDescription: "Senior Demurrage Analyst. Manages primary claim and RAC portfolios."
     },
@@ -47,6 +64,9 @@ export function seedDatabase(db: Database.Database) {
       username: "swayam.ghatage",
       password: "Swayam@123",
       role: "Supervisor",
+      clientId: null,
+      clientName: null,
+      createdBy: "usr-001",
       avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
       roleDescription: "Operations Supervisor & Post-Fixture Lead. Full review and authorization authority."
     },
@@ -57,14 +77,95 @@ export function seedDatabase(db: Database.Database) {
       username: "paras.chougale",
       password: "Paras@123",
       role: "Reviewer",
+      clientId: null,
+      clientName: null,
+      createdBy: "usr-001",
       avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
       roleDescription: "Legal Counsel & External Auditor. Read-only compliance inspection mode."
+    },
+    {
+      id: "usr-005",
+      name: "Anita Sharma",
+      email: "anita.sharma@laytime.com",
+      username: "anita.sharma",
+      password: "Finance@123",
+      role: "Finance",
+      clientId: null,
+      clientName: null,
+      createdBy: "usr-001",
+      avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80",
+      roleDescription: "Financial Controller. Invoice generation, payments recording, and financial oversight."
+    },
+    {
+      id: "usr-006",
+      name: "Trafigura Commercial",
+      email: "client@trafigura.com",
+      username: "client.trafigura",
+      password: "Client@123",
+      role: "Client",
+      clientId: "client-trafigura",
+      clientName: "Trafigura Trading Pte Ltd",
+      createdBy: "usr-002",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      roleDescription: "External Client Counterparty Portal. View own claims, summaries, and approve final offers."
+    },
+    {
+      id: "usr-client-sokana",
+      name: "Sokana Operations",
+      email: "client.sokana@laytime.com",
+      username: "client.sokana",
+      password: "Client@123",
+      role: "Client",
+      clientId: "client-sokana3",
+      clientName: "Sokana3",
+      createdBy: "usr-001",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      roleDescription: "Sokana Client Portal. Access to all Sokana demurrage claims and updates."
+    },
+    {
+      id: "usr-client-eastport",
+      name: "Eastport USA Commercial",
+      email: "client.eastport@laytime.com",
+      username: "client.eastport",
+      password: "Client@123",
+      role: "Client",
+      clientId: "client-eastport",
+      clientName: "Eastport USA LLC",
+      createdBy: "usr-001",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      roleDescription: "Eastport USA Client Portal. Access to Eastport voyage claims."
+    },
+    {
+      id: "usr-client-peregrine",
+      name: "Peregrine Tankers Commercial",
+      email: "client.peregrine@laytime.com",
+      username: "client.peregrine",
+      password: "Client@123",
+      role: "Client",
+      clientId: "client-peregrine",
+      clientName: "Peregrine Tankers",
+      createdBy: "usr-001",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      roleDescription: "Peregrine Tankers Client Portal. Access to Peregrine claims."
+    },
+    {
+      id: "usr-client-norstar",
+      name: "Norstar Shipping Lead",
+      email: "client.norstar@laytime.com",
+      username: "client.norstar",
+      password: "Client@123",
+      role: "Client",
+      clientId: "client-norstar",
+      clientName: "Norstar",
+      createdBy: "usr-001",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      roleDescription: "Norstar Client Portal. Access to Norstar voyage claims."
     }
   ];
 
   for (const u of users) {
     const hash = hashPasswordSync(u.password);
-    insertUser.run(u.id, u.name, u.email, u.username, hash, u.role, u.avatar, "Active", u.roleDescription, now, now);
+    insertUser.run(u.id, u.name, u.email, u.username, hash, u.role, u.clientId, u.clientName, u.createdBy, u.avatar, "Active", u.roleDescription, now, now);
   }
 
   // 2. SEED CLAIMS, PORTS, BERTHS, SOF, DEDUCTIONS, DISCREPANCIES
@@ -475,6 +576,152 @@ export function seedDatabase(db: Database.Database) {
     "Captain Alexander Drake",
     now
   );
+
+  // 7. AUTO-INGEST LaytimeServicesTracker.csv
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const csvPath = path.join(process.cwd(), "LaytimeServicesTracker.csv");
+    if (fs.existsSync(csvPath)) {
+      const text = fs.readFileSync(csvPath, "utf8");
+      // Basic CSV parser
+      const parseCSV = (t: string) => {
+        const rows: string[][] = [];
+        let row: string[] = [];
+        let token = "";
+        let inQ = false;
+        for (let i = 0; i < t.length; i++) {
+          const c = t[i];
+          const next = t[i + 1];
+          if (c === '"') {
+            if (inQ && next === '"') { token += '"'; i++; } else { inQ = !inQ; }
+          } else if (c === ',' && !inQ) {
+            row.push(token); token = "";
+          } else if ((c === '\r' || c === '\n') && !inQ) {
+            if (c === '\r' && next === '\n') i++;
+            row.push(token); token = "";
+            if (row.some(cell => cell.trim().length > 0)) rows.push(row);
+            row = [];
+          } else { token += c; }
+        }
+        if (token.length > 0 || row.length > 0) {
+          row.push(token);
+          if (row.some(cell => cell.trim().length > 0)) rows.push(row);
+        }
+        return rows;
+      };
+
+      const rows = parseCSV(text);
+      const cleanNum = (val: any) => {
+        if (!val) return 0;
+        const n = parseFloat(String(val).replace(/,/g, "").trim());
+        return isNaN(n) ? 0 : n;
+      };
+
+      const parseDt = (dStr: string) => {
+        if (!dStr) return null;
+        const s = dStr.trim();
+        if (s === "13/02/1900" || s.endsWith("1900") || s.length < 8) return null;
+        const parts = s.split(/[\/\-]/);
+        if (parts.length === 3) {
+          let day = parseInt(parts[0], 10);
+          let month = parseInt(parts[1], 10);
+          let year = parseInt(parts[2], 10);
+          if (year < 100) year += 2000;
+          if (day > 0 && day <= 31 && month > 0 && month <= 12) {
+            return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          }
+        }
+        return s;
+      };
+
+      const insertTrackerClaim = db.prepare(`
+        INSERT OR REPLACE INTO claims (
+          id, client_id, claim_name, account_name, broker_name, claim_status, claim_type, ship_name,
+          cp_type, voyage_number, assigned_to, days_open, claim_closed, contentions, claim_notes,
+          document_links, demurrage_rate_per_day, counterparty_name, counterparty_type, claim_filed_amount,
+          received_claim_amount, agreed_amount, billable_amount, payment_received, payment_concluded,
+          layday, cancelling_date, voyage_end_date, instruction_received_date, notice_received_date,
+          claim_received_date, notice_timebar_days, claim_timebar_days, timebarred, claim_agreed_date,
+          charterparty_date, days_awaiting_payment, invoice_number, tax_year, bl_quantity,
+          owners_claim_amount, claim_timebar_date, claim_filed_date, created_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?
+        )
+      `);
+
+      const dataRows = rows.slice(1);
+      const tx = db.transaction((items: string[][]) => {
+        for (const r of items) {
+          const claimId = r[0]?.trim();
+          if (!claimId) continue;
+          const account = r[1]?.trim() || "Sokana3";
+          let clientId = "client-sokana3";
+          if (account.includes("Eastport")) clientId = "client-eastport";
+          else if (account.includes("Peregrine")) clientId = "client-peregrine";
+          else if (account.includes("Norstar")) clientId = "client-norstar";
+
+          const openDaysPlus = cleanNum(r[2]);
+          const claimStatus = r[3]?.trim() || "Submitted";
+          const shipName = r[4]?.trim() || "Unknown Vessel";
+          const voyageNo = r[5]?.trim() || "";
+          const cpDate = parseDt(r[6]);
+          const charterer = r[7]?.trim() || "";
+          const broker = r[8]?.trim() || "";
+          const claimFiledDate = parseDt(r[9]);
+          const filedAmount = cleanNum(r[10]);
+          const agreedAmount = cleanNum(r[11]);
+          const claimType = r[12]?.trim() || "Demurrage";
+          const notes = r[13]?.trim() || "";
+          const invoiceNo = r[14]?.trim() || "";
+          const agreedDate = parseDt(r[15]);
+          const paymentReceived = cleanNum(r[16]);
+          const counterparty = r[17]?.trim() || charterer;
+          const contractType = r[18]?.trim() || "CP";
+          const layday = parseDt(r[19]);
+          const cancelling = parseDt(r[20]);
+          const instructionReceived = parseDt(r[21]);
+          const blQuantity = r[22]?.trim() || "";
+          const voyageEnds = parseDt(r[23]);
+          const claimReceived = parseDt(r[24]);
+          const timebarDays = cleanNum(r[25]) || 45;
+          const timebarDate = parseDt(r[26]);
+          const timebarred = r[27]?.trim().toLowerCase() === "true" ? 1 : 0;
+          const ownersClaim = cleanNum(r[28]);
+          const openDays = cleanNum(r[29]) || openDaysPlus;
+          const paymentConcluded = r[30]?.trim().toLowerCase() === "true" ? 1 : 0;
+          const claimClosed = (r[31]?.trim().toLowerCase() === "true" || claimStatus.includes("Claim Closed") || claimStatus.includes("Write Off")) ? 1 : 0;
+          const billableAmount = cleanNum(r[32]);
+          const taxYear = r[33]?.trim() || "2024-2025";
+          const claimName = `${shipName} - ${charterer || "Voyage"} (${claimId})`;
+          const assignedTo = "Rohit Mengane";
+          const createdAt = instructionReceived ? `${instructionReceived}T08:00:00.000Z` : (cpDate ? `${cpDate}T08:00:00.000Z` : now);
+
+          insertTrackerClaim.run(
+            claimId, clientId, claimName, account, broker, claimStatus, claimType, shipName,
+            contractType, voyageNo, assignedTo, openDays, claimClosed, "", notes,
+            JSON.stringify([]), 0, counterparty, "Charterer", filedAmount,
+            ownersClaim, agreedAmount, billableAmount, paymentReceived, paymentConcluded,
+            layday || "", cancelling || "", voyageEnds || "", instructionReceived || "", "",
+            claimReceived || "", 30, timebarDays, timebarred, agreedDate || "",
+            cpDate || "", 0, invoiceNo, taxYear, blQuantity,
+            ownersClaim, timebarDate || "", claimFiledDate || "", createdAt, now
+          );
+        }
+      });
+      tx(dataRows);
+      console.log(`Auto-seeded ${dataRows.length} claims from LaytimeServicesTracker.csv`);
+    }
+  } catch (trackerErr) {
+    console.warn("Tracker CSV auto-ingestion error:", trackerErr);
+  }
 
   console.log("Database seeded successfully with users, claims, RAC cases, and notifications.");
 }

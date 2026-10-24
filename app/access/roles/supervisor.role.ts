@@ -28,6 +28,7 @@ export const supervisorRole: RoleDefinition = {
   hiddenFields: [],
   visibleScreens: [
     "/dashboard",
+    "/dashboard/supervisor",
     "/claims",
     "/claims/create",
     "/calculator",
@@ -38,7 +39,8 @@ export const supervisorRole: RoleDefinition = {
     "/analytics",
     "/reports",
     "/documents",
-    "/users"
+    "/users",
+    "/ai-assistant"
   ],
   menuItems: [
     "Dashboard",

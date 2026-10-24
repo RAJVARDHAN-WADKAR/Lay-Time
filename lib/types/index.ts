@@ -78,23 +78,41 @@ export type ClaimStatus =
   | "Review"
   | "Settled"
   | "Disputed"
-  | "Timebarred";
+  | "Timebarred"
+  | "2. Nil Demurrage (No Claim)"
+  | "3. Pending Info from Owners"
+  | "4. Calculation Sent to Owners"
+  | "5. Claim Filed"
+  | "6. Waiting Charterers Response"
+  | "7. Agreed"
+  | "8. Disputed"
+  | "9. Legal"
+  | "10. Claim Closed"
+  | "11. Commercial Write Off"
+  | string;
 
 export type ClaimType =
+  | "Demurrage"
+  | "Rebill"
   | "Load Port Demurrage"
   | "Discharge Port Demurrage"
   | "Combined Demurrage"
   | "Despatch"
-  | "Detention";
+  | "Detention"
+  | string;
 
 export type CPType =
+  | "CP"
+  | "COA"
+  | "Rebill"
   | "GENCON"
   | "ASBATANKVOY"
   | "NYPE"
   | "BIMCO"
   | "BPVOY4"
   | "SHELLVOY6"
-  | "Other";
+  | "Other"
+  | string;
 
 export type CounterpartyType =
   | "Owner"
@@ -263,6 +281,14 @@ export interface Claim {
   claimAgreedDate?: string;
   charterpartyDate?: string;
   daysAwaitingPayment?: number;
+
+  // Tracker Specific Fields
+  invoiceNumber?: string;
+  taxYear?: string;
+  blQuantity?: string;
+  ownersClaimAmount?: number;
+  claimTimebarDate?: string;
+  claimFiledDate?: string;
 
   // Relational data
   ports?: Port[];

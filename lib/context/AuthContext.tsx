@@ -245,7 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canEditClaim = useCallback(
     (claimAssignedTo?: string, claimClient?: string): boolean => {
       if (!isAuthenticated || !user) return false;
-      return canEditClaimFn(user.role, user.email, claimAssignedTo, user.name, claimClient, user.clientName);
+      return canEditClaimFn(user.role, user.email, claimAssignedTo, user.name, claimClient, user.clientName, user.id);
     },
     [isAuthenticated, user]
   );

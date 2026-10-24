@@ -51,10 +51,11 @@ export const reviewerClientRole: RoleDefinition = {
   },
   visibleScreens: (context?: UserContext): string[] => {
     if (isExternalClient(context)) {
-      return ["/claims", "/claims/[id]"];
+      return ["/dashboard", "/dashboard/reviewer-client", "/claims", "/claims/[id]", "/documents"];
     }
     return [
       "/dashboard",
+      "/dashboard/reviewer-client",
       "/claims",
       "/claims/[id]",
       "/rac",
@@ -66,7 +67,7 @@ export const reviewerClientRole: RoleDefinition = {
   },
   menuItems: (context?: UserContext): string[] => {
     if (isExternalClient(context)) {
-      return ["My Claims", "Documents", "Notifications"];
+      return ["Dashboard", "My Claims", "Documents", "Notifications"];
     }
     return [
       "Dashboard",

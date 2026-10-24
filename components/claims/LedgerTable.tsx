@@ -44,14 +44,16 @@ export interface ColumnDef {
 export const SRS_COLUMNS: ColumnDef[] = [
   // 1-13 General
   { key: "id", label: "Claim No.", category: "General", defaultVisible: true },
-  { key: "claimName", label: "Claim Name", category: "General", defaultVisible: true },
-  { key: "accountName", label: "Client Name", category: "General", defaultVisible: true },
+  { key: "invoiceNumber", label: "Invoice No.", category: "Financials", defaultVisible: true },
+  { key: "voyageNumber", label: "Voyage No.", category: "Voyage", defaultVisible: true },
+  { key: "accountName", label: "Client Account", category: "General", defaultVisible: true },
+  { key: "counterpartyName", label: "Charterer", category: "General", defaultVisible: true },
   { key: "shipName", label: "Ship Name", category: "General", defaultVisible: true },
   { key: "claimStatus", label: "Claim Status", category: "General", defaultVisible: true },
   { key: "claimType", label: "Claim Type", category: "General", defaultVisible: true },
-  { key: "brokerName", label: "Broker Name", category: "General", defaultVisible: false },
+  { key: "brokerName", label: "Broker Name", category: "General", defaultVisible: true },
+  { key: "claimName", label: "Claim Name", category: "General", defaultVisible: false },
   { key: "cpType", label: "CP Form", category: "General", defaultVisible: false },
-  { key: "counterpartyName", label: "Counterparty", category: "General", defaultVisible: false },
   { key: "counterpartyType", label: "Counterparty Role", category: "General", defaultVisible: false },
   { key: "assignedTo", label: "Assigned To", category: "General", defaultVisible: false },
   { key: "daysOpen", label: "Days Open", category: "General", defaultVisible: true },
@@ -59,22 +61,22 @@ export const SRS_COLUMNS: ColumnDef[] = [
 
   // 14-21 Financials
   { key: "claimFiledAmount", label: "Demurrage (USD)", category: "Financials", defaultVisible: true },
+  { key: "agreedAmount", label: "Agreed Settlement ($)", category: "Financials", defaultVisible: true },
+  { key: "billableAmount", label: "Billable Fee ($)", category: "Financials", defaultVisible: true },
   { key: "demurrageRatePerDay", label: "Demurrage Rate ($/d)", category: "Financials", defaultVisible: false },
   { key: "receivedClaimAmount", label: "Received Claim ($)", category: "Financials", defaultVisible: false },
-  { key: "agreedAmount", label: "Agreed Settlement ($)", category: "Financials", defaultVisible: false },
-  { key: "billableAmount", label: "Billable Amount ($)", category: "Financials", defaultVisible: false },
   { key: "paymentReceived", label: "Payment Collected ($)", category: "Financials", defaultVisible: false },
   { key: "paymentConcluded", label: "Payment Concluded", category: "Financials", defaultVisible: false },
   { key: "daysAwaitingPayment", label: "Days Awaiting Payment", category: "Financials", defaultVisible: false },
 
   // 22-28 Voyage
+  { key: "charterpartyDate", label: "CP Date", category: "Voyage", defaultVisible: false },
+  { key: "instructionReceivedDate", label: "Instruction Date", category: "Voyage", defaultVisible: false },
   { key: "layday", label: "Layday", category: "Voyage", defaultVisible: false },
   { key: "cancellingDate", label: "Cancelling Date", category: "Voyage", defaultVisible: false },
   { key: "voyageEndDate", label: "Voyage End Date", category: "Voyage", defaultVisible: false },
-  { key: "instructionReceivedDate", label: "Instruction Date", category: "Voyage", defaultVisible: false },
   { key: "noticeReceivedDate", label: "Notice Received Date", category: "Voyage", defaultVisible: false },
   { key: "claimReceivedDate", label: "Claim Received Date", category: "Voyage", defaultVisible: false },
-  { key: "charterpartyDate", label: "Charterparty Date", category: "Voyage", defaultVisible: false },
 
   // 29-32 Compliance
   { key: "noticeTimebarDays", label: "Notice Timebar (d)", category: "Compliance", defaultVisible: false },
@@ -156,14 +158,19 @@ export function LedgerTable({
   // Filtered claims
   const filteredClaims = useMemo(() => {
     return initialClaims.filter((claim) => {
-      // Global Search across ship, client, claim ID, claim name
+      // Global Search across ship, client, claim ID, invoice, counterparty, broker
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matches =
           (claim.shipName && claim.shipName.toLowerCase().includes(query)) ||
           (claim.accountName && claim.accountName.toLowerCase().includes(query)) ||
           (claim.id && claim.id.toLowerCase().includes(query)) ||
+          (claim.invoiceNumber && claim.invoiceNumber.toLowerCase().includes(query)) ||
+          (claim.voyageNumber && claim.voyageNumber.toLowerCase().includes(query)) ||
+          (claim.counterpartyName && claim.counterpartyName.toLowerCase().includes(query)) ||
+          (claim.brokerName && claim.brokerName.toLowerCase().includes(query)) ||
           (claim.claimName && claim.claimName.toLowerCase().includes(query)) ||
+          (claim.claimNotes && claim.claimNotes.toLowerCase().includes(query)) ||
           (claim.claimType && claim.claimType.toLowerCase().includes(query));
 
         if (!matches) return false;
@@ -326,12 +333,15 @@ export function LedgerTable({
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider whitespace-nowrap">
                   {visibleColumns.id && <th className="py-3.5 px-4">Claim No.</th>}
-                  {visibleColumns.claimName && <th className="py-3.5 px-4">Claim Name</th>}
-                  {visibleColumns.accountName && <th className="py-3.5 px-4">Client</th>}
+                  {visibleColumns.invoiceNumber && <th className="py-3.5 px-4">Invoice No.</th>}
+                  {visibleColumns.voyageNumber && <th className="py-3.5 px-4">Voyage No.</th>}
+                  {visibleColumns.accountName && <th className="py-3.5 px-4">Client Account</th>}
+                  {visibleColumns.counterpartyName && <th className="py-3.5 px-4">Charterer</th>}
                   {visibleColumns.shipName && <th className="py-3.5 px-4">Ship Name</th>}
                   {visibleColumns.claimStatus && <th className="py-3.5 px-4">Status</th>}
                   {visibleColumns.claimType && <th className="py-3.5 px-4">Claim Type</th>}
                   {visibleColumns.brokerName && <th className="py-3.5 px-4">Broker</th>}
+                  {visibleColumns.claimName && <th className="py-3.5 px-4">Claim Name</th>}
                   {visibleColumns.cpType && <th className="py-3.5 px-4">CP Form</th>}
                   {visibleColumns.counterpartyName && <th className="py-3.5 px-4">Counterparty</th>}
                   {visibleColumns.counterpartyType && <th className="py-3.5 px-4">Role</th>}
@@ -368,6 +378,18 @@ export function LedgerTable({
                         <Link href={`/claims/${c.id}`} className="hover:text-blue-600 hover:underline">
                           {c.id}
                         </Link>
+                      </td>
+                    )}
+
+                    {visibleColumns.invoiceNumber && (
+                      <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
+                        {c.invoiceNumber || "—"}
+                      </td>
+                    )}
+
+                    {visibleColumns.voyageNumber && (
+                      <td className="py-3.5 px-4 font-mono text-slate-600">
+                        {c.voyageNumber || "—"}
                       </td>
                     )}
 
@@ -608,12 +630,26 @@ export function LedgerTable({
               className="w-full rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">All Statuses</option>
-              <option value="Submitted">Submitted</option>
-              <option value="Incomplete">Incomplete</option>
-              <option value="Review">Review</option>
-              <option value="Settled">Settled</option>
-              <option value="Disputed">Disputed</option>
-              <option value="Timebarred">Timebarred</option>
+              <optgroup label="Operational Tracker Stages">
+                <option value="3. Pending Info from Owners">3. Pending Info from Owners</option>
+                <option value="4. Calculation Sent to Owners">4. Calculation Sent to Owners</option>
+                <option value="5. Claim Filed">5. Claim Filed</option>
+                <option value="6. Waiting Charterers Response">6. Waiting Charterers Response</option>
+                <option value="7. Agreed">7. Agreed</option>
+                <option value="8. Disputed">8. Disputed</option>
+                <option value="9. Legal">9. Legal</option>
+                <option value="2. Nil Demurrage (No Claim)">2. Nil Demurrage (No Claim)</option>
+                <option value="10. Claim Closed">10. Claim Closed</option>
+                <option value="11. Commercial Write Off">11. Commercial Write Off</option>
+              </optgroup>
+              <optgroup label="System Workflow Statuses">
+                <option value="Submitted">Submitted</option>
+                <option value="Incomplete">Incomplete</option>
+                <option value="Review">Review</option>
+                <option value="Settled">Settled</option>
+                <option value="Disputed">Disputed</option>
+                <option value="Timebarred">Timebarred</option>
+              </optgroup>
             </select>
           </div>
 

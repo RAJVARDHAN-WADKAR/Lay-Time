@@ -49,10 +49,10 @@ export function claimScope(user: ScopedUser, tableAlias: string = "claims"): Sco
   }
 
   if (role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR") {
-    // Match assigned_to by user ID, user Name, or user Email
+    // Match assigned_to strictly by exact user ID, user Name, or user Email
     return {
-      sql: `(${prefix}assigned_to = ? OR ${prefix}assigned_to = ? OR LOWER(${prefix}assigned_to) = LOWER(?) OR LOWER(${prefix}assigned_to) LIKE ?)`,
-      params: [user.id, user.name, user.name, `%${user.name.split(" ")[0].toLowerCase()}%`]
+      sql: `(${prefix}assigned_to = ? OR LOWER(${prefix}assigned_to) = LOWER(?) OR LOWER(${prefix}assigned_to) = LOWER(?))`,
+      params: [user.id, user.name, user.email]
     };
   }
 
@@ -325,7 +325,10 @@ export function getScopedClaimById(
  * Scoped access to SoF events. Throws 403 for Client.
  */
 export function getScopedSoF(user: ScopedUser, claimId: string): any[] {
-  if (user.role === "Client") {
+  const isClient =
+    user.role === "Client" ||
+    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  if (isClient) {
     const err = new Error("Forbidden: Client users may not access Statement of Facts");
     (err as any).statusCode = 403;
     throw err;
@@ -348,7 +351,10 @@ export function getScopedSoF(user: ScopedUser, claimId: string): any[] {
  * Scoped access to Laytime Calculations. Throws 403 for Client.
  */
 export function getScopedCalculations(user: ScopedUser, claimId: string): any {
-  if (user.role === "Client") {
+  const isClient =
+    user.role === "Client" ||
+    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  if (isClient) {
     const err = new Error("Forbidden: Client users may not access internal laytime calculations");
     (err as any).statusCode = 403;
     throw err;
@@ -370,7 +376,10 @@ export function getScopedCalculations(user: ScopedUser, claimId: string): any {
  * Scoped access to Discrepancies. Throws 403 for Client.
  */
 export function getScopedDiscrepancies(user: ScopedUser, claimId: string): any[] {
-  if (user.role === "Client") {
+  const isClient =
+    user.role === "Client" ||
+    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  if (isClient) {
     const err = new Error("Forbidden: Client users may not access discrepancy reports");
     (err as any).statusCode = 403;
     throw err;
@@ -392,31 +401,39 @@ export function getScopedDiscrepancies(user: ScopedUser, claimId: string): any[]
  * Scoped access to RAC Cases. Throws 403 for Client.
  */
 export function getScopedRacCases(user: ScopedUser, caseId?: string): any {
-  if (user.role === "Client") {
+  const isClient =
+    user.role === "Client" ||
+    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  if (isClient) {
     const err = new Error("Forbidden: Client users may not access RAC module");
     (err as any).statusCode = 403;
     throw err;
   }
 
   const db = getDatabase();
+  const isProcessor =
+    user.role === "Claim Processor" ||
+    user.role === "Processor" ||
+    user.role === "CLAIM_PROCESSOR";
+
   if (caseId) {
-    if (user.role === "Claim Processor" || user.role === "Processor") {
+    if (isProcessor) {
       const sql = `
         SELECT * FROM rac_cases 
-        WHERE id = ? AND (LOWER(assigned_to) = LOWER(?) OR assigned_to = ?)
+        WHERE id = ? AND (LOWER(assigned_to) = LOWER(?) OR assigned_to = ? OR LOWER(assigned_to) = LOWER(?))
       `;
-      return db.prepare(sql).get(caseId, user.name, user.id);
+      return db.prepare(sql).get(caseId, user.name, user.id, user.email);
     }
     return db.prepare("SELECT * FROM rac_cases WHERE id = ?").get(caseId);
   }
 
-  if (user.role === "Claim Processor" || user.role === "Processor") {
+  if (isProcessor) {
     const sql = `
       SELECT * FROM rac_cases 
-      WHERE (LOWER(assigned_to) = LOWER(?) OR assigned_to = ?) 
+      WHERE (LOWER(assigned_to) = LOWER(?) OR assigned_to = ? OR LOWER(assigned_to) = LOWER(?)) 
       ORDER BY created_at DESC
     `;
-    return db.prepare(sql).all(user.name, user.id);
+    return db.prepare(sql).all(user.name, user.id, user.email);
   }
 
   return db.prepare("SELECT * FROM rac_cases ORDER BY created_at DESC").all();
