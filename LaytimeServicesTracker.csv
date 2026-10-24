@@ -1,0 +1,622 @@
+﻿"CLAIM%23","Account","Open Days+","Claim Status","SHIP NAME","Voyage Number","C/P DATE","CharterersName","BROKER","Claim Filed Date","ClaimFiledAmount","Agreed ($)","ClaimType","Notes","Invoice Number","Agreed Date","PaymentReceived","Counterparty Name","Contract Type","Layday","Cancelling","InstructionReceived","BLQuantity","Voyage Ends","Claim Received","ClaimTimebarDays","ClaimTimberdate","Timebarred","Owners Claim","Open Days","Payment Concluded","Claim Concluded","Billable($)","TaxYear","ID","Update"
+"DBLS24397","Sokana3","0","2. Nil Demurrage (No Claim)","Louis P","900030","11/10/2024","ADM","SPI Marine USA","18/11/2024","0",,"Demurrage","11/18 no dem calc sent
+",,"18/11/2024","18/11/2024",,"CP",,,"18/11/2024",,,,"45","13/02/1900","False",,"45,614","False","False","425","2024-2025","225","Choice 1"
+"DBLS24396","Sokana3","45,612","3. Pending Info from Owners","Marquette","1039002","09/10/2024","Vantage","SPI Marine USA",,,,"Demurrage","11/16 ship docs tees
+",,,,,"COA",,,"15/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","224","Choice 1"
+"DBLS24395","Sokana3","45,612","4. Calculation Sent to Owners","Owl 3","912013","20/09/2024","Rubis","Netco Houston",,,,"Demurrage","11/16 inv requ - agent sof disch",,,,,"CP",,,"14/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","223","Choice 1"
+"DBLS24394","Sokana3","2","5. Claim Filed","Rudolf Schulte","312015","29/08/2024","Luberef","Clarksons Specialized DMCC","14/11/2024","42,068.09",,"Demurrage","11/16 revised sent
+11/15 broker counters weather and wrong ship name on pump log. to ops
+11/14 claim filed","LUBEREF290824D",,,,"CP",,,"13/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","222","Choice 1"
+"DBLS24393","Sokana3","45,612","4. Calculation Sent to Owners","Rudolf Schulte","312015","28/08/2024","ADM","SPI Marine USA",,,,"Demurrage","11/16 inv requ",,,,,"COA",,,"13/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","221","Choice 1"
+"DBLS24392","Sokana3","45,612","3. Pending Info from Owners","Rudolf Schulte","312015","27/08/2024","NCTI","Netco Houston",,,,"Demurrage","11/16 inv requ",,,,,"CP",,,"13/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","220","Choice 1"
+"DBLS24391","Sokana3","45,609","3. Pending Info from Owners","Alfred N","700031","27/09/2024","ADM","SPI Marine USA",,,,"Demurrage","11/13 time between berths load, barge disch docs ",,,,,"CP",,,"13/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","219","Choice 1"
+"DBLS24390","Sokana3","2","6. Waiting Charterers Response","Owl 6","915028","07/10/2024","ETL","Odin USA","12/11/2024","183,770.14",,"Demurrage","11/12 claim filed, broker receipt","ETL10072024D",,,,"CP",,,"12/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","218","Choice 1"
+"DBLS24389","Eastport USA LLC","45,608","3. Pending Info from Owners","SC Draco","Lift 9","12/08/2024","Shell","Eastport Maritime USA LLC",,,,"Demurrage","11/12 more berths rotterdam? antwerp? delay reasons? nomination needed",,,,,"COA",,,"11/11/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","217","Choice 1"
+"DBLS24388","Sokana3","0","6. Waiting Charterers Response","Starlight I","120062","11/09/2024","Greyrock","Bluepoint Maritime","11/11/2024","163,625",,"Demurrage","11/11 claim filed, chtrs receipt","GREY09112024D",,,,"CP",,,"11/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","216","Choice 1"
+"DBLS24387","Sokana3","3","6. Waiting Charterers Response","Cech","1113006","18/10/2024","Cepsa","Medco","11/11/2024","36,354.17",,"Demurrage","11/12 broker receipt
+11/11 claim filed","181024CEPD",,,,"CP",,,"11/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","215","Choice 1"
+"DBLS24386","Sokana3","2","6. Waiting Charterers Response","Cech","1113005","10/09/2024","Enjet","Bluepoint Maritime","12/11/2024","8,781.25",,"Demurrage","11/14 chtrs reciept
+11/12 claim filed","ENJET09102024D",,,,"CP",,,"11/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","214","Choice 1"
+"DBLS24385","Sokana3","1","6. Waiting Charterers Response","Linus P","300034","09/09/2024","Greenergy","Howe Robinson London","13/11/2024","260,451.39",,"Demurrage","11/13 claim filed, broker receipt (said it is greenergy not trafi)","TRA090924D",,,,"CP",,,"11/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","213","Choice 1"
+"DBLS24384","Sokana3","12","6. Waiting Charterers Response","Rebecca Schulte","310023","20/09/2024","Trafigura","Howe Robinson London","06/11/2024","103,116.67",,"Demurrage","11/18 chtrs receipt
+11/9 sent more docs
+11/7 broker asked more docs, to sok
+11/6 claim filed","TRA200924D",,,,"CP",,,"06/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","212","Choice 1"
+"DBLS24383","Sokana3","0","5. Claim Filed","Chase Ocean","1032001","30/08/2024","FGV IFFCO
+Trading ","Riverside","18/11/2024","107,610.42",,"Demurrage","11/18 claim filed","FELDA300824D",,,,"CP",,,"06/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","211","Choice 1"
+"DBLS24382","Sokana3","1","6. Waiting Charterers Response","Starlight II","140072","22/10/2024","Equinor","Infinity Shipbrokers","05/11/2024","34,215.28",,"Demurrage","11/6 chtrs reciept
+11/5 claim filed, broker receipt
+- added 1hr for dst","EQU221024D",,,,"CP",,,"04/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","210","Choice 1"
+"DBLS24381","Sokana3","0","6. Waiting Charterers Response","Stone I","170056","19/10/2024","Hartree","OB Americas LLC","04/11/2024","110,225.69",,"Demurrage","11/4 claim filed, chtrs receipt
+- laycan amended to 23/24th per addendum","HAR10192024D",,,,"CP",,,"01/11/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","209","Choice 1"
+"DBLS24380","Sokana3","4","6. Waiting Charterers Response","Owl 1","910029","19/08/2024","Stryker","Galbraith's Chemicals","01/11/2024","176,833.33",,"Demurrage","11/1  claim filed, broker reciept","STRYKER310724D",,,,"CP",,,"31/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","208","Choice 1"
+"DBLS24379","Sokana3","3","6. Waiting Charterers Response","Marie C","350031","16/09/2024","ADM","SPI Marine USA","01/11/2024","41,237.5",,"Demurrage","11/1 claim filed, chtrs receipt","ADM160924D",,,,"CP",,,"31/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","207","Choice 1"
+"DBLS24378","Sokana3","5","7. Agreed","Marie C","350031","17/09/2024","Vantage","SPI Marine USA","01/11/2024","65,925",,"Demurrage","11/6 agreed
+11/1 claim filed, chtrs receipt","VCP231223SEP#2D",,,,"COA",,,"31/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","206","Choice 1"
+"DBLS24377","Sokana3","4","10. Claim Closed","Starlight II","140072","22/10/2024","Equinor
+ASA","Infinity Shipbrokers AS","31/10/2024","7,575.99","7,575.99","Rebill","11/1 broker receipt
+10/31 claim filed","EQU221024R","04/11/2024","04/11/2024",,"CP",,,"31/10/2024",,,,"45","13/02/1900","False",,"45,600","False","False","225","2024-2025","205","Choice 1"
+"DBLS24376","Sokana3","4","6. Waiting Charterers Response","Reinhold Schulte","313018","02/09/2024","ATF","Reshamwala Shipbrokers DMCC","01/11/2024","177,099.99",,"Demurrage","11/5 chtrs reciept
+11/4 broker receipt
+11/1 claim filed","ARAMC020924D",,,,"CP",,,"31/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","204","Choice 1"
+"DBLS24375","Sokana3","14","6. Waiting Charterers Response","Reinhold Schulte","313018","21/08/2024","Reliance","Steem 1960 Oslo","01/11/2024","27,078.75",,"Demurrage","11/15 chtrs receipt
+11/1 claim filed, broker receipt","RIL210824D",,,,"CP",,,"31/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","203","Choice 1"
+"DBLS24374","Sokana3","0","2. Nil Demurrage (No Claim)","Sky","160061","11/10/2024","Hartree","Braemar London - Tankers","31/10/2024",,,"Demurrage","10/30 calc too low to file",,"31/10/2024",,,"CP",,,"30/10/2024",,,,"45","13/02/1900","False",,"45,596","False","False","350","2024-2025","202","Choice 1"
+"DBLS24373","Sokana3","7","6. Waiting Charterers Response","Starlight I","120059","12/07/2024","Global Petroleum
+LLC","Southport Maritime","29/10/2024","2,430",,"Rebill","10/30 broker receipt
+10/29 claim filed","GLOBAL07122024M1",,,,"CP",,,"29/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","201","Choice 1"
+"DBLS24372","Sokana3","7","6. Waiting Charterers Response","Louis P","900029","23/08/2024","Vantage","SPI Marine USA","07/11/2024","167,587.29",,"Demurrage","11/7 claim filed, broker receipt","VCP221223AUG1D",,,,"COA",,,"29/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","200","Choice 1"
+"DBLS24371","Peregrine Tankers","14","6. Waiting Charterers Response","Das","Das 24/008","11/10/2024","Sacor","Howe Robinson London","31/10/2024","94,050",,"Demurrage","11/14 chtrs reciept
+11/1 broker receipt
+10/31 claim filed
+- not giving weather due to agent saying it is open sea berth","DS08D10312024",,,,"CP",,,"29/10/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","199","Choice 1"
+"DBLS24370","Sokana3","1","6. Waiting Charterers Response","Mandal","1038001","22/08/2024","Raizen","Galbraith's","31/10/2024","162,291.67",,"Demurrage","10/31 claim filed, chtrs reciept
+- giving flair till 0000 as agent didnt have end time","RAI220824D",,,,"CP",,,"28/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","198","Choice 1"
+"DBLS24369","Peregrine Tankers","19","8. Disputed","Al Reem","Al Reem 24/008","10/10/2024","CSSA","Clarksons","30/10/2024","7,890.28","1,390.28","Demurrage","11/18 chtrs counter 6hrs allowance load, maintained ours. they maintained, to ops for revision
+10/31 chtrs reciept
+10/30 claim filed, broker receipt","AL08D10302024",,,,"CP",,,"25/10/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","197","Choice 1"
+"DBLS24368","Sokana3","5","8. Disputed","Patrick C","919024","22/08/2024","Posidonia","Brazilship/Scanbrasil","24/10/2024","1,067",,"Rebill","10/25 broker said should have been direct to chtrs, they're working with agent to reverse charge for sokana
+10/24 ops filed","ACELEN08222024R2",,,,,,,"24/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","196",
+"DBLS24367","Norstar","0","2. Nil Demurrage (No Claim)","Sun 9","2308","16/09/2024","OQ
+Trading (Singapore)","Steem 1960 Singapore","29/10/2024","0",,"Demurrage","10/24 no dem calc sent",,,,,"CP",,,"24/10/2024",,,,"45","13/02/1900","False",,"0","False","False","600","2024-2025","193","Choice 1"
+"DBLS24366","Sokana3","13","10. Claim Closed","Cielo di New York","1033003","13/09/2024","Trafigura","Howe Robinson London","24/10/2024","22,808.96","22,808.96","Rebill","10/24 sent full ds as requested
+10/23 claim filed, broker receipt",,"06/11/2024","06/11/2024",,"CP",,,"23/10/2024",,,,"45","13/02/1900","False",,"45,602","False","False","225","2024-2025","192","Choice 1"
+"DBLS24365","Sokana3","6","6. Waiting Charterers Response","Starlight II","140071","24/09/2024","Greyrock","Bluepoint Maritime","23/10/2024","60,140.28",,"Demurrage","10/29 chtrs receipt
+10/23 claim filed","GREY09242024D",,,,"CP",,,"23/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","191","Choice 1"
+"DBLS24364","Sokana3","5","6. Waiting Charterers Response","Otto H","800031","11/09/2024","Vantage","SPI Marine USA","23/10/2024","62,162.5",,"Demurrage","10/24 chtrs receipt
+10/23 claim filed, broker receipt","VCP231223SEP1D",,,,"COA",,,"22/10/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","190","Choice 1"
+"DBLS24363","Sokana3","14","7. Agreed","Starlight II","140071","24/09/2024","Greyrock","Bluepoint Maritime","22/10/2024","46,817.36","24,320.00","Rebill","11/5 chased vd
+10/23 comm agreed to bill basis estimate vs actual amount
+10/22 claim filed, broker questions amount. maintained
+- speed up","GREY09242024R",,,,"CP",,,"22/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","189",
+"DBLS24362","Sokana3","7","6. Waiting Charterers Response","Chem Ranger","100014","10/07/2024","Aramco Trading
+Fujairah","Harbour Marine","22/10/2024","18,819",,"Rebill","10/22 claim filed, broker receipt
+- holding tugs","ATC100724R2",,,,"CP",,,"22/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","188",
+"DBLS24361","Peregrine Tankers","11","6. Waiting Charterers Response","Yas","Yas
+24/005","20/09/2024","Valero","Gulfstream Tanker Chartering","21/10/2024","79,577.78",,"Demurrage","10/31 chtrs receipt
+10/21 claim filed, broker receipt","YA05D10212024",,,,"CP",,,"21/10/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","187","Choice 1"
+"DBLS24360","Sokana3","11","6. Waiting Charterers Response","Reinhold Schulte","313018","02/09/2024","Aramco Trading
+Fujairah","Reshamwala","18/10/2024","11,656",,"Rebill","10/21 broker receipt
+10/18 claim filed
+- awrp",,,,,"CP",,,"18/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","186","Choice 1"
+"DBLS24359","Sokana3","11","6. Waiting Charterers Response","Sky","160060","01/10/2024","Hartree","Braemar London - Tankers","17/10/2024","22,037.6",,"Rebill","10/22 chtrs ask heating stmt and engine log. sent
+10/17 claim filed, broker receipt",,,,,"CP",,,"17/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","185","Choice 1"
+"DBLS24358","Sokana3","8","7. Agreed","Patrick C","919024","22/08/2024","Posidonia","Brazilship/Scanbrasil","17/10/2024","13,213.89",,"Rebill","11/5 vd 11/18 likely
+10/25 agreed and being paid soon supposedly
+10/17 claim filed, broker says should have been settled direct with agent. ops responded to broker","ACELEN08222024R!","25/10/2024",,,"CP",,,"17/10/2024",,,,"45","13/02/1900","False",,"45,590","False","False","225","2024-2025","184",
+"DBLS24357","Sokana3","192","9. Legal","Rudolf Schulte","312012","14/03/2024","Count","SSY Chemicals USA","10/05/2024",,,"Demurrage","11/18 chtrs offer 50% split of the wait times at load/tees. to sok
+11/15 going arbitration
+11/7 ops chased
+10/31 accepted all but maintained the nors 
+10/17 comments to ops
+- old fairway one they asked us to handle",,,,,"CP",,,"16/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","183","Choice 1"
+"DBLS24356","Sokana3","13","6. Waiting Charterers Response","Hafnia Malacca","1033003","01/05/2024","PCLI","SPI Marine USA","16/10/2024","72,243.76",,"Rebill","10/21 sent revised 69,068.76
+10/17 sent cover sheet and maintainedd, broker maintained, maintained ours
+10/16 claim filed, broker asked cover sheet and rejects most costs. to sok for cover sheet, will maintain all","PCLI05012024CR",,,,"CP",,,"16/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","182","Choice 1"
+"DBLS24355","Sokana3","11","6. Waiting Charterers Response","Sky","160060","01/10/2024","Hartree","Braemar London - Tankers","17/10/2024","53,480.56",,"Demurrage","10/18 chtrs receipt
+10/17 claim filed, broker reciept","HAR10012024D",,,,"CP",,,"16/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","181","Choice 1"
+"DBLS24354","Sokana3","11","6. Waiting Charterers Response","Willard J","600034","01/10/2024","Vietsea","United Maritime","18/10/2024","46,582.33",,"Demurrage","10/18 claim filed, broker receipt","VIETSEA011024D",,,,"CP",,,"16/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","180","Choice 1"
+"DBLS24353","Sokana3","6","10. Claim Closed","Cielo di New York","1037002","09/08/2024","ST Shipping","Poten","16/10/2024","10,728.78","10,728.78","Rebill","10/16 claim filed, broker receipt","STSHIP08092024R","22/10/2024","22/10/2024",,"CP",,,"16/10/2024",,,,"45","13/02/1900","False",,"45,587","False","False","225","2024-2025","179","Choice 1"
+"DBLS24352","Sokana3","16","6. Waiting Charterers Response","Owl 5","914030","16/09/2024","Posidonia","Brazilship/Scanbrasil","16/10/2024","160,041.67",,"Demurrage","11/1 revised sent
+10/31 ops said error on calc, asked invoice
+10/16 claim filed, broker receipt","Posid16092024D",,,,"CP",,,"15/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","178","Choice 1"
+"DBLS24351","Sokana3","0","2. Nil Demurrage (No Claim)","Chase Ocean","1032002","25/09/2024","Wilmar","Raffles","15/10/2024","0",,"Demurrage","10/15 no dem calc sent",,"15/10/2024",,,"CP",,,"15/10/2024",,,,"45","13/02/1900","False",,"45,580","False","False","425","2024-2025","177","Choice 1"
+"DBLS24350","Sokana3","13","6. Waiting Charterers Response","Alfred N","700030","23/08/2024","Vantage","SPI Marine USA","15/10/2024","64,353.57","56,853.57","Demurrage","10/17 revised sent
+10/16 broker said 6hrs allowance st rose not given. to sok
+10/15 claim filed, broker receipt","VCP221223OVIKD",,,,"COA",,,"14/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","176","Choice 1"
+"DBLS24349","Sokana3","170","10. Claim Closed","Sky","160050","11/04/2024","Hartree","True North","07/05/2024",,"245,843.75","Demurrage","11/11 vd 11/15
+11/5 chased vd
+10/24 agreed
+10/23 they maintained, maintained ours
+10/15 they maintained, we maintained
+10/14 accept discharge counters. reject daylight
+- chris asked us to review charterer's counter on an old fairway claim. ","HAR04112024D","24/10/2024","15/11/2024",,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"45,589","False","False","425","2024-2025","175","Choice 1"
+"DBLS24348","Sokana3","0","2. Nil Demurrage (No Claim)","Owl 6","915027","23/08/2024","PCLI","SPI Marine USA","11/10/2024","0",,"Demurrage","10/11 no dem calc sent",,"11/10/2024",,,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"45,576","False","False","425","2024-2025","174","Choice 1"
+"DBLS24347","Sokana3","27","6. Waiting Charterers Response","Owl 3","912012","19/08/2024","Shell","Trillium Shipbrokers","15/10/2024","66,506.47",,"Demurrage","11/11 chtrs ask a couple questions
+10/15 claim filed, chtrs receipt","Shell19082024D",,,,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","173","Choice 1"
+"DBLS24346","Sokana3","0","2. Nil Demurrage (No Claim)","Chem Patriot","230017","09/07/2024","Intergrain","Galbraith's","11/10/2024","0",,"Demurrage","10/11 no dem calc sent",,"11/10/2024",,,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"45,576","False","False","425","2024-2025","172","Choice 1"
+"DBLS24345","Sokana3","0","2. Nil Demurrage (No Claim)","Marquette","1039001","04/09/2024","Tricon","Clarksons","11/10/2024","0",,"Demurrage","10/11 no dem calc sent",,"11/10/2024",,,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"45,576","False","False","425","2024-2025","171","Choice 1"
+"DBLS24344","Sokana3","18","10. Claim Closed","Marquette","1039001","23/08/2024","ADM","SPI Marine USA","18/10/2024","88,621.57","59,621.57","Demurrage","10/29 chtrs receipt 
+10/21 sent revised 59,621.57
+10/18 claim filed, broker counters end date differs. to sok for revised","ADM08242024D","05/11/2024","05/11/2024",,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"45,601","False","False","425","2024-2025","170","Choice 1"
+"DBLS24343","Sokana3","13","6. Waiting Charterers Response","Alfred N","700030","22/08/2024","Lyondell","Odin USA","15/10/2024","40,841.67",,"Demurrage","10/15 claim filed, broker receipt","Lyond22082024D",,,,"CP",,,"11/10/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","169","Choice 1"
+"DBLS24342","Eastport USA LLC","4","6. Waiting Charterers Response","Global Glory","LIFT 8","11/07/2024","Shell","Eastport Maritime USA LLC","24/10/2024","474,491.54",,"Demurrage","10/25 chtrs reciept
+10/24 claim sent to chtrs
+10/23 claim from owners 
+- owners claim has a calc error, sent per epus
+",,,,,"COA",,,"10/10/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","168","Choice 1"
+"DBLS24341","Sokana3","36","7. Agreed","Stone I","170055","30/09/2024","Shell","Bluepoint Maritime","10/10/2024","60,773.61",,"Demurrage","11/15 Agreed
+10/14 chtrs receipt
+10/10 claim filed","SHELL09302024D","15/11/2024",,,"CP",,,"10/10/2024",,,,"45","13/02/1900","False",,"45,611","False","False","425","2024-2025","167","Choice 1"
+"DBLS24340","Peregrine Tankers","18","6. Waiting Charterers Response","Al Reem","Al Reem 24/007","13/09/2024","Trafigura","Affinity","10/10/2024","26,488.89",,"Demurrage","10/14 chtrs receipt
+10/10 claim filed, broker receipt","AL07D10102024",,,,"CP",,,"09/10/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","166","Choice 1"
+"DBLS24339","Sokana3","14","7. Agreed","Steel","180046","12/04/2024","Raizen","Brazilship/Scanbrasil","08/10/2024","149,028.26",,"Rebill","11/5 chased
+10/22 agreed, they want add comm removed. ops maintained
+10/8 claim filed, broker receipt","RAIZEN04122024M1","22/10/2024",,,"CP",,,"08/10/2024",,,,"45","13/02/1900","False",,"45,587","False","False","225","2024-2025","165","Choice 1"
+"DBLS24338","Norstar","18","6. Waiting Charterers Response","Hexagon Alpha","HEX24002","19/08/2024","ED&F Man Molasses","Nexo","10/10/2024","71,854.81",,"Demurrage","10/10 claim filed, broker receipt","HEX24002Dem",,,,"CP",,,"07/10/2024",,,,"45","13/02/1900","False",,"0","False","False","600","2024-2025","164","Choice 1"
+"DBLS24337","Peregrine Tankers","21","10. Claim Closed","Charline","Charline 24/004","27/09/2024","Shell","True North","08/10/2024","58,050","58,050.00","Demurrage","10/8 claim filed, chtrs receipt","CH04D10082024","29/10/2024","29/10/2024",,"CP",,,"07/10/2024",,,,"45","13/02/1900","False",,"45,594","False","False","500","2024-2025","163","Choice 1"
+"DBLS24336","Sokana3","0","10. Claim Closed","El Zorro","992008","22/09/2024","Rubis","Netco Houston","07/10/2024","54,915","54,915.00","Demurrage","10/7 claim filed, chtrs counter cbp. maintained ours. Agreed","Rubis22092024D","07/10/2024","11/10/2024",,"CP",,,"07/10/2024",,,,"45","13/02/1900","False",,"45,572","False","False","425","2024-2025","162","Choice 1"
+"DBLS24335","Sokana3","0","2. Nil Demurrage (No Claim)","Hafnia Malacca","1033005","20/09/2024","ETL","Bluepoint Maritime","07/10/2024",,,"Demurrage","10/7 no dem calc sent",,"07/10/2024",,,"CP",,,"07/10/2024",,,,"45","13/02/1900","False",,"45,572","False","False","425","2024-2025","161","Choice 1"
+"DBLS24334","Sokana3","3","10. Claim Closed","Starlight II","140070","12/08/2024","Vitol","Bluepoint Maritime","04/10/2024","5,676.07","5,676.07","Rebill","10/8 chtrs receipt
+10/4 claim filed","VIT08122024R","07/10/2024","07/10/2024",,"CP",,,"04/10/2024",,,,"45","13/02/1900","False",,"45,572","False","False","225","2024-2025","160","Choice 1"
+"DBLS24333","Sokana3","32","6. Waiting Charterers Response","El Zorro","992007","30/08/2024","Shell","Southport Maritime","04/10/2024","1,250",,"Rebill","11/5 chased
+10/7 chtrs reciept
+10/4 claim filed, broker receipt","SHE300824R",,,,"CP",,,"04/10/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","159","Choice 1"
+"DBLS24332","Sokana3","7","10. Claim Closed","Starlight II","140067","07/08/2024","Vitol","Bluepoint Maritime","02/10/2024","5,317.97","5,317.97","Rebill","10/3 chtrs receipt
+10/2 claim filed","VIT07082024R","09/10/2024","09/10/2024",,"CP",,,"02/10/2024",,,,"45","13/02/1900","False",,"45,574","False","False","225","2024-2025","154","Choice 1"
+"DBLS24331","Norstar","36","6. Waiting Charterers Response","Harmony","HAR2412","23/09/2024","Reliance","United Marine","02/10/2024","18,247.92",,"Demurrage","11/6 accting chased
+10/9 chased receipt
+10/2 claim filed, broker receipt","HAR2412Dem",,,,"CP",,,"01/10/2024",,,,"45","13/02/1900","False",,"0","False","False","600","2024-2025","153","Choice 1"
+"DBLS24330","Peregrine Tankers","44","6. Waiting Charterers Response","Das","Das 24/007","13/09/2024","Sacor","Howe Robinson","01/10/2024","56,165.97",,"Demurrage","11/14 chtrs receipt
+11/5 chased
+10/9 chased reciept
+10/1 claim filed, broker recepit","DS07D10012024",,,,"CP",,,"30/09/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","152","Choice 1"
+"DBLS24329","Sokana3","26","6. Waiting Charterers Response","Hafnia Soya","1032007","04/09/2024","Alkagesta","Monaco Shipbrokers","02/10/2024","64,483.33",,"Demurrage","10/3 chtrs receipt
+10/2 claim filed, broker receipt","ALK040924D",,,,"CP",,,"30/09/2024",,,,"45","13/02/1900","False",,"0","False","False","400","2024-2025","151","Choice 1"
+"DBLS24328","Sokana3","26","6. Waiting Charterers Response","Stone I","170054","11/09/2024","Hartree","Southport Maritime","02/10/2024","98,015.62",,"Demurrage","10/4 chtrs receipt
+10/3 broker receipt 
+10/2 claim filed","HAR09112024D",,,,"CP",,,"30/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","150","Choice 1"
+"DBLS24327","Sokana3","12","6. Waiting Charterers Response","Sky","160059","16/08/2024","Levantine","Essex","16/10/2024","46,550",,"Demurrage","10/17 chtrs receipt
+10/16 claim filed","LEV08162024COA1D",,,,"COA",,,"27/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","149","Choice 1"
+"DBLS24326","Sokana3","21","10. Claim Closed","Linus P","300033","22/07/2024","Vantage","SPI Marine USA","08/10/2024","296,927.7","296,927.70","Demurrage","10/29 agreed
+10/8 claim filed, broker receipt","VCP221223JULYD","29/10/2024","29/10/2024",,"COA",,,"27/09/2024",,,,"45","13/02/1900","False",,"45,594","False","False","350","2024-2025","148","Choice 1"
+"DBLS24325","Sokana3","28","6. Waiting Charterers Response","Cielo di New York","1037003","13/09/2024","Trafigura","Howe Robinson London","30/09/2024","153,700",,"Demurrage","10/8 chtrs receipt 
+9/30 claim filed, broker receipt","TRA130924BD",,,,"CP",,,"27/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","147","Choice 1"
+"DBLS24324","Sokana3","36","6. Waiting Charterers Response","Sky","160057","19/07/2024","Aramco Trading Americas LLC","SSY USA","30/09/2024","28,907.27",,"Rebill","11/5 chased
+9/30 claim filed, broker reciept","ARAMCO07192024M",,,,"CP",,,"30/09/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","146","Choice 1"
+"DBLS24323","Sokana3","28","11. Commercial Write Off","El Zorro","992006","10/05/2024","Trafigura","Netco Houston","30/09/2024","11,028.4",,"Rebill","10/28 dropped per commercial advice
+10/25 chtrs cmaintain rejection. to sok for comm/legal
+10/17 chased
+10/9 ops maintained
+10/8 they reject again
+10/3 they reject, ops maintained
+10/2 chtrs reject, maintained ours 
+10/1 broker receipt
+9/30 claim filed","TRAFI100524HR",,,,"CP",,,"30/09/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","145","Choice 1"
+"DBLS24322","Peregrine Tankers","36","7. Agreed","Charline","Charline 24/003","30/08/2024","Suncor","Gulfstream Tanker Chartering","30/09/2024","7,088.89",,"Demurrage","11/5 Agreed
+10/1 chtrs receipt 
+9/30 claim filed
+- not giving early load credit due suncor terms, counting time between coc and flag state disch as seems normal pre discharge ops taking place","CH03D09262024","05/11/2024",,,"CP",,,"26/09/2024",,,,"45","13/02/1900","False",,"45,601","False","False","500","2024-2025","144","Choice 1"
+"DBLS24321","Sokana3","7","10. Claim Closed","Rebecca Schulte","310021","27/06/2024","ADM","SPI Marine USA","24/09/2024","10,935.32","10,935.32","Demurrage","9/25 chtrs receipt
+9/24 claim filed, broker receipt","ADM270624D","01/10/2024","01/10/2024",,"CP",,,"24/09/2024",,,,"45","13/02/1900","False",,"45,566","False","False","350","2024-2025","143","Choice 1"
+"DBLS24320","Sokana3","6","10. Claim Closed","Rebecca Schulte","310021","22/07/2024","Vantage","SPI Marine USA","25/09/2024","43,447.7","43,447.70","Demurrage","10/1 Agreed
+9/30 chtrs receipt 
+9/25 claim filed
+- st rose to dunkirk+ornskoldsvik parcel","VCP130624D2","01/10/2024","02/10/2024",,"CP",,,"24/09/2024",,,,"45","13/02/1900","False",,"45,566","False","False","350","2024-2025","142","Choice 1"
+"DBLS24319","Sokana3","6","10. Claim Closed","Rebecca Schulte","310021","22/07/2024","Vantage","SPI Marine USA","25/09/2024","41,441.17","41,441.17","Demurrage","10/1 Agreed 
+9/30 chtrs receipt
+9/25 claim filed, broker receipt
+- galveston to thames parcel","VCP130624D","01/10/2024","02/10/2024",,"COA",,,"24/09/2024",,,,"45","13/02/1900","False",,"45,566","False","False","350","2024-2025","141","Choice 1"
+"DBLS24318","Sokana3","0","10. Claim Closed","Marie C","350030","05/09/2024","Hevi","MJLF","26/09/2024","106,583.33","106,583.33","Demurrage","10/3 asked if paid
+9/26 claim filed, chtrs receipt. they question weather, to agent for clarification. Agreed vd 9/26
+- no delay by hurricane ","Hevi05092024D","26/09/2024","26/09/2024",,"CP",,,"24/09/2024",,,,"45","13/02/1900","False",,"45,561","False","False","350","2024-2025","140","Choice 1"
+"DBLS24317","Sokana3","47","6. Waiting Charterers Response","Patrick C","919024","22/08/2024","Posidonia","Brazilship/Scanbrasil","25/09/2024","102,223.2",,"Demurrage","10/2 chtrs reciept
+9/25 claim filed, broker reciept","ACELEN08222024D",,,,"CP",,,"24/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","139","Choice 1"
+"DBLS24316","Sokana3","34","11. Commercial Write Off","Patrick C","919022","12/06/2024","Enjet","Bluepoint Maritime","24/09/2024","23,664.07",,"Rebill","9/24 claim filed, broker rejects as freight all inclusive. to sok","ENJET06122024",,,,"CP",,,"24/09/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","138","Choice 1"
+"DBLS24315","Sokana3","34","6. Waiting Charterers Response","Rebecca Schulte","310022","13/09/2024","Trafigura","Howe Robinson London","24/09/2024","14,733.33",,"Demurrage","10/14 chtrs receipt
+10/9 chased receipt
+9/24 claim filed, broker receipt
+ still need agent sof load","TRA130924D",,,,"CP",,,"23/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","137","Choice 1"
+"DBLS24314","Sokana3","34","6. Waiting Charterers Response","Chem Ranger","100014","10/07/2024","Aramco Trading
+Fujairah","Harbour Marine","24/09/2024","41,499.99",,"Demurrage","9/24 claim filed, chtrs receipt","ATC100724D",,,,"CP",,,"23/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","136","Choice 1"
+"DBLS24313","Sokana3","34","6. Waiting Charterers Response","Hafnia Malacca","1033004","03/09/2024","Vitol","Bluepoint Maritime","24/09/2024","168,671.88",,"Demurrage","9/24 claim filed, chtrs receipt","VIT09032024D",,,,"CP",,,"23/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","135","Choice 1"
+"DBLS24312","Sokana3","43","10. Claim Closed","El Zorro","992007","30/08/2024","Shell ","Southport Maritime","24/09/2024","15,347.22","15,347.22","Demurrage","9/24 claim filed, chtrs receipt","SHE300824D","06/11/2024","06/11/2024",,"CP",,,"23/09/2024",,,,"45","13/02/1900","False",,"45,602","False","False","350","2024-2025","134","Choice 1"
+"DBLS24311","Sokana3","2","11. Commercial Write Off","Hafnia Soya","1032004","01/05/2024","Petro Canada","SPI Marine USA","23/09/2024","58,242.48","51,843.72","Rebill","9/25 ops revised to 51,843.72
+9/24 broker countered only dockage/wharfage. to sok
+9/23 claim filed","PCLI05012024/2R","25/09/2024","23/10/2024",,"CP",,,"23/09/2024",,,,"45","13/02/1900","False",,"45,560","False","False","225","2024-2025","133","Choice 1"
+"DBLS24310","Sokana3","9","10. Claim Closed","Cech","1113003","05/08/2024","Suncor","Trillium Shipbrokers","23/09/2024","18,740.86","18,740.86","Rebill","9/23 claim filed","SUN050824M1","02/10/2024","02/10/2024",,"CP",,,"21/09/2024",,,,"45","13/02/1900","False",,"45,567","False","False","225","2024-2025","132","Choice 1"
+"DBLS24309","Sokana3","35","6. Waiting Charterers Response","Starlight I","120061","22/08/2024","Vitol","Bluepoint Maritime","23/09/2024","242,958.33",,"Demurrage","10/3 resent with smaller pdfs, chtrs receipt
+9/23 claim filed","VIT08222024D",,,,"CP",,,"19/09/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","131","Choice 1"
+"DBLS24308","Sokana3","7","10. Claim Closed","FPMC 35","103015","05/07/2024","COFCO","SPI Marine UK","23/09/2024","80,433.33","63,597.22","Demurrage","10/9 asked if paid
+9/30 vd 10/7
+9/26 agreed
+9/25 chtrs counter start time on arrival SL not waiting recalada. also deslopping. to sok
+9/24 broker receipt, asked revised inv for bank details
+9/23 claim filed","COFCO050724D","30/09/2024","07/10/2024",,"CP",,,"19/09/2024",,,,"45","13/02/1900","False",,"45,565","False","False","350","2024-2025","130","Choice 1"
+"DBLS24307","Sokana3","18","10. Claim Closed","Cech","1113004","28/08/2024","Chevron","Gulfstream Tanker Chartering","23/09/2024","129,043.75","124,254.17","Demurrage","10/11 Agreed
+10/10 chtrs counter boiler issues discharge. 
+9/24 chtrs receipt
+9/23 claim filed","Chevr28082024D","11/10/2024","17/10/2024",,"CP",,,"19/09/2024",,,,"45","13/02/1900","False",,"45,576","False","False","425","2024-2025","129","Choice 1"
+"DBLS24306","Sokana3","55","6. Waiting Charterers Response","Hafnia Malacca","1033002","20/06/2024","Hartree","Clarksons Houston","19/09/2024","54,579",,"Rebill","11/13 broker chased 10/24 chased 
+10/15, 10/10 broker chased receipt
+9/24 chased receipt
+9/19 claim filed, broker receipt",,,,,"CP",,,"19/09/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","128","Choice 1"
+"DBLS24305","Sokana3","47","6. Waiting Charterers Response","Owl 5","914029","23/08/2024","Raizen","Tide Maritime","19/09/2024","21,908.33",,"Demurrage","11/5 chased
+9/24 chased receipt 
+9/19 claim filed, broker receipt","Raize27082024D",,,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","127","Choice 1"
+"DBLS24304","Sokana3","19","11. Commercial Write Off","Owl 5","914028","15/07/2024","Vibra","Galbraith's","20/09/2024","124,283.33","111,753.33","Demurrage","10/15 vd 10/18
+10/9 Agreed 
+10/4 maintained our last
+10/3 accept start time., reject shifting. they maintained
+10/2 chtrs counter start time load and shift from pob, 
+9/24 chtrs receipt 
+9/20 claim filed, broker receipt
+- billing time stuck at first berth, likely to be disputed","Vibra16072024D","09/10/2024","18/10/2024",,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"45,574","False","False","425","2024-2025","126","Choice 1"
+"DBLS24303","Sokana3","42","6. Waiting Charterers Response","Owl 5","914028","25/07/2024","Ipiranga","Netco Houston","24/09/2024","55,852.08",,"Demurrage","11/5 chased
+10/17 chased receipt
+9/24 claim filed
+- likely to counter no dem, trying to bill time stuck at berth after hose off due to draft restriction change by terminal. ","Ipira25072024D",,,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","125","Choice 1"
+"DBLS24302","Sokana3","33","6. Waiting Charterers Response","Otto H","800030","31/07/2024","Count","Galbraith's","25/09/2024","17,460",,"Demurrage","9/27 broker receipt
+9/25 claim filed, broker receipt","COUNT310724D",,,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","124","Choice 1"
+"DBLS24301","Sokana3","0","2. Nil Demurrage (No Claim)","Otto H","800030","30/07/2024","ADM","SPI Marine USA","18/09/2024","0",,"Demurrage","9/18 no dem calc sent",,"18/09/2024",,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"45,553","False","False","425","2024-2025","123","Choice 1"
+"DBLS24300","Sokana3","0","2. Nil Demurrage (No Claim)","Chem Ranger","100014","01/08/2024","Golding","Green & Black","18/09/2024","0",,"Demurrage","9/18 no dem calc sent",,"18/09/2024",,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"45,553","False","False","425","2024-2025","122","Choice 1"
+"DBLS24299","Sokana3","5","10. Claim Closed","Chem Ranger","100014","16/08/2024","ADM International","SPI Marine USA","19/09/2024","13,956.25","10,331.25","Demurrage","9/24 accepted tide deduction. agreed
+9/20 chtrs counter tide
+9/19 claim filed, broker receipt","ADMI160824D","24/09/2024","27/09/2024",,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"45,559","False","False","425","2024-2025","121","Choice 1"
+"DBLS24298","Sokana3","39","6. Waiting Charterers Response","Hafnia Soya","1032006","02/08/2024","ABGT","Bluepoint Maritime","19/09/2024","89,062.5",,"Demurrage","10/1 chtrs receipt
+9/24 chased reciept 
+9/19 claim filed","BIRLA08022024D",,,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","120","Choice 1"
+"DBLS24297","Sokana3","33","11. Commercial Write Off","Owl 4","913033","09/08/2024","Rubis","Netco Houston","18/09/2024","28,710","24,215.28","Demurrage","10/21 agreed and sent inv
+10/15 asked inv again
+10/8 to sok
+10/7 chtrs maintained. 
+9/23 chtrs counter shift at load, maintained ours
+9/18 claim filed, broker receipt
+- included detention after loading, might need to split to separate claim, will see how they respond","RUB090824D","21/10/2024","24/10/2024",,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"45,586","False","False","425","2024-2025","119","Choice 1"
+"DBLS24296","Sokana3","0","2. Nil Demurrage (No Claim)","Chase Ocean","1032001","09/08/2024","Riya
+International Pte Ltd","Atlantic Pioneer Maritime","18/09/2024","0",,"Demurrage","9/18 no dem calc sent",,"18/09/2024",,,"CP",,,"18/09/2024",,,,"45","13/02/1900","False",,"45,553","False","False","425","2024-2025","118","Choice 1"
+"DBLS24295","Peregrine Tankers","54","7. Agreed","Yas","Yas 24/004","23/08/2024","Suncor","Trillium Shipbrokers","18/09/2024","41,343.06","37,093.06","Demurrage","11/11 agreed
+11/6 chtrs counter san juan ship issue. to ops
+11/5 chased
+9/18 claim filed, chtrs receipt","YA04D09182024","11/11/2024",,,"CP",,,"17/09/2024",,,,"45","13/02/1900","False",,"45,607","False","False","500","2024-2025","117","Choice 1"
+"DBLS24294","Sokana3","0","2. Nil Demurrage (No Claim)","Rebecca Schulte","310021","25/07/2024","Tricon","Lighthouse Chartering","17/09/2024","0",,"Demurrage","9/17 no dem calc sent",,"17/09/2024",,,"CP",,,"16/09/2024",,,,"45","13/02/1900","False",,"45,552","False","False","425","2024-2025","116","Choice 1"
+"DBLS24293","Peregrine Tankers","48","6. Waiting Charterers Response","Al Reem","Al Reem
+24/006","13/08/2024","Cepsa","Madrid Shipping Advisors","18/09/2024","193,642.36",,"Demurrage","11/5 chased
+9/18 claim filed, broker receipt","ALR06D09172024",,,,"CP",,,"16/09/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","115","Choice 1"
+"DBLS24292","Peregrine Tankers","61","6. Waiting Charterers Response","Das","Das 24006","05/09/2024","Trafigura","Oil Brokerage Limited","18/09/2024","23,625",,"Demurrage","1/18 broker chased
+9/18 claim filed, chtrs receipt","DA06D09182024",,,,"CP",,,"16/09/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","114","Choice 1"
+"DBLS24291","Sokana3","0","2. Nil Demurrage (No Claim)","El Zorro","992005 Voy 10","10/05/2024","Trafigura","Netco Houston","17/09/2024",,,"Demurrage","9/17 no dem calc sent",,"17/09/2024",,,"CP",,,"15/09/2024",,,,"45","13/02/1900","False",,"45,552","False","False","425","2024-2025","113","Choice 1"
+"DBLS24290","Sokana3","22","7. Agreed","El Zorro","992005 Voy 9","10/05/2024","Trafigura","Netco Houston","24/09/2024","148,359.38","139,218.75","Demurrage","11/5 chased vd
+10/16 agreed
+9/26 to sok for revision
+9/25 chtrs counter more weather. asked agent the timings
+9/24 claim filed, broker reciept","TRAFI100524ID","16/10/2024",,,"CP",,,"15/09/2024",,,,"45","13/02/1900","False",,"45,581","False","False","425","2024-2025","111","Choice 1"
+"DBLS24289","Sokana3","0","2. Nil Demurrage (No Claim)","El Zorro","992005 Voy 8","10/05/2024","Trafigura","Netco Houston","17/09/2024","0",,"Demurrage","9/17 no dem calc sent",,"17/09/2024",,,"CP",,,"15/09/2024",,,,"45","13/02/1900","False",,"45,552","False","False","425","2024-2025","112","Choice 1"
+"DBLS24288","Sokana3","0","2. Nil Demurrage (No Claim)","Owl 6","915026","13/06/2024","Energy Transport
+Ltd","Bluepoint Maritime","12/09/2024","0",,"Demurrage","9/12 no dem calc sent",,"12/09/2024",,,"CP",,,"12/09/2024",,,,"45","13/02/1900","False",,"45,547","False","False","425","2024-2025","110","Choice 1"
+"DBLS24287","Sokana3","26","6. Waiting Charterers Response","Owl 3","912011","26/07/2024","Seariver
+Maritime","Netco Houston","10/10/2024","33,013.89",,"Demurrage","11/5 chased
+10/14 chtrs receipt
+10/10 claim filed, broker receipt
+- not deducting waiting pilots in river at disch per ops, expect write offs","SRM260724D",,,,"CP",,,"12/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","109","Choice 1"
+"DBLS24286","Sokana3","20","10. Claim Closed","Rudolf Schulte","312014","18/07/2024","ADM","SPI Marine USA","26/09/2024","65,186.97","65,186.97","Demurrage","10/9 chtrs reciept
+9/26 claim filed, broker receipt
+-not treating hamburg as multiple berths, called same berth 2x due to lack of cargo so didnt give shifting or 2nd berth nor allowance","ADMI180724D","16/10/2024","16/10/2024",,"CP",,,"12/09/2024",,,,"45","13/02/1900","False",,"45,581","False","False","425","2024-2025","108","Choice 1"
+"DBLS24285","Sokana3","32","6. Waiting Charterers Response","Rudolf Schulte","312014","17/07/2024","Count","Galbraith's","04/10/2024","26,312.82",,"Demurrage","11/5 chased
+10/9 chtrs receipt
+10/4 claim filed, broker reciept","COUNT170724D",,,,"CP",,,"12/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","107","Choice 1"
+"DBLS24284","Sokana3","42","6. Waiting Charterers Response","Marie C","350029","24/07/2024","Murex","Clarksons CT","24/09/2024","111,937.5",,"Demurrage","11/5 chased
+10/9 chased receipt
+9/24 claim filed, broker receipt","MUREX240724D",,,,"CP",,,"12/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","106","Choice 1"
+"DBLS24283","Sokana3","65","8. Disputed","Cielo di New York","1037002","09/08/2024","ST Shipping","Poten","12/09/2024","81,175",,"Demurrage","11/16 maintained ours
+11/15 chtrs counter bunkering
+11/5 chased
+9/12 claim filed, chtrs receipt","STSHIP08092024D",,,,"CP",,,"10/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","105","Choice 1"
+"DBLS24282","Sokana3","0","2. Nil Demurrage (No Claim)","Willard J","600033","09/05/2024","Maywal","Netco Houston","12/09/2024",,,"Demurrage","9/12 no dem",,"12/09/2024",,,"CP",,,"10/09/2024",,,,"45","13/02/1900","False",,"45,547","False","False","425","2024-2025","104","Choice 1"
+"DBLS24281","Sokana3","29","6. Waiting Charterers Response","Stone I","170053","11/07/2024","Maritime PressX","SSY London","07/10/2024","671,125",,"Demurrage","11/5 chased
+10/7 claim filed, chtrs receipt
+- sokana didnt have the terms so filed basis standard unamended bp4","SAH07112024D",,,,"CP",,,"10/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","103","Choice 1"
+"DBLS24280","Peregrine Tankers","19","10. Claim Closed","Charline","Charline
+24/002","14/08/2024","Seariver
+Maritime","Howe Robinson London","11/09/2024","61,068.75",,"Demurrage","10/17 vd 10/20
+10/9 asked if paid
+9/30 Agreed
+9/11 claim filed, chtrs receipt","CH02D09112024","30/09/2024","18/10/2024",,"CP",,,"09/09/2024",,,,"45","13/02/1900","False",,"45,565","False","False","500","2024-2025","102","Choice 1"
+"DBLS24279","Peregrine Tankers","66","6. Waiting Charterers Response","Das","Das 24/005","06/08/2024","Valero","Gulfstream Tanker Chartering","10/09/2024","79,644.44",,"Demurrage","11/15, 11/5 chased
+9/19 chtrs receipt 
+9/10 claim filed, broker receipt
+- ops not giving gangway discharge, told them valero likely to counter it","YA05D09102024",,,,"CP",,,"09/09/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","101","Choice 1"
+"DBLS24278","Sokana3","7","10. Claim Closed","Starlight II","140070","12/08/2024","Vitol","Bluepoint Maritime","09/09/2024","160,437.5","160,437.50","Demurrage","9/10 chtrs receipt 
+9/9 claim filed","VIT08122024D","16/09/2024","16/09/2024",,"CP",,,"06/09/2024",,,,"45","13/02/1900","False",,"45,551","False","False","425","2024-2025","100","Choice 1"
+"DBLS24277","Norstar","54","6. Waiting Charterers Response","Hexagon Alpha","HEX24001","19/08/2024","Vietsea","SSY Singapore","12/09/2024","70,629.17",,"Demurrage","11/5 chased
+10/10 chtrs reciept
+9/12 claim filed, broker receipt
+- seems excess pumping to deduct merak but billing in full","HEX24001DEMM",,,,"CP",,,"05/09/2024",,,,"45","13/02/1900","False",,"0","False","False","600","2024-2025","97","Choice 1"
+"DBLS24276","Sokana3","56","7. Agreed","Cech","1113003","05/08/2024","Suncor","Trillium Shipbrokers","04/09/2024","71,683.33","68,325.00","Demurrage","10/30 chtrs counter split flushing time. agreed
+9/4 claim filed, chtrs receipt
+- flushing time agreed to split by commercial, didn't inform us","SUN050824D",,,,"CP",,,"04/09/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","96","Choice 1"
+"DBLS24275","Eastport USA LLC","34","6. Waiting Charterers Response","SC Virgo","LIFT 7","10/06/2024","Shell","Eastport Maritime USA LLC","24/09/2024","236,279.74",,"Demurrage","9/25 chtrs receipt 
+9/24 claim sent to chtrs
+9/5 calc to epus",,,,"SC Shipping","CP",,,"04/09/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","95","Choice 1"
+"DBLS24274","Sokana3","54","6. Waiting Charterers Response","Marie C","350028","02/07/2024","Shell","Braemar London - Tankers","12/09/2024","53,483.13",,"Demurrage","11/5 chased
+9/13 chtrs receipt
+9/12 claim filed, broker receipt","SHE020724D",,,,"CP",,,"30/08/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","94","Choice 1"
+"DBLS24273","Sokana3","0","2. Nil Demurrage (No Claim)","Alfred N","700029","11/04/2024","Alnor","SPI Marine USA","09/09/2024",,,"Demurrage","9/9 no dem calc sent",,"09/09/2024",,,"CP",,,"30/08/2024",,,,"45","13/02/1900","False",,"45,544","False","False","350","2024-2025","93","Choice 1"
+"DBLS24272","Sokana3","0","10. Claim Closed","Louis P","900028","06/08/2024","Hevi","MJLF","06/09/2024","184,566.67","184,566.67","Demurrage","9/6 agreed  
+9/6 claim filed, broker receipt - no agent sof discharge availabled",,"06/09/2024","09/09/2024",,"CP",,,"30/08/2024",,,,"45","13/02/1900","False",,"45,541","False","False","350","2024-2025","92","Choice 1"
+"DBLS24271","Sokana3","69","8. Disputed","Patrick C","919018","25/06/2024","Citgo","Bluepoint Maritime","03/09/2024","272,437.5",,"Demurrage","11/11 chtrs counter shifting and time end at load. maintained ours due to miss river clause
+11/8, 11/4 ops chased
+9/24 chased
+9/4 chtrs receipt 
+9/3 claim filed - agent sof discharge","CITGO06252024D",,,,"CP",,,"29/08/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","91","Choice 1"
+"DBLS24270","Sokana3","69","8. Disputed","Owl 4","913029","24/04/2024","Renkert","SPI Marine USA","28/08/2024","5,050",,"Rebill","11/5 chased
+9/25 maintained ours
+9/24 broker questions it, to sok
+9/13, 9/5 chased receipt
+8/28 claim filed","NEXTCORE260424R",,,,"CP",,,"28/08/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","90","Choice 1"
+"DBLS24269","Sokana3","61","8. Disputed","Chem Ranger","100014","18/04/2024","ADM International SARL","SPI Marine USA","28/08/2024","108,135.85",,"Rebill","10/9 with lars
+9/27chtrs reject. to sok
+9/26 revised upward per ops and sent to broker
+9/24 waiting revised invoice due to different original estimate
+8/28 claim filed, broker rejected, maintained ours. ","ADMI180424R",,,,"CP",,,"28/08/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","89","Choice 1"
+"DBLS24268","Sokana3","69","6. Waiting Charterers Response","Reinhold Schulte","313017","30/05/2024","ENI","Nolarma","28/08/2024","1,942.79",,"Rebill","11/5, 10/17, 9/16, 9/5 chased 
+8/28 claim filed, chtrs receipt","ENI300524R",,,,"CP",,,"28/08/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","88","Choice 1"
+"DBLS24267","Sokana3","69","6. Waiting Charterers Response","Reinhold Schulte","313017","06/05/2024","Chevron","SPI Marine USA","28/08/2024","2,575.32",,"Rebill","11/5, 10/17, 9/24 chased
+8/28 claim filed, broker receipt","Chevron060524R",,,,"CP",,,"28/08/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","87","Choice 1"
+"DBLS24266","Eastport USA LLC","62","8. Disputed","FPMC 33","2401","05/08/2024","Proman","Eastport Maritime USA LLC","27/08/2024","97,666.67",,"Demurrage","10/18 chased for response
+9/19 chtrs counter sent to owners
+9/18 chased 
+8/29 chtrs receipt   
+8/27 claim sent to chtrs",,,,"Bahri","CP",,,"27/08/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","86","Choice 1"
+"DBLS24265","Peregrine Tankers","0","2. Nil Demurrage (No Claim)","St Mary","St Mary 24/007","12/07/2024","Marubeni","EA Gibson Houston","03/09/2024",,,"Demurrage","9/3 no dem",,"03/09/2024",,,"CP",,,"27/08/2024",,,,"45","13/02/1900","False",,"45,538","False","False","500","2024-2025","85","Choice 1"
+"DBLS24264","Peregrine Tankers","73","6. Waiting Charterers Response","Yas","Yas 24/003","05/08/2024","Valero","Howe Robinson London","03/09/2024","86,966.32",,"Demurrage","11/15, 11/5, 10/17 chased
+9/3 claim filed, broker receipt","YAS03D09022024",,,,"CP",,,"27/08/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","84","Choice 1"
+"DBLS24263","Sokana3","49","10. Claim Closed","Hafnia Malacca","1033003","01/05/2024","PCLI","SPI Marine USA","28/08/2024","489,232.5","489,232.50","Demurrage","10/16 agreed
+9/24 chased 
+8/30 chtrs receipt    
+8/28 claim filed, broker receipt","PCLI05012024CD","16/10/2024","23/10/2024",,"CP",,,"27/08/2024",,,,"45","13/02/1900","False",,"45,581","False","False","350","2024-2025","83","Choice 1"
+"DBLS24262","Sokana3","0","2. Nil Demurrage (No Claim)","Owl 4","913032","24/07/2024","EDF","Nexo Shipbroking LLC","23/08/2024","0",,"Demurrage","8/23 no dem calc sent",,"23/08/2024",,,"CP",,,"23/08/2024",,,,"45","13/02/1900","False",,"45,527","False","False","350","2024-2025","82","Choice 1"
+"DBLS24261","Sokana3","67","7. Agreed","Alfred N","700029","03/05/2024","Trafigura","Wake Marine","09/09/2024","234,750",,"Demurrage","11/14 Agreed, vd 11/27
+10/17 chased
+9/10 revised sent
+9/9 claim filed, broker receipt, broker countered start of time","Trafi030524D",,,,"CP",,,"22/08/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","81","Choice 1"
+"DBLS24260","Sokana3","46","10. Claim Closed","Owl 3","912010","13/07/2024","ATMI","Southport Maritime","12/09/2024","4,083.33","0.00","Demurrage","10/15 chtrs counter no dem due xdaylight. to sok as not mentioned on sofs, withdrawn
+9/30 sent agent sof disch
+9/13 chtrs ask another time sheet discharge. to sok 
+9/12 claim filed, broker receipt
+- no agent sofs either port per ops","ATMI13072024D",,,,"CP",,,"22/08/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","80","Choice 1"
+"DBLS24259","Norstar","21","10. Claim Closed","Sun 9","923006","12/06/2024","Sucden Geneva SA","Braemar DMCC","21/08/2024","16,580.95","9,830.95","Demurrage","10/18 they said paid 10/15. asked accts
+10/10 chased vd
+10/9 asked if piad
+9/16 vd 10/7
+9/11 agreed
+8/29 chtrs counter no dem, accepted some of their counter but maintained demurrage incurred   
+8/28 chtrs receipt   
+8/26 broker receipt   
+8/23 chased receipt    
+8/21 claim filed","SUN9/2306/DEMURRAGE","11/09/2024","18/10/2024",,"CP",,,"21/08/2024",,,,"45","13/02/1900","False",,"45,546","False","False","600","2024-2025","79","Choice 1"
+"DBLS24258","Sokana3","22","10. Claim Closed","Cielo di New York","1037001","27/07/2024","Sacor","Howe Robinson London","21/08/2024","59,906.25","59,906.25","Demurrage","9/12 agreed 
+8/26 chtrs receipt   
+8/21 claim filed, broker receipt","SAC270724D","12/09/2024","18/09/2024",,"CP",,,"21/08/2024",,,,"45","13/02/1900","False",,"45,547","False","False","350","2024-2025","78","Choice 1"
+"DBLS24257","Sokana3","0","2. Nil Demurrage (No Claim)","Starlight I","120059","12/07/2024","Global Petroleum LLC","Southport Maritime","21/08/2024","0",,"Demurrage","8/21 no dem calc sent",,"21/08/2024",,,"CP",,,"21/08/2024",,,,"45","13/02/1900","False",,"45,525","False","False","350","2024-2025","77","Choice 1"
+"DBLS24256","Sokana3","73","8. Disputed","Starlight I","120058","17/05/2024","Maritime PressX","SSY London","28/08/2024","808,797.92",,"Demurrage","11/8 ops chased
+11/4 maintained ours
+11/1 they reject time lost due to heating, to ops about this as nothing advised up front
+10/30 they're checking 
+10/28 ops chased
+10/17, 9/24 chased
+8/28 claim filed, chtrs receipt
+- seems heating was not done per cp, not advised prior to chtrs counter","SAH170524D",,,,"CP",,,"21/08/2024",,,,"45","13/02/1900","False",,"0","False","False","350","2024-2025","76","Choice 1"
+"DBLS24255","Sokana3","21","10. Claim Closed","Chem Patriot","230016","21/05/2024","Vantage Corn Processing","SPI Marine USA","19/08/2024","64,122.03","64,122.03","Rebill","8/19 claim filed, broker receipt, consider as chtrs receipt","Vanta22122023-1DEV","09/09/2024","09/09/2024",,"CP",,,"19/08/2024",,,,"45","13/02/1900","False",,"45,544","False","False","225","2024-2025","75","Choice 1"
+"DBLS24254","Peregrine Tankers","82","10. Claim Closed","Yas","Yas 24/002","12/07/2024","Koch","OB Americas LLC","17/08/2024","66,472.22",,"Demurrage","11/7 agreed
+11/5 chased
+9/19 chased - chtrs said 90 days to review roughly
+8/19 chtrs receipt   
+8/17 claim filed","YA02D08162024","07/11/2024","11/11/2024",,"CP",,,"16/08/2024",,,,"45","13/02/1900","False",,"45,603","False","False","500","2024-2025","74","Choice 1"
+"DBLS24253","Peregrine Tankers","68","10. Claim Closed","Charline","Charline 24/001","03/07/2024","Valero","Gulfstream Tanker Chartering","17/08/2024","8,576.39","8,576.39","Demurrage","11/5 chased vd
+10/24 Agreed
+9/19 chased but they wont review till at least 90 days
+8/18 chtrs receipt     
+8/16 claim filed  
+- ops billing amsterdam to docs onboard, likely to be disputed","CH01D08162024","24/10/2024","28/10/2024",,"CP",,,"16/08/2024",,,,"45","13/02/1900","False",,"45,589","False","False","500","2024-2025","73","Choice 1"
+"DBLS24252","Sokana3","4","10. Claim Closed","Willard J","600033","07/06/2024","ADM International SARL","SPI Marine USA","17/08/2024","128,249.01","128,249.01","Demurrage","8/21 agreed vd 8/23     
+8/19 broker receipt   
+8/17 claim filed","07062024ADMD","21/08/2024","23/08/2024",,"CP",,,"14/08/2024",,,,"45","13/02/1900","False",,"45,525","False","False","350","2024-2025","72","Choice 1"
+"DBLS24251","Sokana3","78","8. Disputed","Rudolf Schulte","312013","05/06/2024","Vantage Corn Processing","SPI Marine USA","19/08/2024","161,560.57","131,039.73","Demurrage","11/5 chased
+10/15 sok offers 50% split of difference, sent inv
+9/26 to sok
+9/25 chtrs maintained
+9/24 maintained per ops
+9/18 chtrs reject all time prior 12th as supposedly ship wasnt approved till then. to sok
+8/19 claim filed, broker receipt","VCP221223JUNED",,,,"COA","10/07/2024","30/07/2024","14/08/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","71","Choice 1"
+"DBLS24250","Sokana3","0","2. Nil Demurrage (No Claim)","Owl 6","915026","07/06/2024","Hartree Partners LP","Clarksons Houston","14/08/2024","0",,"Demurrage","8/14 no dem calc sent",,"14/08/2024",,,"CP",,,"14/08/2024",,,,"45","13/02/1900","False",,"45,518","False","False","425","2024-2025","70","Choice 1"
+"DBLS24249","Sokana3","20","10. Claim Closed","Alfred N","700029","18/04/2024","Biogra Trading FZE","Pinnacle Marine","14/08/2024","35,622.22","35,622.22","Demurrage","8/19 broker receipt, consider as chtrs receipt   
+8/14 claim filed","BIOGR180424D","03/09/2024","03/09/2024",,"CP",,,"14/08/2024",,,,"45","13/02/1900","False",,"45,538","False","False","425","2024-2025","69","Choice 1"
+"DBLS24248","Sokana3","64","10. Claim Closed","Sky","160054","21/06/2024","PCLI","SPI Marine USA","14/08/2024","99,111.81","99,111.81","Demurrage","10/17 chased, agreed
+9/24 chased 
+8/19 chtrs reciept
+8/14 claim filed","PCLI05012024D","17/10/2024","30/10/2024",,"CP",,,"13/08/2024",,,,"45","13/02/1900","False",,"45,582","False","False","425","2024-2025","68","Choice 1"
+"DBLS24247","Sokana3","53","10. Claim Closed","TG Aries","1034002","21/06/2024","Vantage Corn Processing","SPI Marine USA","15/08/2024","226,604.17","219,562.50","Demurrage","10/7 agreed
+10/1 chtrs counter tide for shifting to 2nd berth. to sok
+9/26 sent calc with port names swapped
+9/24 chased
+8/30 revised sent to broker
+8/21 broker said amend laytime. to sok
+8/15 claim filed, broker receipt","VCP221223KD","07/10/2024","08/10/2024",,"COA",,,"13/08/2024",,,,"45","13/02/1900","False",,"45,572","False","False","425","2024-2025","67","Choice 1"
+"DBLS24246","Sokana3","86","6. Waiting Charterers Response","FPMC 35","103014","07/06/2024","Vitol","Galbraith's","15/08/2024","254,041.67",,"Demurrage","11/8 ops chased
+11/5, 10/17 chased
+10/8 ops chased
+8/20 chtrs receipt
+8/15 claim filed, broker receipt","VIT070624D",,,,"CP",,,"13/08/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","66","Choice 1"
+"DBLS24245","Eastport USA LLC","32","6. Waiting Charterers Response","SC Taurus","LIFT 6","21/05/2024","Shell Trading US Company","Eastport Maritime USA LLC","26/09/2024","234,574.19",,"Demurrage","10/16 chased
+10/2 chtrs counter and ask more,. sent to owners 
+9/26 claim sent to chtrs",,,,"SC Shipping","COA",,,"13/08/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","65","Choice 1"
+"DBLS24244","Sokana3","24","10. Claim Closed","Chem Patriot","230016","21/05/2024","Vantage Corn Processing","SPI Marine USA","19/08/2024","54,563.97","50,084.81","Demurrage","9/24 chased vd
+9/12 revised to chtrs, agreed
+8/21 chtrs counter bunkering galveston
+8/19 claim filed, broker receipt
+- bunkering not on any docs received initially","Vanta22122023-1D","12/09/2024","13/09/2024",,"COA",,,"13/08/2024",,,,"45","13/02/1900","False",,"45,547","False","False","425","2024-2025","64","Choice 1"
+"DBLS24243","Sokana3","0","7. Agreed","Elsa Essberger","312013","21/05/2024","Sokana3","Wonsild","13/08/2024","84,906.25","84,906.25","Demurrage","8/13 ok to pay sent to ops - RECEIVED CLAIM FROM OWNERS","ESTK/2024/03293","13/08/2024",,,"CP",,,"13/08/2024",,,,"45","13/02/1900","False",,"45,517","False","False","425","2024-2025","63","Choice 1"
+"DBLS24242","Sokana3","34","10. Claim Closed","Hafnia Soya","1032005","01/08/2024","Shell Trading (US) Company","Southport Maritime","13/08/2024","66,966.67","57,536.67","Demurrage","10/8 ops chased vd
+9/24 chased vd
+9/17 inv sent
+9/16 Agreed, asked inv
+8/27 to chtrs accepting nor rejecting balance
+8/26 chtrs counter laycan+6 load (they're right), weather discharge (they're wrong). to sok
+8/14 chtrs receipt
+8/13 claim filed, broker receipt","SHELL08022024D","16/09/2024","11/10/2024",,"CP","02/08/2024","04/08/2024","13/08/2024",,,,"45","13/02/1900","False",,"45,551","False","False","425","2024-2025","60","Choice 1"
+"DBLS24241","Sokana3","38","10. Claim Closed","Otto H","800030","24/06/2024","Vantage Corn Processing","SPI Marine USA","16/08/2024","231,800","225,300.00","Demurrage","9/23 agreed and gave in on thames
+9/9 to chtrs accepting amsterdam but rejecting thames
+9/6 chtrs counter
+8/19 chtrs receipt
+8/16 claim filed, broker receipt","VCP240624D","23/09/2024","25/09/2024",,"COA","10/06/2024","30/06/2024","13/08/2024",,,,"45","13/02/1900","False",,"45,558","False","False","425","2024-2025","59","Choice 1"
+"DBLS24240","Sokana3","64","10. Claim Closed","Rudolf Schulte","312014","21/05/2024","Chevron International Tankship Ltd","SPI Marine USA","15/08/2024","141,939.83","141,939.83","Demurrage","10/24 Agreed
+10/17 chased
+9/24 maintained ours
+9/12 maintained ours, chtrs maintained. to sok
+8/28 chtrs claim deduct for others at antwerp and shore issue le havre. to sok
+8/15 claim filed, chtrs receipt","Cehvron210524D","18/10/2024","18/10/2024",,"CP",,,"12/08/2024",,,,"45","13/02/1900","False",,"45,583","False","False","425","2024-2025","51","Choice 1"
+"DBLS24239","Sokana3","87","10. Claim Closed","Marie C","350026","24/05/2024","Greenergy Fuels Ltd","Howe Robinson London","13/08/2024","232,062.97","223,541.67","Demurrage","11/12 ops chased vd
+11/8 Agreed
+11/7 revised to chtrs 
+11/6 chtrs counter tide and gangway down. to sok 
+11/5 fdd sent demand
+11/5, 10/24, 10/15, 10/8 ops chased
+8/14 chtrs receipt
+8/13 claim filed, broker receipt","GRE240524D","08/11/2024","13/11/2024",,"CP",,,"12/08/2024",,,,"45","13/02/1900","False",,"45,604","False","False","425","2024-2025","50","Choice 1"
+"DBLS24238","Sokana3","77","10. Claim Closed","Willard J","600032","19/04/2024","Cargill International SA","Pole Shipping SA","12/08/2024","9,400.69","0.00","Demurrage","9/16 to sok agreeing with chtrs that this is no dem
+9/13 chtrs counter different rate and laytime and broker commission to be deducted. They see no demurrage. asked recap from ops as this was a fairway one
+8/13 chtrs receipt
+8/12 claim filed","CARGI190424D",,,,"CP",,,"12/08/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","49","Choice 1"
+"DBLS24237","Sokana3","30","10. Claim Closed","Alfred N","700029","16/04/2024","Aramco Trading Fujairah","Reshamwala Shipbrokers DMCC","26/08/2024","119,665.17","119,665.17","Demurrage","9/25 Agreed vd 4 Oct
+9/24 broker still waiting comments from chtrs
+9/16 chased
+8/30 revised calc/inv sent
+8/27 broker receipt
+8/26 claim filed","ATC160424D","25/09/2024","04/10/2024",,"CP","17/04/2024","20/04/2024","28/08/2024",,,,"45","13/02/1900","False",,"45,560","False","False","425","2024-2025","47","Choice 1"
+"DBLS24236","Sokana3","53","10. Claim Closed","Starlight II","140065","22/05/2024","Irving Oil Limited","Braemar London - Tankers","12/08/2024","23,565.28","23,565.28","Demurrage","10/9 asked if paid
+10/4 agreed
+9/24, 9/16 chased
+8/22 chtrs receipt
+8/19 chased receipt
+8/13 broker receipt
+8/12 claim filed","IRV05222024D","04/10/2024","08/10/2024",,"CP","19/07/2024","21/07/2024","10/08/2024",,,,"45","13/02/1900","False",,"45,569","False","False","425","2024-2025","46","Choice 1"
+"DBLS24235","Sokana3","0","2. Nil Demurrage (No Claim)","Louis P","900027","19/06/2024","Bunge SA","Braemar USA - Specialized","09/08/2024","0",,"Demurrage","8/9 no dem calc sent",,"09/08/2024",,,"CP","05/07/2024","10/07/2024","09/08/2024",,,,"45","13/02/1900","False",,"45,513","False","False","425","2024-2025","44","Choice 1"
+"DBLS24234","Sokana3","8","10. Claim Closed","Chem Ranger","100014","18/04/2024","Archer Daniels Midland Co","SPI Marine USA","13/08/2024","819,987.5","819,987.50","Demurrage","8/21 agreed
+8/15 chtrs receipt
+8/13 claim filed, broker receipt 
+- ops said not to give strike deductions","ADMI180424D","21/08/2024","23/08/2024",,"CP","01/05/2024","15/05/2024","08/08/2024",,,,"45","13/02/1900","False",,"45,525","False","False","425","2024-2025","42","Choice 1"
+"DBLS24233","Sokana3","91","7. Agreed","Starlight II","140068","15/07/2024","Novum Energy","Southport Maritime","09/08/2024","41,635.42",,"Demurrage","11/8 ops chased, Agreed
+11/5, 10/17, 9/24, 9/5 chased
+8/12 chtrs receipt
+8/9 claim filed, broker receipt","NOVUM07152024D","08/11/2024",,,"CP","22/07/2024","26/07/2024","07/08/2024",,,,"45","13/02/1900","False",,"45,604","False","False","425","2024-2025","39",
+"DBLS24232","Sokana3","88","6. Waiting Charterers Response","Stone I","170051","05/04/2024","Seacrest","Brazilship/Scanbrasil","08/08/2024","794,062.5",,"Demurrage","11/1 160,000 paid, balance outstanding
+10/31 ops chased vd again
+10/17 working on payment plan with chartering
+9/24, 9/16, 9/5 chased
+8/13 chtrs reciept
+8/8 claim filed, broker receipt","SEACREST04052024BBD",,,,"CP",,,"06/08/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","37","Choice 1"
+"DBLS24231","Peregrine Tankers","95","8. Disputed","Das","Das 24/004","19/03/2024","Tricon Energy Ltd.","Lighthouse Chartering","12/08/2024","852,883.33",,"Demurrage","11/15 they maintained, we maintained
+11/5 chased 
+10/18 they want credit for unused pan can time. maintained our last
+10/16 chased 
+9/13 accept late arrival and weather. maintained balance
+9/6 they counter late arrival, weather, shifting between berths and extra nor, plus weather
+9/5, 8/26 chased
+8/13 chtrs receipt
+8/12 claim filed  - need recvd lops and load logs","DAS04D08122024",,,,"CP","20/04/2024","05/05/2024","06/08/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","36","Choice 1"
+"DBLS24230","Sokana3","0","2. Nil Demurrage (No Claim)","Chem Ranger","100014","25/04/2024","Gantrade Corporation","Odin USA","02/08/2024","0",,"Demurrage","8/2 no dem calc sent",,"02/08/2024",,,"CP",,,"05/08/2024",,,,"45","13/02/1900","False",,"45,506","False","False","425","2024-2025","35","Choice 1"
+"DBLS24229","Peregrine Tankers","100","6. Waiting Charterers Response","Al Reem","Al Reem 24/004","27/06/2024","Musket","McQuilling USA","07/08/2024","180,347.22",,"Demurrage","11/15, 11/5, 10/16, 9/19 chased
+9/5, 8/26 chased
+8/16 chtrs receipt
+8/13 chased receipt
+8/7 claim filed, broker receipt","AL04D08072024",,,,"CP","04/07/2024","06/07/2024","02/08/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","34",
+"DBLS24228","Sokana3","39","10. Claim Closed","FPMC 35","103010","22/01/2024","Citgo","Howe Robinson London","01/08/2024","3,075.92","3,075.92","Rebill","9/9 agreed
+9/5, 8/26 chased
+8/14 chtrs receipt
+8/13 chased receipt
+8/2 broker receipt
+8/1 claim filed","VIT220124M1","09/09/2024","09/09/2024",,"Rebill",,,"01/08/2024",,,,"45","13/02/1900","False",,"45,544","False","False","225","2024-2025","33","Choice 1"
+"DBLS24227","Sokana3","105","7. Agreed","El Zorro","992005 Voy 7","10/05/2024","Trafigura","Netco Houston","02/08/2024","7,031.25",,"Demurrage","11/15 agreed, vd 11/27
+11/4 ops chased all
+10/17 chased
+8/14 chtrs reciept
+8/13 chased reciept
+8/2 claim filed, broker receipt","Trafi10052024GD","15/11/2024",,,"CP",,,"01/08/2024",,,,"45","13/02/1900","False",,"45,611","False","False","425","2024-2025","31","Choice 1"
+"DBLS24226","Sokana3","105","7. Agreed","El Zorro","992005 Voy 6","10/05/2024","Trafigura","Netco Houston","02/08/2024","7,687.5",,"Demurrage","11/15 agreed, vd 11/27
+11/4 ops chased all 
+10/17 chased 
+8/6 chtrs receipt
+8/2 claim filed, broker receipt","Trafi100524FD","15/11/2024",,,"CP",,,"01/08/2024",,,,"45","13/02/1900","False",,"45,611","False","False","425","2024-2025","32","Choice 1"
+"DBLS24225","Sokana3","7","10. Claim Closed","Chem Ranger","100014","17/04/2024","Cargill","Clarksons CT","01/08/2024","9,510.58","9,510.58","Demurrage","8/8 Agreed
+8/1 claim filed, broker reciept","CARGILL170424D","08/08/2024","23/08/2024",,"CP","01/05/2024","20/05/2024","01/08/2024","4,079.365",,,"45","13/02/1900","False",,"45,512","False","False","425","2024-2025","30","Choice 1"
+"DBLS24224","Sokana3","104","6. Waiting Charterers Response","Hafnia Malacca","1033002","20/06/2024","Hartree","Clarksons Houston","01/08/2024","27,575.44",,"Rebill","11/13 broker chased
+11/5, 10/17, 9/24, 9/16, 9/5, 8/26 chased
+8/8 chtrs receipt
+8/1 claim filed, broker receipt","HAR200624R",,,,"Rebill",,,"01/08/2024",,,,"45","13/02/1900","False",,"0","False","False","225","2024-2025","29","Choice 1"
+"DBLS24223","Sokana3","45","10. Claim Closed","Hafnia Malacca","1033001","28/05/2024","Shell","Clarksons Houston","30/07/2024","7,632.27","7,632.27","Rebill","9/13 Agreed
+9/5, 8/26 chased
+8/1 chtrs receipt
+7/30 claim filed, broker receipt","STUSCO05282024R","13/09/2024","17/09/2024",,"Rebill",,,"31/07/2024",,,,"45","13/02/1900","False",,"45,548","False","False","225","2024-2025","28","Choice 1"
+"DBLS24222","Sokana3","57","10. Claim Closed","Chem Ranger","100014","11/12/2023","NCTI","Netco Houston","31/07/2024","7,710.49",,"Rebill","9/26 vd today
+9/24, 9/16, 9/5, 8/26 chased
+8/13, broker confirmed sent to chtrs
+8/7 chased reciept
+7/31 claim filed","JX190424R","26/09/2024","30/09/2024",,"Rebill",,,"31/07/2024",,,,"45","13/02/1900","False",,"45,561","False","False","225","2024-2025","27","Choice 1"
+"DBLS24221","Sokana3","3","10. Claim Closed","Chem Bulldog","220021","01/04/2024","Rubis","Netco Houston","30/07/2024","7,006.06","7,006.06","Rebill","8/14 paid 2 august
+8/13 chased
+7/30 Claim filed, broker reciept","RUB010424R","02/08/2024","02/08/2024",,"Rebill",,,"30/07/2024",,,,"45","13/02/1900","False",,"45,506","False","False","225","2024-2025","26","Choice 1"
+"DBLS24220","Sokana3","11","10. Claim Closed","FPMC 35","103013","21/02/2024","Vantage","SPI Marine USA","26/07/2024","27,532.64","27,532.64","Rebill","8/6 agreed
+7/26 claim filed, broker questioned, ops maintained","VCP210224M2","06/08/2024","08/08/2024",,"Rebill",,,"26/07/2024",,,,"45","13/02/1900","False",,"45,510","False","False","225","2024-2025","21","Choice 1"
+"DBLS24219","Sokana3","1","10. Claim Closed","Starlight II","140067","08/07/2024","Vitol","Bluepoint Maritime","29/07/2024","41,781.25",,"Demurrage","10/22 chtrs said paid 7/30. to sok
+10/17 chased
+7/29 chtrs receipt","VIT07082024D","30/07/2024","30/07/2024",,"CP",,,"25/07/2024",,,,"45","13/02/1900","False",,"45,503","False","False","425","2024-2025","20","Choice 1"
+"DBLS24218","Sokana3","0","2. Nil Demurrage (No Claim)","Chem Ranger","100014","11/12/2023","NCTI","Netco Houston","24/07/2024","0",,"Demurrage",,,"24/07/2024",,,"CP",,,"25/07/2024",,,,"45","13/02/1900","False",,"45,497","False","False","425","2024-2025","19","Choice 1"
+"DBLS24217","Sokana3","25","10. Claim Closed","Hafnia Soya","1032004","01/05/2024","Petro Canada","SPI Marine USA","01/08/2024","207,078.47","207,078.47","Demurrage","8/26 Agreed
+8/1 claim filed, chtrs reciept","PCLI05012024/2D","26/08/2024","04/09/2024",,"CP",,,"25/07/2024",,,,"45","13/02/1900","False",,"45,530","False","False","425","2024-2025","18","Choice 1"
+"DBLS24216","Sokana3","108","7. Agreed","Owl 5","914027","30/06/2024","Trafigura","Netco Houston","29/07/2024","73,281.25",,"Demurrage","11/14 agreed vd 11/27
+11/5 chased
+10/29 ops chased
+10/17 chased
+8/23, 8/13 chased receipt
+7/29 claim filed, broker reciept","Trafi30062024D","14/11/2024",,,"CP",,,"25/07/2024",,,,"45","13/02/1900","False",,"45,610","False","False","425","2024-2025","17","Choice 1"
+"DBLS24215","Sokana3","0","10. Claim Closed","Owl 4","913031","15/07/2024","Hevi.","MJLF","05/08/2024","180,570.83","241,208.33","Demurrage","9/16 paid
+8/30 balance invoice sent to chtrs
+8/29 error on original calc 
+8/12 they said paid 8/9. asked ada. confirmed paid 12 August
+8/5 claim filed, broker reciept 
+- billed balance due of 3,570.83","Hevi15072024D2","05/08/2024","16/09/2024",,"CP",,,"25/07/2024",,,,"45","13/02/1900","False",,"45,509","False","False","425","2024-2025","16","Choice 1"
+"DBLS24214","Eastport USA LLC","0","2. Nil Demurrage (No Claim)","Zahra",,"23/05/2024","Proman","Eastport Maritime USA LLC","24/07/2024","0",,"Demurrage","24/07 - Nil Demo due to 16 days of Laytime. Josh Asked Alison to double check. ",,"24/07/2024",,"NCC","COA",,,"24/07/2024",,,,"45","13/02/1900","False",,"45,497","False","False","500","2024-2025","15","Choice 1"
+"DBLS24213","Sokana3","15","10. Claim Closed","Rebecca Schulte","310020","13/05/2024","Phillips 66","Braemar London - Specialized","24/07/2024","2,152.71","2,152.71","Rebill","8/8 Agreed    
+8/1 chased receipt, chtrs receipt","P66130524R","08/08/2024","09/08/2024",,"Rebill",,,"24/07/2024",,,,"45","13/02/1900","False",,"45,512","False","False","225","2024-2025","14","Choice 1"
+"DBLS24212","Sokana3","80","10. Claim Closed","Hafnia Malacca","1033002","20/06/2024","Hartree","Clarksons Houston","29/07/2024","447,282.99","441,616.32","Demurrage","11/5 asked if paid
+10/28 vd 10/31
+10/21 chtrs maintain excess stripping
+10/17 chased again, being paid apparently
+9/25 they said end of week for their calc on pumping
+8/30 they maintain excess pumping discharge and want excess stripping. to sok 
+8/26 maintained ours
+8/20 chtrs counter fp+6 load and excess pumping discharge. to sok.
+  7/29 claim filed, charterer's receipt","HAR200624D","17/10/2024","31/10/2024",,"CP",,,"24/07/2024",,,,"45","13/02/1900","False",,"45,582","False","False","425","2024-2025","13","Choice 1"
+"DBLS24211","Sokana3","0","2. Nil Demurrage (No Claim)","Patrick C","919022","12/06/2024","Enjet","Bluepoint Maritime","24/07/2024","0",,"Demurrage",,,"24/07/2024",,,"CP",,,"24/07/2024",,,,"45","13/02/1900","False",,"45,497","False","False","425","2024-2025","12","Choice 1"
+"DBLS24210","Sokana3","50","10. Claim Closed","Reinhold Schulte","313017","05/06/2024","Chevron","SPI Marine USA","25/07/2024","85,709.38","85,709.38","Demurrage","9/24 chased vd
+9/13 Agreed
+9/5, 8/26 chased
+7/25 claim filed, charterer's receipt","Chevron060524D","13/09/2024","26/09/2024",,"CP",,,"24/07/2024",,,,"45","13/02/1900","False",,"45,548","False","False","425","2024-2025","11","Choice 1"
+"DBLS24209","Sokana3","102","6. Waiting Charterers Response","Reinhold Schulte","313017","30/05/2024","ENI","Nolarma","26/07/2024","5,907.37",,"Demurrage","11/5 chased
+10/29 ops chased
+10/17 chased
+10/10 ops chased
+9/24, 9/16, 9/5, 8/26 chased
+7/29 chtrs reciept","ENI300524D",,,,"CP",,,"24/07/2024",,,,"45","13/02/1900","False",,"0","False","False","425","2024-2025","9","Choice 1"
+"DBLS24208","Sokana3","84","10. Claim Closed","Stone I","170052","11/06/2024","Posidonia.","Brazilship/Scanbrasil","26/07/2024","336,291.67","335,562.50","Demurrage","11/5 vd likely 11/8
+11/4, 10/24 ops chased
+10/18 chtrs counter diff all fast time alumar. agreed
+10/15 with legal
+10/3 legal friday per chris
+9/24, 9/16, 9/5, 8/26 chased
+8/5 chtrs receipt
+8/1 asked chtrs receipt conf
+7/26 claim filed, broker reciept","ACE06112024D","18/10/2024","13/11/2024",,"CP",,,"24/07/2024",,,,"45","13/02/1900","False",,"45,583","False","False","425","2024-2025","8","Choice 1"
+"DBLS24207","Sokana3","0","2. Nil Demurrage (No Claim)","Chem Bulldog","220022","19/04/2024","MOCOH SA","McQuilling (Hellas) Ltd","24/07/2024","0",,"Demurrage",,,"24/07/2024",,"Interunity Management (Deutschland) GmbH","CP","01/05/2024","10/05/2024","24/07/2024",,,,"45","13/02/1900","False",,"45,497","False","False","425","2024-2025","7","Choice 1"
+"DBLS24206","Eastport USA LLC","69","8. Disputed","FPMC 33","LIFT 7","14/05/2024","NCC Chemical Carriers","Eastport Maritime USA LLC","20/08/2024","86,244.44",,"Demurrage","10/17 chased 
+9/24 owners maintained, sent to chtrs
+9/20 counter sent to owners 
+8/29 receipt confirmed   
+8/26 chased reciept
+8/23 owners claim sent to chtrs, told chtrs the differences and that this should be nil due to weather not being deducted by owners",,,,"Clearlake Shipping PTE Ltd","CP","01/06/2024","10/06/2024","22/07/2024",,,,"90","30/03/1900","False",,"0","False","False","500","2024-2025","6","Choice 1"
+"DBLS24205","Sokana3","41","10. Claim Closed","FPMC 35","103013","21/02/2024","Vantage","SPI Marine USA","26/07/2024","18,722.78","18,722.78","Rebill","9/10 chased as not paid
+9/5 Agreed, vd today
+8/26 chased
+8/13 chased
+7/26 claim filed, broker questioned, ops maintained","VCP210224M1","05/09/2024","09/09/2024",,"Rebill",,,"26/07/2024",,,,"45","13/02/1900","False",,"45,540","False","False","225","2024-2025","22","Choice 1"
+"DBLS24204","Eastport USA LLC","96","6. Waiting Charterers Response","Global Glory",,"10/04/2024","STUSCO","Eastport Maritime USA LLC","01/08/2024","47,435.19",,"Demurrage","11/5, 10/9, 9/16 chased chtrs 
+8/1 Claim sent to Charterers, chtrs reciept",,,,"SC Shipping","COA","05/05/2024","20/05/2024","11/07/2024",,,,"90","30/03/1900","False",,"0","False","False","500","2024-2025","4","Choice 1"
+"DBLS24203","Eastport USA LLC","52","10. Claim Closed","Atlantic Journey",,"15/04/2024","Proman","Eastport Maritime USA LLC","23/07/2024","13,711.11","13,711.11","Demurrage","9/13 agreed vd 25 Sept
+7/24 chtrs receipt",,"13/09/2024","25/09/2024","Clearlake Shipping PTE Ltd","COA","25/05/2024","05/06/2024","10/07/2024","0",,,"90","30/03/1900","False",,"45,548","False","False","500","2024-2025","3","Choice 1"
+"DBLS24202","Eastport USA LLC","117","6. Waiting Charterers Response","Andean Sun",,"26/04/2024","OCI Methanol Marketing LLC","Eastport Maritime USA LLC","11/07/2024","197,176.39",,"Demurrage","11/5, 10/9, 9/16 chased chtrs 
+7/24 chtrs reciept",,,,"Clearlake Shipping PTE Ltd","CP","20/05/2024","30/05/2024","10/07/2024","40,004.128",,,"45","13/02/1900","False","197,176.39","0","False","False","500","2024-2025","2","Choice 1"
+"DBLS24201","Eastport USA LLC","118","6. Waiting Charterers Response","SC Virgo",,"03/12/2024","Shell Trading US Company","Eastport Maritime USA LLC","10/07/2024","351,377.55",,"Demurrage","11/5 chased owners 
+10/17 chtrs counter sent to owners
+10/9, 9/16 chased chtrs 
+7/11 chtrs receipt",,,,"SC Shipping","COA","20/04/2024","20/04/2024","02/07/2024",,,,"45","13/02/1900","False",,"0","False","False","500","2024-2025","1","Choice 1"
