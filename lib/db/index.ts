@@ -23,6 +23,9 @@ export function getDatabase(): Database.Database {
 
     // Initialize Schema
     dbInstance.exec(SCHEMA_SQL);
+    try { dbInstance.exec("ALTER TABLE claims ADD COLUMN is_overridden INTEGER NOT NULL DEFAULT 0;"); } catch {}
+    try { dbInstance.exec("ALTER TABLE claims ADD COLUMN overridden_demurrage REAL;"); } catch {}
+    try { dbInstance.exec("ALTER TABLE claims ADD COLUMN override_reason TEXT;"); } catch {}
 
     // Run Initial Seed
     try {

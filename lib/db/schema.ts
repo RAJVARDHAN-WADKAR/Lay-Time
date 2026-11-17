@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS claims (
   owners_claim_amount REAL DEFAULT 0,
   claim_timebar_date TEXT,
   claim_filed_date TEXT,
+  is_overridden INTEGER NOT NULL DEFAULT 0,
+  overridden_demurrage REAL,
+  override_reason TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

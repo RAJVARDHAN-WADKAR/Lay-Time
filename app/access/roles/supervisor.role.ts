@@ -62,6 +62,7 @@ export const supervisorRole: RoleDefinition = {
     "sof",
     "documents",
     "calculations",
+    "discrepancies",
     "negotiations",
     "rac",
     "ownerComparison",

@@ -145,7 +145,8 @@ export async function addSoFActivity(claimId: string, activity: Omit<SoFActivity
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(activity)
   });
-  return await res.json();
+  const data = await res.json();
+  return data.claim || data.activity || data;
 }
 
 export async function updateSoFActivity(claimId: string, activityId: string, updates: Partial<SoFActivity>): Promise<any> {
@@ -154,14 +155,16 @@ export async function updateSoFActivity(claimId: string, activityId: string, upd
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates)
   });
-  return await res.json();
+  const data = await res.json();
+  return data.claim || data.activity || data;
 }
 
 export async function deleteSoFActivity(claimId: string, activityId: string): Promise<any> {
   const res = await fetch(`/api/claims/${claimId}/sof/${activityId}`, {
     method: "DELETE"
   });
-  return await res.json();
+  const data = await res.json();
+  return data.claim || data;
 }
 
 export const addActivity = addSoFActivity;

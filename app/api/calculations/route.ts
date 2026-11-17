@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { calculateClaimLaytime } from "@/lib/calculations/laytime";

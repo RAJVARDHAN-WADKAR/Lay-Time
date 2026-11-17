@@ -1,7 +1,9 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { getScopedSoF, getScopedClaimById } from "@/lib/db/scoped";
-import { getDatabase } from "@/lib/db";
+import { addActivityToClaim, updateActivityInClaim, deleteActivityFromClaim, getClaimById } from "@/lib/db/queries";
 import { z } from "zod";
 
 export const GET = withApi({
@@ -26,6 +28,7 @@ export const GET = withApi({
 });
 
 const SoFActivitySchema = z.object({
+  id: z.string().optional(),
   activityName: z.string().min(1, "Activity name is required"),
   startTime: z.string().min(1),
   stopTime: z.string().min(1),
@@ -46,30 +49,51 @@ export const POST = withApi({
       return NextResponse.json({ error: "Claim not found" }, { status: 404 });
     }
 
-    const db = getDatabase();
-    const actId = `act-${Date.now()}`;
-    db.prepare(`
-      INSERT INTO statement_of_facts (
-        id, claim_id, port_id, berth_id, activity_name, start_time, stop_time,
-        duration_minutes, duration_formatted, percentage_counted, prorata,
-        deduction_category, remarks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      actId,
-      params.id,
-      body.portId || null,
-      body.berthId || null,
-      body.activityName,
-      body.startTime,
-      body.stopTime,
-      body.durationMinutes || 120,
-      body.durationFormatted || "02h 00m",
-      body.percentageCounted ?? 100,
-      body.prorata ?? 100,
-      body.deductionCategory || "Operational",
-      body.remarks || ""
-    );
+    const activity = addActivityToClaim(params.id, body as any);
+    const updatedClaim = getClaimById(params.id);
 
-    return NextResponse.json({ success: true, activity: { id: actId, ...body } }, { status: 201 });
+    return NextResponse.json({ success: true, activity, claim: updatedClaim }, { status: 201 });
+  }
+});
+
+export const PUT = withApi({
+  roles: ["Supervisor", "Claim Processor", "Processor"],
+  handler: async ({ user, params, req, body }) => {
+    const claim = getScopedClaimById(user, params.id);
+    if (!claim) {
+      return NextResponse.json({ error: "Claim not found" }, { status: 404 });
+    }
+
+    const actId = body?.id || req.nextUrl.searchParams.get("activityId");
+    if (!actId) {
+      return NextResponse.json({ error: "Activity ID required" }, { status: 400 });
+    }
+
+    const updated = updateActivityInClaim(params.id, actId, body);
+    if (!updated) {
+      return NextResponse.json({ error: "Activity not found" }, { status: 404 });
+    }
+
+    const updatedClaim = getClaimById(params.id);
+    return NextResponse.json({ success: true, activity: updated, claim: updatedClaim });
+  }
+});
+
+export const DELETE = withApi({
+  roles: ["Supervisor", "Claim Processor", "Processor"],
+  handler: async ({ user, params, req }) => {
+    const claim = getScopedClaimById(user, params.id);
+    if (!claim) {
+      return NextResponse.json({ error: "Claim not found" }, { status: 404 });
+    }
+
+    const actId = req.nextUrl.searchParams.get("activityId");
+    if (!actId) {
+      return NextResponse.json({ error: "Activity ID required" }, { status: 400 });
+    }
+
+    deleteActivityFromClaim(params.id, actId);
+    const updatedClaim = getClaimById(params.id);
+    return NextResponse.json({ success: true, claim: updatedClaim });
   }
 });

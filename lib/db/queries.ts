@@ -325,6 +325,9 @@ function mapRowToClaim(row: any, includeRelations = false): Claim {
     ownersClaimAmount: row.owners_claim_amount || 0,
     claimTimebarDate: row.claim_timebar_date || undefined,
     claimFiledDate: row.claim_filed_date || undefined,
+    isOverridden: Boolean(row.is_overridden),
+    overriddenDemurrage: row.overridden_demurrage != null ? row.overridden_demurrage : undefined,
+    overrideReason: row.override_reason || undefined,
     clientId: row.client_id || row.clientId,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -440,7 +443,7 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     "layday", "cancellingDate", "voyageEndDate", "instructionReceivedDate", "noticeReceivedDate",
     "claimReceivedDate", "noticeTimebarDays", "claimTimebarDays", "timebarred", "claimAgreedDate",
     "charterpartyDate", "daysAwaitingPayment", "invoiceNumber", "taxYear", "blQuantity",
-    "ownersClaimAmount", "claimTimebarDate", "claimFiledDate"
+    "ownersClaimAmount", "claimTimebarDate", "claimFiledDate", "isOverridden", "overriddenDemurrage", "overrideReason"
   ];
 
   const dbFieldMap: Record<string, string> = {
@@ -478,6 +481,9 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     claimAgreedDate: "claim_agreed_date",
     charterpartyDate: "charterparty_date",
     daysAwaitingPayment: "days_awaiting_payment",
+    isOverridden: "is_overridden",
+    overriddenDemurrage: "overridden_demurrage",
+    overrideReason: "override_reason",
     invoiceNumber: "invoice_number",
     taxYear: "tax_year",
     blQuantity: "bl_quantity",
@@ -560,15 +566,19 @@ export function savePortsForClaim(claimId: string, ports: Port[]): void {
   const db = getDatabase();
   db.transaction(() => {
     db.prepare("DELETE FROM ports WHERE claim_id = ?").run(claimId);
-    const insertPort = db.prepare("INSERT INTO ports (id, claim_id, name, port_type, load_rate, created_at) VALUES (?, ?, ?, ?, ?, ?)");
-    const insertBerth = db.prepare("INSERT INTO berths (id, port_id, name, quantity, prorata_share, is_prorata_overridden, load_rate, cargo_type, receiver_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const insertPort = db.prepare("INSERT OR REPLACE INTO ports (id, claim_id, name, port_type, load_rate, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+    const insertBerth = db.prepare("INSERT OR REPLACE INTO berths (id, port_id, name, quantity, prorata_share, is_prorata_overridden, load_rate, cargo_type, receiver_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     const now = new Date().toISOString();
+    let pIdx = 0;
     for (const p of ports) {
-      const portId = p.id || `port-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      pIdx++;
+      const portId = p.id ? (p.id.includes(claimId) ? p.id : `${claimId}-${p.id}`) : `port-${claimId}-${pIdx}`;
       insertPort.run(portId, claimId, p.name, p.portType, p.loadRate, now);
+      let bIdx = 0;
       for (const b of p.berths || []) {
-        const berthId = b.id || `berth-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+        bIdx++;
+        const berthId = b.id ? (b.id.includes(claimId) ? b.id : `${claimId}-${b.id}`) : `berth-${portId}-${bIdx}`;
         insertBerth.run(berthId, portId, b.name, b.quantity, b.prorataShare, b.isProrataOverridden ? 1 : 0, b.loadRate, b.cargoType || "", b.receiverName || "");
       }
     }
@@ -631,6 +641,136 @@ export function saveActivitiesForClaim(claimId: string, activities: SoFActivity[
       );
     }
   })();
+}
+
+export function addActivityToClaim(claimId: string, activity: Partial<SoFActivity>): SoFActivity {
+  const db = getDatabase();
+  const actId = activity.id || `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const durationMinutes = activity.durationMinutes || 120;
+  const durationFormatted = activity.durationFormatted || "02h 00m";
+
+  db.prepare(`
+    INSERT INTO statement_of_facts (
+      id, claim_id, port_id, berth_id, activity_name, start_time, stop_time,
+      duration_minutes, duration_formatted, percentage_counted, prorata,
+      deduction_category, remarks, is_ocr_extracted, is_corrected, ocr_confidence, original_ocr_values
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    actId,
+    claimId,
+    activity.portId || null,
+    activity.berthId || null,
+    activity.activityName || "Operational Activity",
+    activity.startTime || new Date().toISOString(),
+    activity.stopTime || new Date().toISOString(),
+    durationMinutes,
+    durationFormatted,
+    activity.percentageCounted ?? 100,
+    activity.prorata ?? 100,
+    activity.deductionCategory || "Other",
+    activity.remarks || "",
+    activity.isOcrExtracted ? 1 : 0,
+    activity.isCorrected ? 1 : 0,
+    activity.ocrConfidence ?? 1.0,
+    activity.originalOcrValues ? JSON.stringify(activity.originalOcrValues) : null
+  );
+
+  return {
+    id: actId,
+    claimId,
+    portId: activity.portId,
+    berthId: activity.berthId,
+    activityName: activity.activityName || "Operational Activity",
+    startTime: activity.startTime || new Date().toISOString(),
+    stopTime: activity.stopTime || new Date().toISOString(),
+    durationMinutes,
+    durationFormatted,
+    percentageCounted: activity.percentageCounted ?? 100,
+    prorata: activity.prorata ?? 100,
+    deductionCategory: activity.deductionCategory || "Other",
+    remarks: activity.remarks || "",
+    isOcrExtracted: Boolean(activity.isOcrExtracted),
+    isCorrected: Boolean(activity.isCorrected),
+    ocrConfidence: activity.ocrConfidence ?? 1.0,
+    originalOcrValues: activity.originalOcrValues
+  };
+}
+
+export function updateActivityInClaim(claimId: string, activityId: string, updates: Partial<SoFActivity>): SoFActivity | null {
+  const db = getDatabase();
+  const existing = db.prepare("SELECT * FROM statement_of_facts WHERE id = ? AND claim_id = ?").get(activityId, claimId) as any;
+  if (!existing) return null;
+
+  const activityName = updates.activityName ?? existing.activity_name;
+  const startTime = updates.startTime ?? existing.start_time;
+  const stopTime = updates.stopTime ?? existing.stop_time;
+  const durationMinutes = updates.durationMinutes ?? existing.duration_minutes;
+  const durationFormatted = updates.durationFormatted ?? existing.duration_formatted;
+  const percentageCounted = updates.percentageCounted ?? existing.percentage_counted;
+  const prorata = updates.prorata ?? existing.prorata;
+  const deductionCategory = updates.deductionCategory ?? existing.deduction_category;
+  const remarks = updates.remarks ?? existing.remarks;
+  const berthId = updates.berthId !== undefined ? updates.berthId : existing.berth_id;
+  const portId = updates.portId !== undefined ? updates.portId : existing.port_id;
+  const isCorrected = updates.isCorrected !== undefined ? (updates.isCorrected ? 1 : 0) : existing.is_corrected;
+
+  db.prepare(`
+    UPDATE statement_of_facts SET
+      activity_name = ?,
+      start_time = ?,
+      stop_time = ?,
+      duration_minutes = ?,
+      duration_formatted = ?,
+      percentage_counted = ?,
+      prorata = ?,
+      deduction_category = ?,
+      remarks = ?,
+      berth_id = ?,
+      port_id = ?,
+      is_corrected = ?
+    WHERE id = ? AND claim_id = ?
+  `).run(
+    activityName,
+    startTime,
+    stopTime,
+    durationMinutes,
+    durationFormatted,
+    percentageCounted,
+    prorata,
+    deductionCategory,
+    remarks,
+    berthId || null,
+    portId || null,
+    isCorrected,
+    activityId,
+    claimId
+  );
+
+  return {
+    id: activityId,
+    claimId,
+    portId: portId || undefined,
+    berthId: berthId || undefined,
+    activityName,
+    startTime,
+    stopTime,
+    durationMinutes,
+    durationFormatted,
+    percentageCounted,
+    prorata,
+    deductionCategory,
+    remarks,
+    isOcrExtracted: Boolean(existing.is_ocr_extracted),
+    isCorrected: Boolean(isCorrected),
+    ocrConfidence: existing.ocr_confidence,
+    originalOcrValues: existing.original_ocr_values ? JSON.parse(existing.original_ocr_values) : undefined
+  };
+}
+
+export function deleteActivityFromClaim(claimId: string, activityId: string): boolean {
+  const db = getDatabase();
+  const info = db.prepare("DELETE FROM statement_of_facts WHERE id = ? AND claim_id = ?").run(activityId, claimId);
+  return info.changes > 0;
 }
 
 export function getDeductionsForClaim(claimId: string) {

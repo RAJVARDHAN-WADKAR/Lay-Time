@@ -56,6 +56,7 @@ export const adminRole: RoleDefinition = {
     "sof",
     "documents",
     "calculations",
+    "discrepancies",
     "negotiations",
     "rac",
     "ownerComparison",

@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed-auth": "node scripts/seed-users.js",
-    "test:auth": "node scripts/test-auth-suite.js"
+    "test:auth": "node scripts/test-auth-suite.js",
+    "test:e2e": "node scripts/test-full-e2e.js",
+    "test": "npm run test:auth && npm run test:e2e"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

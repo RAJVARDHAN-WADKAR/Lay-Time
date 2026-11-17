@@ -61,6 +61,7 @@ export const claimProcessorRole: RoleDefinition = {
     "sof",
     "documents",
     "calculations",
+    "discrepancies",
     "negotiations",
     "rac",
     "ownerComparison",

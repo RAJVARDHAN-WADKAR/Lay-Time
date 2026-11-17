@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromRequest, canEditClaim } from "@/lib/auth/session";
 import { getChasersForClaim, createChaserRecord, getClaimById } from "@/lib/db/queries";

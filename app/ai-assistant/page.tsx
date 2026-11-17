@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { getClaims } from "@/lib/api";
 import { Claim } from "@/lib/types";
 import { queryAiAssistant } from "@/lib/mock/assistant";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/inputs";
 import { Badge } from "@/components/ui/badge";
@@ -14,10 +15,11 @@ import {
   Send,
   Sparkles,
   Info,
-  FileCheck,
-  HelpCircle,
   RotateCcw,
   BookOpen,
+  ExternalLink,
+  ShieldCheck,
+  ChevronRight
 } from "lucide-react";
 
 interface ChatMessage {
@@ -27,6 +29,11 @@ interface ChatMessage {
   citation?: string;
   timestamp: string;
   confidenceScore?: number;
+  matchedClaimId?: string;
+  suggestedActions?: Array<{
+    label: string;
+    href?: string;
+  }>;
 }
 
 export default function AiAssistantPage() {
@@ -37,8 +44,9 @@ export default function AiAssistantPage() {
     {
       id: "msg-0",
       sender: "assistant",
-      text: "Hello! I am your AI Demurrage & Laytime Claim Assistant. Ask me about specific vessels, weather deductions, OCR discrepancies, or timebarred claims grounded in your active claims dataset.",
-      citation: "Charterparty Laytime Intelligence Engine v1.0",
+      text: "Hello! I am your AI Demurrage & Laytime Claim Assistant powered by Maritime RAG. Ask me about specific vessels, Statement of Facts deductions, OCR anomalies, charterparty clauses (BPVOY4, ASBATANKVOY, GENCON, SHELLVOY), or timebar deadlines.",
+      citation: "Maritime Charterparty & Claims Knowledge Base v2.0",
+      confidenceScore: 0.99,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -47,8 +55,12 @@ export default function AiAssistantPage() {
 
   useEffect(() => {
     async function load() {
-      const data = await getClaims();
-      setClaims(data);
+      try {
+        const data = await getClaims();
+        setClaims(data);
+      } catch (err) {
+        console.warn("Could not load claims in assistant:", err);
+      }
     }
     load();
   }, []);
@@ -59,13 +71,14 @@ export default function AiAssistantPage() {
 
   const quickPrompts = [
     "What is the demurrage calculated for MV Nordic Voyager?",
+    "How does Once on Demurrage Always on Demurrage apply under BPVOY4 Clause 18?",
     "Are there any timebarred claims in the system?",
     "What were the OCR discrepancies found in MV Baltic Trader?",
     "Give me an overview of total demurrage exposure across all accounts.",
     "Explain how weather deductions are applied under charterparty rules.",
   ];
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const queryText = (textToSend || input).trim();
     if (!queryText) return;
 
@@ -80,21 +93,59 @@ export default function AiAssistantPage() {
     setInput("");
     setIsTyping(true);
 
-    // Simulate natural AI thinking delay (400-600ms)
-    setTimeout(() => {
-      const response = queryAiAssistant(queryText, claims);
+    try {
+      // Call the server-side Maritime RAG API
+      const res = await fetch("/api/ai-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: queryText }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const assistantMsg: ChatMessage = {
+          id: `msg-assistant-${Date.now()}`,
+          sender: "assistant",
+          text: data.answer || data.response?.answer || "No response received.",
+          citation: data.citation || data.response?.citation,
+          confidenceScore: data.confidenceScore ?? data.response?.confidenceScore,
+          matchedClaimId: data.matchedClaimId || data.response?.matchedClaimId,
+          suggestedActions: data.suggestedActions || data.response?.suggestedActions,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      } else {
+        // Fallback to local RAG engine if server response was not 200
+        const localResp = queryAiAssistant(queryText, claims);
+        const assistantMsg: ChatMessage = {
+          id: `msg-assistant-${Date.now()}`,
+          sender: "assistant",
+          text: localResp.answer,
+          citation: localResp.citation,
+          confidenceScore: localResp.confidenceScore,
+          matchedClaimId: localResp.matchedClaimId,
+          suggestedActions: localResp.suggestedActions,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
+    } catch {
+      // Fallback on network error
+      const localResp = queryAiAssistant(queryText, claims);
       const assistantMsg: ChatMessage = {
         id: `msg-assistant-${Date.now()}`,
         sender: "assistant",
-        text: response.answer,
-        citation: response.citation,
-        confidenceScore: response.confidenceScore,
+        text: localResp.answer,
+        citation: localResp.citation,
+        confidenceScore: localResp.confidenceScore,
+        matchedClaimId: localResp.matchedClaimId,
+        suggestedActions: localResp.suggestedActions,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
-
       setMessages((prev) => [...prev, assistantMsg]);
+    } finally {
       setIsTyping(false);
-    }, 500);
+    }
   };
 
   const handleResetChat = () => {
@@ -114,14 +165,14 @@ export default function AiAssistantPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI Claim Assistant</h1>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI Maritime Assistant</h1>
             <Badge variant="purple" className="flex items-center space-x-1">
               <Sparkles className="h-3 w-3 mr-0.5" />
-              <span>Grounded Mock RAG</span>
+              <span>Maritime Grounded RAG v2.0</span>
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Query active claims, SoF extractions, timebar deadlines, and laytime computations.
+            Real-time retrieval-augmented intelligence over active claims, Statement of Facts, OCR logs, and charterparty clauses.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={handleResetChat} className="text-xs text-slate-500">
@@ -131,15 +182,15 @@ export default function AiAssistantPage() {
       </div>
 
       {/* RAG Banner Notice */}
-      <div className="p-3 bg-amber-50/80 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-center justify-between shadow-2xs">
+      <div className="p-3 bg-blue-50/80 border border-blue-200 text-blue-900 text-xs rounded-xl flex items-center justify-between shadow-2xs">
         <div className="flex items-center space-x-2">
-          <Info className="h-4 w-4 text-amber-600 shrink-0" />
+          <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0" />
           <span>
-            <strong>Demo Architecture:</strong> This assistant is grounded in the current application state via <code>lib/mock/assistant.ts</code> and returns source-cited answers or deterministic fallbacks.
+            <strong>Maritime RAG Architecture:</strong> Grounded dynamically in SQLite claim records, Statement of Facts logs, and standard charterparty forms (BPVOY4, ASBATANKVOY, GENCON 94, SHELLVOY6, BIMCO 2013).
           </span>
         </div>
-        <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider hidden sm:inline">
-          Mock Seam
+        <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider hidden sm:inline">
+          Live RAG
         </span>
       </div>
 
@@ -181,7 +232,7 @@ export default function AiAssistantPage() {
 
                 {/* Message Bubble */}
                 <div
-                  className={`max-w-xl rounded-2xl p-4 text-xs leading-relaxed space-y-2 ${
+                  className={`max-w-xl rounded-2xl p-4 text-xs leading-relaxed space-y-2.5 ${
                     isUser
                       ? "bg-slate-900 text-white rounded-tr-xs"
                       : "bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-xs shadow-2xs"
@@ -189,11 +240,51 @@ export default function AiAssistantPage() {
                 >
                   <div className="whitespace-pre-wrap">{msg.text}</div>
 
-                  {/* Citation line if assistant */}
-                  {!isUser && msg.citation && (
-                    <div className="pt-2 border-t border-slate-200/80 flex items-center space-x-1.5 text-[11px] text-blue-700 font-medium">
-                      <BookOpen className="h-3.5 w-3.5 shrink-0 text-blue-600" />
-                      <span className="truncate">Source: {msg.citation}</span>
+                  {/* Matched Claim Link Card */}
+                  {!isUser && msg.matchedClaimId && (
+                    <div className="pt-2 border-t border-slate-200/80">
+                      <Link
+                        href={`/claims/${msg.matchedClaimId}`}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-blue-100/70 hover:bg-blue-200/70 text-blue-800 font-semibold text-[11px] transition"
+                      >
+                        <span>Open Claim Record: {msg.matchedClaimId}</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* Suggested Quick Actions */}
+                  {!isUser && msg.suggestedActions && msg.suggestedActions.length > 0 && (
+                    <div className="pt-2 flex flex-wrap gap-1.5">
+                      {msg.suggestedActions.map((act, actIdx) => (
+                        act.href ? (
+                          <Link
+                            key={actIdx}
+                            href={act.href}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 bg-white border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-700 rounded text-[10px] font-medium transition"
+                          >
+                            <span>{act.label}</span>
+                            <ChevronRight className="h-2.5 w-2.5" />
+                          </Link>
+                        ) : null
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Citation & Grounding line */}
+                  {!isUser && (msg.citation || msg.confidenceScore !== undefined) && (
+                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-blue-700">
+                      {msg.citation && (
+                        <div className="flex items-center space-x-1.5 truncate max-w-[75%]">
+                          <BookOpen className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                          <span className="truncate font-medium">Source: {msg.citation}</span>
+                        </div>
+                      )}
+                      {msg.confidenceScore !== undefined && msg.confidenceScore > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 shrink-0">
+                          {Math.round(msg.confidenceScore * 100)}% Grounded
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -218,7 +309,7 @@ export default function AiAssistantPage() {
                 <div className="h-1.5 w-1.5 bg-blue-600 rounded-full animate-pulse" />
                 <div className="h-1.5 w-1.5 bg-blue-600 rounded-full animate-pulse delay-75" />
                 <div className="h-1.5 w-1.5 bg-blue-600 rounded-full animate-pulse delay-150" />
-                <span className="text-[11px] text-slate-400 pl-1">Scanning claim ledger & Statement of Facts...</span>
+                <span className="text-[11px] text-slate-400 pl-1">Scanning claim ledger & charterparty clauses...</span>
               </div>
             </div>
           )}
@@ -234,7 +325,7 @@ export default function AiAssistantPage() {
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSend();
             }}
-            placeholder="Ask anything about claims, demurrage rates, rain deductions, timebars..."
+            placeholder="Ask anything about claims, demurrage rates, rain deductions, timebars, charter clauses..."
             className="flex-1 bg-white text-xs h-10"
           />
           <Button

@@ -91,6 +91,7 @@ export const reviewerClientRole: RoleDefinition = {
       "sof",
       "documents",
       "calculations",
+    "discrepancies",
       "negotiations",
       "rac",
       "ownerComparison",

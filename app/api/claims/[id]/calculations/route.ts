@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { getScopedCalculations, getScopedClaimById } from "@/lib/db/scoped";
@@ -23,7 +25,9 @@ export const GET = withApi({
     }
 
     const calc = getScopedCalculations(user, params.id);
-    return NextResponse.json({ calculations: calc });
+    const fullClaim = getClaimById(params.id);
+    const calculation = fullClaim ? calculateClaimLaytime(fullClaim) : null;
+    return NextResponse.json({ calculations: calc, calculation });
   }
 });
 

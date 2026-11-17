@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { calculateOilChemPumping } from "@/lib/calculations/oilChem";
 import { requireUser } from "@/lib/auth/session";

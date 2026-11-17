@@ -3,13 +3,14 @@ import { Claim, SoFActivity } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 interface ClaimSoFTabProps {
   claim: Claim;
   userCanEdit: boolean;
   onOpenAddModal: () => void;
   onOpenEditModal: (act: SoFActivity) => void;
+  onDeleteActivity?: (actId: string) => void;
 }
 
 export function ClaimSoFTab({
@@ -17,6 +18,7 @@ export function ClaimSoFTab({
   userCanEdit,
   onOpenAddModal,
   onOpenEditModal,
+  onDeleteActivity
 }: ClaimSoFTabProps) {
   const berths = claim.ports?.flatMap((p) => p.berths) || [];
 
@@ -28,7 +30,7 @@ export function ClaimSoFTab({
           <p className="text-xs text-slate-500">Detailed chronological operational events, weather delays, and deductions</p>
         </div>
         {userCanEdit && (
-          <Button size="sm" onClick={onOpenAddModal} className="text-xs flex items-center space-x-1">
+          <Button size="sm" onClick={onOpenAddModal} className="text-xs flex items-center space-x-1 bg-blue-600 hover:bg-blue-700 text-white">
             <Plus className="h-3.5 w-3.5" />
             <span>Add Activity</span>
           </Button>
@@ -77,14 +79,30 @@ export function ClaimSoFTab({
                     </td>
                     <td className="p-3 text-right">
                       {userCanEdit ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onOpenEditModal(act)}
-                          className="h-6 px-2 text-xs text-blue-600"
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex items-center justify-end space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onOpenEditModal(act)}
+                            className="h-6 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          >
+                            Edit
+                          </Button>
+                          {onDeleteActivity && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm(`Delete "${act.activityName}" from Statement of Facts?`)) {
+                                  onDeleteActivity(act.id);
+                                }
+                              }}
+                              className="h-6 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-slate-400 text-xs">Locked</span>
                       )}

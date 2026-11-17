@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getVisibleTabs, normalizeRole } from "@/app/access/roles";
-import { getClaimById, updateClaim, addSoFActivity, updateSoFActivity } from "@/lib/api/claims";
+import { getClaimById, updateClaim, addSoFActivity, updateSoFActivity, deleteSoFActivity } from "@/lib/api/claims";
 import { Claim, SoFActivity, Discrepancy } from "@/lib/types";
 import { calculateClaimLaytime } from "@/lib/calculations";
 import { detectDiscrepancies } from "@/lib/calculations/discrepancies";
@@ -192,28 +192,110 @@ export default function ClaimDetailPage() {
     }
   };
 
+  const calculateDuration = (start: string, stop: string) => {
+    const s = new Date(start).getTime();
+    const e = new Date(stop).getTime();
+    const diffMins = Math.max(Math.round((e - s) / 60000), 0);
+    const d = Math.floor(diffMins / 1440);
+    const h = Math.floor((diffMins % 1440) / 60);
+    const m = diffMins % 60;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const formatted = d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m` : `${pad(h)}h ${pad(m)}m`;
+    return { diffMins, formatted };
+  };
+
   const handleCreateActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!claim) return;
     try {
-      const updated = await addSoFActivity(claim.id, {
-        claimId: claim.id,
-        portId: newActForm.portId || claim.ports?.[0]?.id,
-        berthId: newActForm.berthId || claim.ports?.[0]?.berths?.[0]?.id,
-        activityName: newActForm.activityName,
-        startTime: newActForm.startTime,
-        stopTime: newActForm.stopTime,
-        durationMinutes: 120,
-        durationFormatted: "02h 00m",
-        percentageCounted: Number(newActForm.percentageCounted),
-        prorata: Number(newActForm.prorata),
-        deductionCategory: newActForm.deductionCategory,
-        remarks: newActForm.remarks,
-      });
-      setClaim(updated);
+      const { diffMins, formatted } = calculateDuration(newActForm.startTime, newActForm.stopTime);
+      let updated;
+      if (editingAct) {
+        updated = await updateSoFActivity(claim.id, editingAct.id, {
+          activityName: newActForm.activityName,
+          berthId: newActForm.berthId || claim.ports?.[0]?.berths?.[0]?.id || "",
+          portId: newActForm.portId || claim.ports?.[0]?.id || "",
+          startTime: newActForm.startTime,
+          stopTime: newActForm.stopTime,
+          percentageCounted: Number(newActForm.percentageCounted),
+          prorata: Number(newActForm.prorata),
+          deductionCategory: newActForm.deductionCategory as any,
+          remarks: newActForm.remarks,
+          durationMinutes: diffMins,
+          durationFormatted: formatted,
+          isCorrected: true
+        });
+        success("Activity Updated", "Statement of Facts updated successfully.");
+      } else {
+        updated = await addSoFActivity(claim.id, {
+          claimId: claim.id,
+          portId: newActForm.portId || claim.ports?.[0]?.id,
+          berthId: newActForm.berthId || claim.ports?.[0]?.berths?.[0]?.id,
+          activityName: newActForm.activityName,
+          startTime: newActForm.startTime,
+          stopTime: newActForm.stopTime,
+          durationMinutes: diffMins,
+          durationFormatted: formatted,
+          percentageCounted: Number(newActForm.percentageCounted),
+          prorata: Number(newActForm.prorata),
+          deductionCategory: newActForm.deductionCategory as any,
+          remarks: newActForm.remarks,
+          isOcrExtracted: false,
+          isCorrected: false,
+        });
+        success("Activity Added", "Statement of Facts updated successfully.");
+      }
+      if (updated && updated.id) {
+        setClaim(updated);
+      } else {
+        await loadClaim();
+      }
       setIsAddActModalOpen(false);
+      setEditingAct(null);
     } catch (e: any) {
-      alert(e.message || "Failed to add activity");
+      error("Save Failed", e.message || "Failed to save activity");
+    }
+  };
+
+  const handleDeleteActivity = async (actId: string) => {
+    if (!claim) return;
+    try {
+      const updated = await deleteSoFActivity(claim.id, actId);
+      if (updated && updated.id) {
+        setClaim(updated);
+      } else {
+        await loadClaim();
+      }
+      success("Activity Removed", "Statement of Facts item deleted.");
+    } catch (e: any) {
+      error("Delete Failed", e.message || "Failed to delete activity");
+    }
+  };
+
+  const handleApplyDiscrepancyCorrection = async () => {
+    if (!claim || !correctingDisc) return;
+    setIsSaving(true);
+    try {
+      if (correctingDisc.type === "start_after_stop" && correctingDisc.activityId) {
+        const act = claim.activities?.find((a) => a.id === correctingDisc.activityId);
+        if (act) {
+          const newStop = correctionInput || new Date(new Date(act.startTime).getTime() + 4 * 3600 * 1000).toISOString();
+          await updateSoFActivity(claim.id, act.id, { stopTime: newStop, isCorrected: true });
+        }
+      } else if (correctingDisc.type === "missing_berth" && correctingDisc.activityId) {
+        const targetBerth = correctionInput || claim.ports?.[0]?.berths?.[0]?.id || "";
+        await updateSoFActivity(claim.id, correctingDisc.activityId, { berthId: targetBerth, isCorrected: true });
+      } else if (correctingDisc.activityId) {
+        await updateSoFActivity(claim.id, correctingDisc.activityId, { isCorrected: true });
+      }
+      await loadClaim();
+      success("Correction Applied", "Discrepancy marked as resolved.");
+      setCorrectingDisc(null);
+      setCorrectionInput("");
+    } catch (e: any) {
+      error("Correction Failed", e.message || "Failed to apply correction.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -343,6 +425,7 @@ export default function ClaimDetailPage() {
           { id: "ports", label: `Ports & Berths (${claim.ports?.length || 0})`, icon: Anchor },
           { id: "sof", label: `Statement of Facts (${claim.activities?.length || 0})`, icon: Clock },
           { id: "calculations", label: "Calculation", icon: Calculator },
+          { id: "discrepancies", label: `Discrepancies (${discrepancies.length})`, icon: AlertTriangle },
           { id: "rac", label: "RAC Review", icon: Briefcase },
           { id: "ownerComparison", label: "Owner vs Internal", icon: Scale },
           { id: "timebar", label: "Time-Bar", icon: AlertTriangle },
@@ -638,6 +721,7 @@ export default function ClaimDetailPage() {
               setEditingAct(null);
               setIsAddActModalOpen(true);
             }}
+            onDeleteActivity={handleDeleteActivity}
             onOpenEditModal={(act) => {
               setEditingAct(act);
               setNewActForm({
@@ -1056,7 +1140,7 @@ export default function ClaimDetailPage() {
       <Modal
         isOpen={isAddActModalOpen}
         onClose={() => setIsAddActModalOpen(false)}
-        title="Add Statement of Facts Entry"
+        title={editingAct ? "Edit Statement of Facts Entry" : "Add Statement of Facts Entry"}
         maxWidth="md"
       >
         <form onSubmit={handleCreateActivity} className="space-y-4 text-xs">
