@@ -10,7 +10,8 @@
     "db:seed-auth": "node scripts/seed-users.js",
     "test:auth": "node scripts/test-auth-suite.js",
     "test:e2e": "node scripts/test-full-e2e.js",
-    "test": "npm run test:auth && npm run test:e2e"
+    "test:engine": "node scripts/test-laytime-engine.js",
+    "test": "npm run test:auth && npm run test:e2e && npm run test:engine"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

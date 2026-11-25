@@ -47,8 +47,8 @@ This document provides complete technical documentation for every server-side AP
 - **Request Body**:
   ```json
   {
-    "email": "rajvardhanwadkar76@gmail.com",
-    "password": "Raj@123"
+    "email": "admin@laytime.demo",
+    "password": "Demo@12345"
   }
   ```
 - **Validation**: Email format regex (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`), non-empty strings.
@@ -60,7 +60,7 @@ This document provides complete technical documentation for every server-side AP
     "user": {
       "id": "usr-001",
       "name": "Rajvardhan Wadkar",
-      "email": "rajvardhanwadkar76@gmail.com",
+      "email": "admin@laytime.demo",
       "role": "Admin",
       "status": "Active"
     }

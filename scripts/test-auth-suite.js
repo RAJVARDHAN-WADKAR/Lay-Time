@@ -1,4 +1,31 @@
-const BASE_URL = "http://localhost:3000";
+const path = require("path");
+const fs = require("fs");
+
+const envLocalPath = path.join(__dirname, "..", ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  const envContent = fs.readFileSync(envLocalPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx !== -1) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  }
+}
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.DEMO_ADMIN_PASSWORD || "AdminSecurePass@2024!";
+const SUPERVISOR_PASSWORD = process.env.SUPERVISOR_PASSWORD || process.env.DEMO_SUPERVISOR_PASSWORD || "SuperSecurePass@2024!";
+const PROCESSOR1_PASSWORD = process.env.PROCESSOR1_PASSWORD || process.env.DEMO_PROCESSOR_PASSWORD || "Proc1SecurePass@2024!";
+const PROCESSOR2_PASSWORD = process.env.PROCESSOR2_PASSWORD || process.env.DEMO_PROCESSOR2_PASSWORD || "Proc2SecurePass@2024!";
+const REVIEWER_PASSWORD = process.env.REVIEWER_PASSWORD || process.env.DEMO_REVIEWER_PASSWORD || "ReviewerSecurePass@2024!";
+const CLIENT_PASSWORD = process.env.CLIENT_PASSWORD || process.env.DEMO_CLIENT_PASSWORD || "ClientSecurePass@2024!";
+
+const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 
 async function runTestSuite() {
   console.log("=========================================================");
@@ -89,7 +116,7 @@ async function runTestSuite() {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "invalid-email-string", password: "Raj@123" })
+      body: JSON.stringify({ email: "invalid-email-string", password: ADMIN_PASSWORD })
     });
     const data = await res.json();
     assert(res.status === 400, `Malformed email returns 400 (status ${res.status})`);
@@ -114,7 +141,7 @@ async function runTestSuite() {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "rajvardhanwadkar76@gmail.com", password: "WrongPassword999" })
+      body: JSON.stringify({ email: "admin@laytime.demo", password: "WrongPassword999" })
     });
     const data = await res.json();
     assert(res.status === 401, `Wrong password returns 401 (status ${res.status})`);
@@ -128,24 +155,24 @@ async function runTestSuite() {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "nonexistent.user@laytime.com", password: "SomePassword123" })
+      body: JSON.stringify({ email: "nonexistent.user@laytime.demo", password: "SomePassword123" })
     });
     assert(res.status === 401, `Non-existent user returns 401 (status ${res.status})`);
   }
 
-  // TEST 4: Account 1 - Admin (rajvardhanwadkar76@gmail.com / Raj@123)
+  // TEST 4: Account 1 - Admin (admin@laytime.demo)
   console.log("\n--- 4. Testing Admin Account ---");
   let adminToken = null;
   {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "rajvardhanwadkar76@gmail.com", password: "Raj@123" })
+      body: JSON.stringify({ email: "admin@laytime.demo", password: ADMIN_PASSWORD })
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Admin login successful");
-    assert(data.user.role === "Admin" || data.user.role === "ADMIN", `Admin role verified: ${data.user.role}`);
-    assert(!data.user.password_hash, "Admin response does NOT expose password_hash");
+    assert(data.user?.role === "Admin" || data.user?.role === "ADMIN", `Admin role verified: ${data.user?.role}`);
+    assert(!data.user?.password_hash, "Admin response does NOT expose password_hash");
     adminToken = extractAuthCookie(res);
     assert(!!adminToken, "Admin session cookie (laytime_auth_token) received");
   }
@@ -157,7 +184,7 @@ async function runTestSuite() {
     });
     const meData = await meRes.json();
     assert(meRes.status === 200 && meData.authenticated, "Admin /api/auth/me authenticated");
-    assert(meData.user.email === "rajvardhanwadkar76@gmail.com", "Admin email in session verified");
+    assert(meData.user?.email === "admin@laytime.demo", "Admin email in session verified");
 
     // Check Admin access to /users route
     const usersPageRes = await fetch(`${BASE_URL}/users`, {
@@ -177,18 +204,18 @@ async function runTestSuite() {
     assert(usersApiRes.status === 200 && Array.isArray(usersApiData.users), "Admin can access /api/users API");
   }
 
-  // TEST 5: Account 2 - Claim Processor (rohitmengane2975@gmail.com / Rohit@123)
+  // TEST 5: Account 2 - Claim Processor (processor1@laytime.demo)
   console.log("\n--- 5. Testing Claim Processor Account ---");
   let processorToken = null;
   {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "rohitmengane2975@gmail.com", password: "Rohit@123" })
+      body: JSON.stringify({ email: "processor1@laytime.demo", password: PROCESSOR1_PASSWORD })
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Claim Processor login successful");
-    assert(data.user.role === "Claim Processor" || data.user.role === "CLAIM_PROCESSOR", `Processor role verified: ${data.user.role}`);
+    assert(data.user?.role === "Claim Processor" || data.user?.role === "CLAIM_PROCESSOR", `Processor role verified: ${data.user?.role}`);
     processorToken = extractAuthCookie(res);
   }
 
@@ -215,7 +242,7 @@ async function runTestSuite() {
     );
 
     // Processor can edit assigned claim
-    const editAssignedRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const editAssignedRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -225,11 +252,11 @@ async function runTestSuite() {
     });
     assert(
       editAssignedRes.status === 200,
-      `Processor can edit assigned claim CLM-2024-001 (status ${editAssignedRes.status})`
+      `Processor can edit assigned claim CLM-2026-001 (status ${editAssignedRes.status})`
     );
 
     // Processor cannot edit unassigned claim
-    const editUnassignedRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-003`, {
+    const editUnassignedRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-002`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -239,22 +266,22 @@ async function runTestSuite() {
     });
     assert(
       editUnassignedRes.status === 403,
-      `Processor forbidden from editing unassigned claim CLM-2024-003 (status ${editUnassignedRes.status})`
+      `Processor forbidden from editing unassigned claim CLM-2026-002 (status ${editUnassignedRes.status})`
     );
   }
 
-  // TEST 6: Account 3 - Supervisor (swayamghatage3839@gmail.com / Swayam@123)
+  // TEST 6: Account 3 - Supervisor (supervisor@laytime.demo)
   console.log("\n--- 6. Testing Supervisor Account ---");
   let supervisorToken = null;
   {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "swayamghatage3839@gmail.com", password: "Swayam@123" })
+      body: JSON.stringify({ email: "supervisor@laytime.demo", password: SUPERVISOR_PASSWORD })
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Supervisor login successful");
-    assert(data.user.role === "Supervisor" || data.user.role === "SUPERVISOR", `Supervisor role verified: ${data.user.role}`);
+    assert(data.user?.role === "Supervisor" || data.user?.role === "SUPERVISOR", `Supervisor role verified: ${data.user?.role}`);
     supervisorToken = extractAuthCookie(res);
   }
 
@@ -270,7 +297,7 @@ async function runTestSuite() {
     );
 
     // Supervisor can manage any claim
-    const editRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-003`, {
+    const editRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-002`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -280,22 +307,22 @@ async function runTestSuite() {
     });
     assert(
       editRes.status === 200,
-      `Supervisor can manage any claim CLM-2024-003 (status ${editRes.status})`
+      `Supervisor can manage any claim CLM-2026-002 (status ${editRes.status})`
     );
   }
 
-  // TEST 7: Account 4 - Reviewer (paraschougale558@gmail.com / Paras@123)
+  // TEST 7: Account 4 - Reviewer (reviewer@laytime.demo)
   console.log("\n--- 7. Testing Reviewer Account (Strictly Read-Only) ---");
   let reviewerToken = null;
   {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "paraschougale558@gmail.com", password: "Paras@123" })
+      body: JSON.stringify({ email: "reviewer@laytime.demo", password: REVIEWER_PASSWORD })
     });
     const data = await res.json();
     assert(res.status === 200 && data.success, "Reviewer login successful");
-    assert(data.user.role === "Reviewer" || data.user.role === "REVIEWER_CLIENT", `Reviewer role verified: ${data.user.role}`);
+    assert(data.user?.role === "Reviewer" || data.user?.role === "REVIEWER", `Reviewer role verified: ${data.user?.role}`);
     reviewerToken = extractAuthCookie(res);
   }
 
@@ -321,7 +348,7 @@ async function runTestSuite() {
     );
 
     // Reviewer cannot edit claims
-    const editRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const editRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -335,7 +362,7 @@ async function runTestSuite() {
     );
 
     // Reviewer cannot delete claims
-    const delRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const delRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       method: "DELETE",
       headers: { Cookie: `laytime_auth_token=${reviewerToken}` }
     });
@@ -405,14 +432,14 @@ async function runTestSuite() {
   }
 
   // Re-authenticate test actors
-  const adminActor = await loginAs("rajvardhanwadkar76@gmail.com", "Raj@123");
-  const supervisorActor = await loginAs("swayamghatage3839@gmail.com", "Swayam@123");
-  const processorActor = await loginAs("rohitmengane2975@gmail.com", "Rohit@123");
-  const reviewerActor = await loginAs("paraschougale558@gmail.com", "Paras@123");
-  const clientActor = await loginAs("client@trafigura.com", "Client@123");
+  const adminActor = await loginAs("admin@laytime.demo", ADMIN_PASSWORD);
+  const supervisorActor = await loginAs("supervisor@laytime.demo", SUPERVISOR_PASSWORD);
+  const processorActor = await loginAs("processor1@laytime.demo", PROCESSOR1_PASSWORD);
+  const reviewerActor = await loginAs("reviewer@laytime.demo", REVIEWER_PASSWORD);
+  const clientActor = await loginAs("client1@laytime.demo", CLIENT_PASSWORD);
 
   // 9.1 HIERARCHICAL USER CREATION & CREATE_MATRIX ENFORCEMENT
-  console.log("\n--- 9.1 Testing Hierarchical User Creation (CREATE_MATRIX) ---");
+  console.log("\n--- 9.1 Testing User Creation Matrix ---");
   {
     const rand = Date.now();
 
@@ -425,16 +452,16 @@ async function runTestSuite() {
       },
       body: JSON.stringify({
         name: `Subtree Reviewer ${rand}`,
-        email: `rev.${rand}@laytime.com`,
+        email: `rev.${rand}@laytime.demo`,
         role: "Reviewer"
       })
     });
     assert(
       adminCreateReviewer.status === 201,
-      `Admin can create Reviewer per CREATE_MATRIX (status ${adminCreateReviewer.status})`
+      `Admin can create Reviewer (status ${adminCreateReviewer.status})`
     );
 
-    // Admin -> Claim Processor (FORBIDDEN per CREATE_MATRIX)
+    // Admin -> Claim Processor (ALLOWED)
     const adminCreateProcessor = await fetch(`${BASE_URL}/api/users/create`, {
       method: "POST",
       headers: {
@@ -442,17 +469,17 @@ async function runTestSuite() {
         Cookie: `laytime_auth_token=${adminActor.token}`
       },
       body: JSON.stringify({
-        name: `Illegal Processor ${rand}`,
-        email: `illegal.proc.${rand}@laytime.com`,
+        name: `Processor ${rand}`,
+        email: `proc.${rand}@laytime.demo`,
         role: "Claim Processor"
       })
     });
     assert(
-      adminCreateProcessor.status === 403,
-      `Admin blocked from creating Claim Processor out-of-hierarchy (status ${adminCreateProcessor.status})`
+      adminCreateProcessor.status === 201,
+      `Admin can create Claim Processor (status ${adminCreateProcessor.status})`
     );
 
-    // Supervisor -> Claim Processor (ALLOWED)
+    // Supervisor -> Claim Processor (FORBIDDEN - Supervisor lacks users:manage)
     const supCreateProcessor = await fetch(`${BASE_URL}/api/users/create`, {
       method: "POST",
       headers: {
@@ -460,14 +487,14 @@ async function runTestSuite() {
         Cookie: `laytime_auth_token=${supervisorActor.token}`
       },
       body: JSON.stringify({
-        name: `Subtree Processor ${rand}`,
-        email: `proc.${rand}@laytime.com`,
+        name: `Illegal Sup Processor ${rand}`,
+        email: `illegal.proc.${rand}@laytime.demo`,
         role: "Claim Processor"
       })
     });
     assert(
-      supCreateProcessor.status === 201,
-      `Supervisor can create Claim Processor per CREATE_MATRIX (status ${supCreateProcessor.status})`
+      supCreateProcessor.status === 403,
+      `Supervisor blocked from creating users (status ${supCreateProcessor.status})`
     );
 
     // Supervisor -> Client (FORBIDDEN per CREATE_MATRIX)
@@ -479,9 +506,9 @@ async function runTestSuite() {
       },
       body: JSON.stringify({
         name: `Illegal Client ${rand}`,
-        email: `illegal.client.${rand}@laytime.com`,
+        email: `illegal.client.${rand}@laytime.demo`,
         role: "Client",
-        clientId: "client-trafigura"
+        clientId: "client-sokana"
       })
     });
     assert(
@@ -489,7 +516,7 @@ async function runTestSuite() {
       `Supervisor blocked from creating Client out-of-hierarchy (status ${supCreateClient.status})`
     );
 
-    // Claim Processor -> Client (ALLOWED)
+    // Claim Processor -> Client (FORBIDDEN per permission matrix)
     const procCreateClient = await fetch(`${BASE_URL}/api/users/create`, {
       method: "POST",
       headers: {
@@ -498,15 +525,15 @@ async function runTestSuite() {
       },
       body: JSON.stringify({
         name: `Subtree Client ${rand}`,
-        email: `client.${rand}@trafigura.com`,
+        email: `client.${rand}@laytime.demo`,
         role: "Client",
-        clientId: "client-trafigura",
-        clientName: "Trafigura"
+        clientId: "client-sokana",
+        clientName: "Sokana Commercial"
       })
     });
     assert(
-      procCreateClient.status === 201,
-      `Claim Processor can create Client per CREATE_MATRIX (status ${procCreateClient.status})`
+      procCreateClient.status === 403,
+      `Claim Processor forbidden from creating users (status ${procCreateClient.status})`
     );
 
     // Claim Processor -> Supervisor (FORBIDDEN per CREATE_MATRIX)
@@ -518,7 +545,7 @@ async function runTestSuite() {
       },
       body: JSON.stringify({
         name: `Illegal Supervisor ${rand}`,
-        email: `illegal.sup.${rand}@laytime.com`,
+        email: `illegal.sup.${rand}@laytime.demo`,
         role: "Supervisor"
       })
     });
@@ -536,7 +563,7 @@ async function runTestSuite() {
       },
       body: JSON.stringify({
         name: `Illegal Reviewer Sub ${rand}`,
-        email: `rev.sub.${rand}@laytime.com`,
+        email: `rev.sub.${rand}@laytime.demo`,
         role: "Reviewer"
       })
     });
@@ -554,7 +581,7 @@ async function runTestSuite() {
       },
       body: JSON.stringify({
         name: `Illegal Client Sub ${rand}`,
-        email: `cli.sub.${rand}@laytime.com`,
+        email: `cli.sub.${rand}@laytime.demo`,
         role: "Client"
       })
     });
@@ -567,8 +594,8 @@ async function runTestSuite() {
   // 9.2 SUBTREE ISOLATION & SELF-PROTECTION GUARDS
   console.log("\n--- 9.2 Testing Subtree Isolation & Self-Protection ---");
   {
-    // Processor cannot update Supervisor (outside actor subtree)
-    const procUpdateSupervisor = await fetch(`${BASE_URL}/api/users/usr-003`, {
+    // Processor cannot update Supervisor (usr-002 is supervisor outside actor subtree)
+    const procUpdateSupervisor = await fetch(`${BASE_URL}/api/users/usr-002`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -582,7 +609,7 @@ async function runTestSuite() {
     );
 
     // Processor cannot deactivate Supervisor (outside actor subtree)
-    const procDeactivateSupervisor = await fetch(`${BASE_URL}/api/users/usr-003`, {
+    const procDeactivateSupervisor = await fetch(`${BASE_URL}/api/users/usr-002`, {
       method: "DELETE",
       headers: { Cookie: `laytime_auth_token=${processorActor.token}` }
     });
@@ -606,16 +633,16 @@ async function runTestSuite() {
   console.log("\n--- 9.3 Testing Row-Level Data Isolation ---");
   {
     // Processor reading assigned claim -> 200
-    const procAssigned = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const procAssigned = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       headers: { Cookie: `laytime_auth_token=${processorActor.token}` }
     });
     assert(
       procAssigned.status === 200,
-      `Processor can read assigned claim CLM-2024-001 (status ${procAssigned.status})`
+      `Processor can read assigned claim CLM-2026-001 (status ${procAssigned.status})`
     );
 
     // Processor reading unassigned claim -> 404 (outside user's scope)
-    const procUnassigned = await fetch(`${BASE_URL}/api/claims/CLM-2024-003`, {
+    const procUnassigned = await fetch(`${BASE_URL}/api/claims/CLM-2026-002`, {
       headers: { Cookie: `laytime_auth_token=${processorActor.token}` }
     });
     assert(
@@ -624,12 +651,12 @@ async function runTestSuite() {
     );
 
     // Client reading own claim -> 200
-    const clientOwn = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const clientOwn = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
       clientOwn.status === 200,
-      `Client can read own claim CLM-2024-001 (status ${clientOwn.status})`
+      `Client can read own claim CLM-2026-001 (status ${clientOwn.status})`
     );
     const clientOwnData = await clientOwn.json();
     const claimKeys = Object.keys(clientOwnData.claim || {});
@@ -645,12 +672,12 @@ async function runTestSuite() {
     );
 
     // Client reading other client's claim -> 404
-    const clientOther = await fetch(`${BASE_URL}/api/claims/CLM-2024-002`, {
+    const clientOther = await fetch(`${BASE_URL}/api/claims/CLM-2026-002`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
       clientOther.status === 404,
-      `Client reading other client claim CLM-2024-002 returns 404 (status ${clientOther.status})`
+      `Client reading other client claim CLM-2026-002 returns 404 (status ${clientOther.status})`
     );
   }
 
@@ -658,7 +685,7 @@ async function runTestSuite() {
   console.log("\n--- 9.4 Testing Client Protected Feature Restrictions ---");
   {
     // Client blocked from Calculations endpoint -> 403
-    const cliCalcRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/calculations`, {
+    const cliCalcRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/calculations`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
@@ -667,7 +694,7 @@ async function runTestSuite() {
     );
 
     // Client blocked from SoF endpoint -> 403
-    const cliSofRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/sof`, {
+    const cliSofRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/sof`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
@@ -676,7 +703,7 @@ async function runTestSuite() {
     );
 
     // Client blocked from Override endpoint -> 403
-    const cliOverrideRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/override`, {
+    const cliOverrideRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/override`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -703,14 +730,14 @@ async function runTestSuite() {
   console.log("\n--- 9.5 Testing Token Version Revocation & Deactivation ---");
   {
     const rand = Date.now();
-    const tempUserEmail = `session.revocation.${rand}@laytime.com`;
+    const tempUserEmail = `session.revocation.${rand}@laytime.demo`;
 
-    // Supervisor creates temporary user
+    // Admin creates temporary user
     const createRes = await fetch(`${BASE_URL}/api/users/create`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `laytime_auth_token=${supervisorActor.token}`
+        Cookie: `laytime_auth_token=${adminActor.token}`
       },
       body: JSON.stringify({
         name: `Revocation Test User ${rand}`,
@@ -735,7 +762,7 @@ async function runTestSuite() {
     // Deactivate temporary user account
     const deactRes = await fetch(`${BASE_URL}/api/users/${tempUserId}`, {
       method: "DELETE",
-      headers: { Cookie: `laytime_auth_token=${supervisorActor.token}` }
+      headers: { Cookie: `laytime_auth_token=${adminActor.token}` }
     });
     assert(deactRes.status === 200, "Temporary user deactivated successfully");
 
@@ -753,7 +780,7 @@ async function runTestSuite() {
   console.log("\n--- 9.6 Testing Client Negotiations Lifecycle & Immutability ---");
   {
     // Client posts text message -> 201
-    const postText = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const postText = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -770,7 +797,7 @@ async function runTestSuite() {
     );
 
     // Attempt PUT/DELETE on negotiation messages -> 405 Method Not Allowed (Append-only)
-    const putMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const putMsg = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -783,7 +810,7 @@ async function runTestSuite() {
       `Negotiation messages are append-only: PUT returns 405 (status ${putMsg.status})`
     );
 
-    const delMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const delMsg = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "DELETE",
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
@@ -793,7 +820,7 @@ async function runTestSuite() {
     );
 
     // Client posts counter_offer -> 201 with status "Pending"
-    const postOffer = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const postOffer = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -813,7 +840,7 @@ async function runTestSuite() {
     const counterOfferMsgId = offerData.message?.id;
 
     // Processor accepts counter_offer -> 200 (creates proposed agreed amount)
-    const procAccept = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/respond`, {
+    const procAccept = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -831,7 +858,7 @@ async function runTestSuite() {
     );
 
     // Supervisor confirms settlement -> 200 (commits to claims.agreed_amount)
-    const supConfirm = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/confirm`, {
+    const supConfirm = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/confirm`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -844,7 +871,7 @@ async function runTestSuite() {
     );
 
     // Verify claim agreed_amount reflects confirmed settlement
-    const verifiedClaimRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const verifiedClaimRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       headers: { Cookie: `laytime_auth_token=${supervisorActor.token}` }
     });
     const verifiedClaimData = await verifiedClaimRes.json();
@@ -862,7 +889,7 @@ async function runTestSuite() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `laytime_auth_token=${supervisorActor.token}`
+        Cookie: `laytime_auth_token=${adminActor.token}`
       },
       body: JSON.stringify({
         name: "Test",
@@ -877,7 +904,7 @@ async function runTestSuite() {
 
     // Zod rejects oversized negotiation message (>2000 chars)
     const oversizedContent = "A".repeat(2005);
-    const oversizedMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const oversizedMsg = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -894,7 +921,7 @@ async function runTestSuite() {
     );
 
     // Zod rejects negative counter-offer amount
-    const negativeOffer = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const negativeOffer = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -912,7 +939,7 @@ async function runTestSuite() {
     );
 
     // SQL Injection attack attempt in parameterized endpoint returns 404 safely
-    const sqliRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-001' OR '1'='1`, {
+    const sqliRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-001' OR '1'='1`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
@@ -924,38 +951,31 @@ async function runTestSuite() {
   // 9.8 COMPREHENSIVE REVIEWER STRICTLY READ-ONLY ACCESS & PROHIBITION MATRIX
   console.log("\n--- 9.8 Testing Reviewer Strictly Read-Only Permissions & Prohibitions Matrix ---");
   {
-    // Reviewer login
-    const revLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "paraschougale558@gmail.com", password: "Paras@123" })
-    });
-    const revToken = extractAuthCookie(revLoginRes);
-    const revHeaders = { Cookie: `laytime_auth_token=${revToken}` };
+    const revHeaders = { Cookie: `laytime_auth_token=${reviewerActor.token}` };
     const revJsonHeaders = {
       "Content-Type": "application/json",
-      Cookie: `laytime_auth_token=${revToken}`
+      Cookie: `laytime_auth_token=${reviewerActor.token}`
     };
 
     // --- WHAT THE REVIEWER CAN DO (READ ONLY) ---
     // 1. View claims, claim list, claim details and status
     const revClaims = await fetch(`${BASE_URL}/api/claims`, { headers: revHeaders });
     assert(revClaims.status === 200, `Reviewer can view claims list (status ${revClaims.status})`);
-    const revClaim = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, { headers: revHeaders });
+    const revClaim = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, { headers: revHeaders });
     assert(revClaim.status === 200, `Reviewer can view claim details and status (status ${revClaim.status})`);
 
     // 2. View Statement of Facts (SoF), ports and berths
-    const revSof = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/sof`, { headers: revHeaders });
+    const revSof = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/sof`, { headers: revHeaders });
     assert(revSof.status === 200, `Reviewer can view Statement of Facts, ports and berths (status ${revSof.status})`);
 
     // 3. View documents and preview/download them
     const revDocs = await fetch(`${BASE_URL}/api/documents`, { headers: revHeaders });
     assert(revDocs.status === 200, `Reviewer can view documents list (status ${revDocs.status})`);
-    const revDocItem = await fetch(`${BASE_URL}/api/documents/doc-101`, { headers: revHeaders });
+    const revDocItem = await fetch(`${BASE_URL}/api/documents/doc-0001`, { headers: revHeaders });
     assert(revDocItem.status === 200, `Reviewer can preview/inspect document (status ${revDocItem.status})`);
 
     // 4. View saved laytime calculation results and summaries (read stored results only)
-    const revCalc = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/calculations`, { headers: revHeaders });
+    const revCalc = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/calculations`, { headers: revHeaders });
     assert(revCalc.status === 200, `Reviewer can view saved laytime calculation results (status ${revCalc.status})`);
     const revOilChem = await fetch(`${BASE_URL}/api/oil-chem`, { headers: revHeaders });
     assert(revOilChem.status === 200, `Reviewer can view saved oil/chem calculation summaries (status ${revOilChem.status})`);
@@ -963,7 +983,7 @@ async function runTestSuite() {
     // 5. View RAC findings and their status
     const revRacCases = await fetch(`${BASE_URL}/api/rac/cases`, { headers: revHeaders });
     assert(revRacCases.status === 200, `Reviewer can view RAC cases and findings (status ${revRacCases.status})`);
-    const revRacCase = await fetch(`${BASE_URL}/api/rac/cases/RAC-2024-001`, { headers: revHeaders });
+    const revRacCase = await fetch(`${BASE_URL}/api/rac/cases/rac-case-1`, { headers: revHeaders });
     assert(revRacCase.status === 200, `Reviewer can view RAC finding status (status ${revRacCase.status})`);
 
     // 6. View payments and invoices
@@ -973,7 +993,7 @@ async function runTestSuite() {
     assert(revInvoices.status === 200, `Reviewer can view invoices (status ${revInvoices.status})`);
 
     // 7. View negotiation history, including minimum acceptable amount
-    const revNego = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations`, { headers: revHeaders });
+    const revNego = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations`, { headers: revHeaders });
     const revNegoData = await revNego.json();
     assert(
       revNego.status === 200 && revNegoData.roleType === "oversight",
@@ -994,10 +1014,10 @@ async function runTestSuite() {
 
     // --- WHAT THE REVIEWER MUST NEVER DO ---
     // 1. Never create, edit or delete Statement of Facts (SoF)
-    const revPostSof = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/sof`, {
+    const revPostSof = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/sof`, {
       method: "POST",
       headers: revJsonHeaders,
-      body: JSON.stringify({ activityName: "Unauthorized SoF Activity", startTime: "2024-07-12T10:00:00Z", stopTime: "2024-07-12T12:00:00Z" })
+      body: JSON.stringify({ activityName: "Unauthorized SoF Activity", startTime: "2026-09-01T10:00:00Z", stopTime: "2026-09-01T12:00:00Z" })
     });
     assert(revPostSof.status === 403, `Reviewer forbidden from creating/editing SoF (status ${revPostSof.status})`);
 
@@ -1009,13 +1029,13 @@ async function runTestSuite() {
     });
     assert(revPostCalc.status === 403, `Reviewer forbidden from executing laytime calculation (status ${revPostCalc.status})`);
 
-    const revPostClaimCalc = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/calculations`, {
+    const revPostClaimCalc = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/calculations`, {
       method: "POST",
       headers: revJsonHeaders
     });
     assert(revPostClaimCalc.status === 403, `Reviewer forbidden from recalculating claim laytime (status ${revPostClaimCalc.status})`);
 
-    const revPostOverride = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/override`, {
+    const revPostOverride = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/override`, {
       method: "POST",
       headers: revJsonHeaders,
       body: JSON.stringify({ overriddenDemurrage: 20000, overrideReason: "Unauthorized override attempt" })
@@ -1033,7 +1053,7 @@ async function runTestSuite() {
     const revPostRacCalc = await fetch(`${BASE_URL}/api/rac/calculations`, {
       method: "POST",
       headers: revJsonHeaders,
-      body: JSON.stringify({ racCaseId: "RAC-2024-001" })
+      body: JSON.stringify({ racCaseId: "rac-case-1" })
     });
     assert(revPostRacCalc.status === 403, `Reviewer forbidden from running RAC analysis (status ${revPostRacCalc.status})`);
 
@@ -1044,7 +1064,7 @@ async function runTestSuite() {
     });
     assert(revPostRacCase.status === 403, `Reviewer forbidden from creating RAC case (status ${revPostRacCase.status})`);
 
-    const revPutRacCase = await fetch(`${BASE_URL}/api/rac/cases/RAC-2024-001`, {
+    const revPutRacCase = await fetch(`${BASE_URL}/api/rac/cases/rac-case-1`, {
       method: "PUT",
       headers: revJsonHeaders,
       body: JSON.stringify({ status: "Closed" })
@@ -1055,7 +1075,7 @@ async function runTestSuite() {
     const revPostOcr = await fetch(`${BASE_URL}/api/ocr`, {
       method: "POST",
       headers: revJsonHeaders,
-      body: JSON.stringify({ fileName: "test.pdf", claimId: "CLM-2024-001" })
+      body: JSON.stringify({ fileName: "test.pdf", claimId: "CLM-2026-001" })
     });
     assert(revPostOcr.status === 403, `Reviewer forbidden from executing OCR (status ${revPostOcr.status})`);
 
@@ -1063,18 +1083,18 @@ async function runTestSuite() {
     const revPostDoc = await fetch(`${BASE_URL}/api/documents`, {
       method: "POST",
       headers: revJsonHeaders,
-      body: JSON.stringify({ fileName: "unauthorized.pdf", claimId: "CLM-2024-001" })
+      body: JSON.stringify({ fileName: "unauthorized.pdf", claimId: "CLM-2026-001" })
     });
     assert(revPostDoc.status === 403, `Reviewer forbidden from uploading documents (status ${revPostDoc.status})`);
 
-    const revPutDoc = await fetch(`${BASE_URL}/api/documents/doc-101`, {
+    const revPutDoc = await fetch(`${BASE_URL}/api/documents/doc-0001`, {
       method: "PUT",
       headers: revJsonHeaders,
       body: JSON.stringify({ status: "Verified" })
     });
     assert(revPutDoc.status === 403, `Reviewer forbidden from modifying documents (status ${revPutDoc.status})`);
 
-    const revDelDoc = await fetch(`${BASE_URL}/api/documents/doc-101`, {
+    const revDelDoc = await fetch(`${BASE_URL}/api/documents/doc-0001`, {
       method: "DELETE",
       headers: revHeaders
     });
@@ -1084,26 +1104,26 @@ async function runTestSuite() {
     const revPostPay = await fetch(`${BASE_URL}/api/payments`, {
       method: "POST",
       headers: revJsonHeaders,
-      body: JSON.stringify({ claimId: "CLM-2024-001", amount: 5000 })
+      body: JSON.stringify({ claimId: "CLM-2026-001", amount: 5000 })
     });
     assert(revPostPay.status === 403, `Reviewer forbidden from recording payments (status ${revPostPay.status})`);
 
     const revPostInv = await fetch(`${BASE_URL}/api/invoices`, {
       method: "POST",
       headers: revJsonHeaders,
-      body: JSON.stringify({ claimId: "CLM-2024-001", amount: 5000 })
+      body: JSON.stringify({ claimId: "CLM-2026-001", amount: 5000 })
     });
     assert(revPostInv.status === 403, `Reviewer forbidden from creating invoices (status ${revPostInv.status})`);
 
     // 7. Never assign or reassign claims, or review-and-settle / approve / close claim
-    const revAssign = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const revAssign = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       method: "PUT",
       headers: revJsonHeaders,
-      body: JSON.stringify({ assignedTo: "another.user@laytime.com" })
+      body: JSON.stringify({ assignedTo: "another.user@laytime.demo" })
     });
     assert(revAssign.status === 403, `Reviewer forbidden from assigning claims (status ${revAssign.status})`);
 
-    const revSettle = await fetch(`${BASE_URL}/api/claims/CLM-2024-001`, {
+    const revSettle = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
       method: "PUT",
       headers: revJsonHeaders,
       body: JSON.stringify({ claimStatus: "Settled" })
@@ -1136,21 +1156,21 @@ async function runTestSuite() {
     assert(revPostAi.status === 403, `Reviewer forbidden from triggering AI assistant (status ${revPostAi.status})`);
 
     // 10. Never initiate, draft, accept, reject or close negotiations
-    const revPostMsg = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/messages`, {
+    const revPostMsg = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/messages`, {
       method: "POST",
       headers: revJsonHeaders,
       body: JSON.stringify({ messageType: "text", content: "Unauthorized review comment" })
     });
     assert(revPostMsg.status === 403, `Reviewer forbidden from posting negotiation messages (status ${revPostMsg.status})`);
 
-    const revRespondNego = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/respond`, {
+    const revRespondNego = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/respond`, {
       method: "POST",
       headers: revJsonHeaders,
       body: JSON.stringify({ messageId: "msg-1", decision: "Accepted" })
     });
     assert(revRespondNego.status === 403, `Reviewer forbidden from accepting/rejecting counter-offers (status ${revRespondNego.status})`);
 
-    const revConfirmNego = await fetch(`${BASE_URL}/api/claims/CLM-2024-001/negotiations/confirm`, {
+    const revConfirmNego = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/negotiations/confirm`, {
       method: "POST",
       headers: revJsonHeaders
     });
@@ -1165,6 +1185,119 @@ async function runTestSuite() {
 
     const revAiPage = await fetch(`${BASE_URL}/ai-assistant`, { headers: revHeaders, redirect: "manual" });
     assert(revAiPage.status === 307 || revAiPage.status === 302, `Reviewer redirected away from /ai-assistant (status ${revAiPage.status})`);
+  }
+
+  // TEST 10: ROLE PERMISSIONS MATRIX BOUNDARIES
+  console.log("\n--- 10. Testing Role Permissions Matrix Boundaries ---");
+  {
+    const supHeaders = {
+      "Content-Type": "application/json",
+      Cookie: `laytime_auth_token=${supervisorActor.token}`
+    };
+    const procHeaders = {
+      "Content-Type": "application/json",
+      Cookie: `laytime_auth_token=${processorActor.token}`
+    };
+    const revHeaders = {
+      "Content-Type": "application/json",
+      Cookie: `laytime_auth_token=${reviewerActor.token}`
+    };
+
+    // 10.1 Supervisor Boundaries:
+    // Supervisor blocked from User Management (403)
+    const supCreateUser = await fetch(`${BASE_URL}/api/users/create`, {
+      method: "POST",
+      headers: supHeaders,
+      body: JSON.stringify({ name: "Sup Test User", email: "suptest@laytime.demo", role: "Reviewer" })
+    });
+    assert(supCreateUser.status === 403, `Supervisor forbidden from user management (status ${supCreateUser.status})`);
+
+    // Supervisor blocked from Company Settings (403)
+    const supPostSettings = await fetch(`${BASE_URL}/api/settings`, {
+      method: "POST",
+      headers: supHeaders,
+      body: JSON.stringify({ companyName: "Unauthorized Name Change" })
+    });
+    assert(supPostSettings.status === 403, `Supervisor forbidden from modifying settings (status ${supPostSettings.status})`);
+
+    // Supervisor ALLOWED: view all claims (200)
+    const supGetClaims = await fetch(`${BASE_URL}/api/claims`, { headers: supHeaders });
+    assert(supGetClaims.status === 200, `Supervisor allowed to view all claims (status ${supGetClaims.status})`);
+
+    // Supervisor ALLOWED: upload documents (200 or 201)
+    const supDoc = await fetch(`${BASE_URL}/api/documents`, {
+      method: "POST",
+      headers: supHeaders,
+      body: JSON.stringify({ fileName: "supervisor-upload.pdf", claimId: "CLM-2026-001" })
+    });
+    assert(supDoc.status === 200 || supDoc.status === 201, `Supervisor allowed to upload documents (status ${supDoc.status})`);
+
+    // Supervisor ALLOWED: override calculation (200)
+    const supOverride = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/override`, {
+      method: "POST",
+      headers: supHeaders,
+      body: JSON.stringify({ overriddenDemurrage: 15000, overrideReason: "Supervisor manual adjustment" })
+    });
+    assert(supOverride.status === 200, `Supervisor allowed to override calculations (status ${supOverride.status})`);
+
+    // 10.2 Claim Processor Boundaries:
+    // Processor blocked from deleting claims (403)
+    const procDeleteClaim = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
+      method: "DELETE",
+      headers: procHeaders
+    });
+    assert(procDeleteClaim.status === 403, `Processor forbidden from deleting claims (status ${procDeleteClaim.status})`);
+
+    // Processor blocked from calculation override (403)
+    const procOverride = await fetch(`${BASE_URL}/api/claims/CLM-2026-001/override`, {
+      method: "POST",
+      headers: procHeaders,
+      body: JSON.stringify({ overriddenDemurrage: 20000, overrideReason: "Processor override attempt" })
+    });
+    assert(procOverride.status === 403, `Processor forbidden from overriding calculations (status ${procOverride.status})`);
+
+    // Processor blocked from reassigning claims (403)
+    const procReassign = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
+      method: "PUT",
+      headers: procHeaders,
+      body: JSON.stringify({ assignedTo: "another.user@laytime.demo" })
+    });
+    assert(procReassign.status === 403, `Processor forbidden from reassigning claims (status ${procReassign.status})`);
+
+    // 10.3 Create Claim 3-layer verification for Reviewer:
+    // Layer 1: Middleware redirects /claims/create
+    const revCreatePage = await fetch(`${BASE_URL}/claims/create`, {
+      headers: revHeaders,
+      redirect: "manual"
+    });
+    assert(revCreatePage.status === 307 || revCreatePage.status === 302, `Reviewer blocked from /claims/create route by middleware (status ${revCreatePage.status})`);
+
+    // Layer 2: API POST /api/claims returns 403
+    const revCreateClaim = await fetch(`${BASE_URL}/api/claims`, {
+      method: "POST",
+      headers: revHeaders,
+      body: JSON.stringify({ vesselName: "Forbidden Carrier" })
+    });
+    assert(revCreateClaim.status === 403, `Reviewer blocked from POST /api/claims (status ${revCreateClaim.status})`);
+  }
+
+  // TEST 11: OPTIMISTIC CONCURRENCY / 409 CONFLICT (DEFECT 8)
+  console.log("\n--- 11. Testing Optimistic Concurrency & 409 Conflict (Defect 8) ---");
+  {
+    const stalePut = await fetch(`${BASE_URL}/api/claims/CLM-2026-001`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `laytime_auth_token=${supervisorActor.token}`
+      },
+      body: JSON.stringify({
+        claimNotes: "Stale update attempt",
+        updatedAt: "2020-01-01T00:00:00.000Z" // clearly stale
+      })
+    });
+    assert(stalePut.status === 409, `Stale update returns 409 Conflict (status ${stalePut.status})`);
+    const staleData = await stalePut.json();
+    assert(staleData.error?.includes("modified") || staleData.currentRecord, "409 response includes conflict details or currentRecord");
   }
 
   // TEST 12: Dedicated Dashboard Landing and Wrong-Role URL Redirections
@@ -1207,6 +1340,15 @@ async function runTestSuite() {
     const cliLoc = cliDashRes.headers.get("location") || "";
     assert(cliLoc.includes("/dashboard/reviewer-client"), `Client redirected to /dashboard/reviewer-client: ${cliLoc}`);
 
+    // Reviewer -> /dashboard/reviewer
+    const revDashRes = await fetch(`${BASE_URL}/dashboard`, {
+      headers: { Cookie: `laytime_auth_token=${reviewerActor.token}` },
+      redirect: "manual"
+    });
+    assert(revDashRes.status === 307 || revDashRes.status === 302, `Reviewer /dashboard redirects (status ${revDashRes.status})`);
+    const revLoc = revDashRes.headers.get("location") || "";
+    assert(revLoc.includes("/dashboard/reviewer"), `Reviewer redirected to /dashboard/reviewer: ${revLoc}`);
+
     // 12.2 Wrong-role URLs redirect to user's own dashboard
     // Admin blocked from /dashboard/supervisor -> redirects to /dashboard/admin
     const adminWrongRes = await fetch(`${BASE_URL}/dashboard/supervisor`, {
@@ -1243,13 +1385,22 @@ async function runTestSuite() {
     assert(cliWrongRes.status === 307 || cliWrongRes.status === 302, `Client blocked from /dashboard/claim-processor (status ${cliWrongRes.status})`);
     const cliWrongLoc = cliWrongRes.headers.get("location") || "";
     assert(cliWrongLoc.includes("/dashboard/reviewer-client"), `Client redirected back to /dashboard/reviewer-client: ${cliWrongLoc}`);
+
+    // Reviewer blocked from /dashboard/admin -> redirects to /dashboard/reviewer
+    const revWrongRes = await fetch(`${BASE_URL}/dashboard/admin`, {
+      headers: { Cookie: `laytime_auth_token=${reviewerActor.token}` },
+      redirect: "manual"
+    });
+    assert(revWrongRes.status === 307 || revWrongRes.status === 302, `Reviewer blocked from /dashboard/admin (status ${revWrongRes.status})`);
+    const revWrongLoc = revWrongRes.headers.get("location") || "";
+    assert(revWrongLoc.includes("/dashboard/reviewer"), `Reviewer redirected back to /dashboard/reviewer: ${revWrongLoc}`);
   }
 
   // TEST 13: Processor Cannot Edit Unassigned or Other Processor's Claim
   console.log("\n--- 13. Testing Processor Claim Isolation & Edit Restrictions ---");
   {
-    // Processor cannot edit unassigned claim
-    const procEditUnassigned = await fetch(`${BASE_URL}/api/claims/CLM-2024-003`, {
+    // Processor cannot edit unassigned claim (CLM-2026-002 assigned to Sneha Joshi)
+    const procEditUnassigned = await fetch(`${BASE_URL}/api/claims/CLM-2026-002`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -1259,21 +1410,7 @@ async function runTestSuite() {
     });
     assert(
       procEditUnassigned.status === 403,
-      `Processor cannot edit unassigned claim CLM-2024-003 (status ${procEditUnassigned.status})`
-    );
-
-    // Processor cannot edit another processor's claim (CLM-2024-005 assigned to Marcus Aurelius)
-    const procEditOther = await fetch(`${BASE_URL}/api/claims/CLM-2024-005`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `laytime_auth_token=${processorActor.token}`
-      },
-      body: JSON.stringify({ claimNotes: "Unauthorized edit on other claim" })
-    });
-    assert(
-      procEditOther.status === 403,
-      `Processor cannot edit claim outside their assignment CLM-2024-005 (status ${procEditOther.status})`
+      `Processor cannot edit unassigned claim CLM-2026-002 (status ${procEditUnassigned.status})`
     );
   }
 
@@ -1281,16 +1418,16 @@ async function runTestSuite() {
   console.log("\n--- 14. Testing External Client Strict Data Isolation ---");
   {
     // Client cannot read another client's claim
-    const cliOtherClaimRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-002`, {
+    const cliOtherClaimRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-002`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
       cliOtherClaimRes.status === 404 || cliOtherClaimRes.status === 403,
-      `Client cannot read another client's claim CLM-2024-002 (status ${cliOtherClaimRes.status})`
+      `Client cannot read another client's claim CLM-2026-002 (status ${cliOtherClaimRes.status})`
     );
 
     // Client cannot read missing-docs for another client's claim
-    const cliOtherDocsRes = await fetch(`${BASE_URL}/api/claims/CLM-2024-002/missing-docs`, {
+    const cliOtherDocsRes = await fetch(`${BASE_URL}/api/claims/CLM-2026-002/missing-docs`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
@@ -1299,7 +1436,7 @@ async function runTestSuite() {
     );
 
     // Client cannot access oil-chem calculations for another client's claim
-    const cliOtherOilChem = await fetch(`${BASE_URL}/api/oil-chem?claimId=CLM-2024-002`, {
+    const cliOtherOilChem = await fetch(`${BASE_URL}/api/oil-chem?claimId=CLM-2026-002`, {
       headers: { Cookie: `laytime_auth_token=${clientActor.token}` }
     });
     assert(
@@ -1315,7 +1452,7 @@ async function runTestSuite() {
     const cliNotifsData = await cliNotifsRes.json();
     assert(Array.isArray(cliNotifsData.notifications), "Client notifications is an array");
     const containsOtherClientClaim = cliNotifsData.notifications.some(
-      (n) => n.claimId === "CLM-2024-002" || n.claimId === "CLM-2024-003"
+      (n) => n.claimId === "CLM-2026-002" || n.claimId === "CLM-2026-003"
     );
     assert(!containsOtherClientClaim, "Client notifications do not leak other clients' claims");
   }
@@ -1376,7 +1513,7 @@ async function runTestSuite() {
       { url: "/api/payments", method: "GET" },
       { url: "/api/clients", method: "GET" },
       { url: "/api/ocr", method: "GET" },
-      { url: "/api/claims/CLM-2024-001/missing-docs", method: "GET" }
+      { url: "/api/claims/CLM-2026-001/missing-docs", method: "GET" }
     ];
 
     for (const ep of apiEndpoints) {

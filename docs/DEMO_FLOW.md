@@ -43,8 +43,8 @@
   - Enter `admin@invalid.com` and `WrongPassword@999`. Click **Sign In**.
   - **Result:** System displays red banner: *"Invalid email or password"*. HTTP status 401. Passwords are never revealed in network responses or DOM.
 * **Action 2 (Admin Login):**
-  - Click the quick-fill button: `Admin (rajvardhanwadkar76@gmail.com)`.
-  - Toggle the password visibility eye icon to reveal `Raj@123`.
+  - Click the quick-fill button: `Admin (admin@laytime.demo)`.
+  - Toggle the password visibility eye icon to reveal `Demo@12345`.
   - Click **Sign In**.
 * **Observed System Behavior:**
   - POST `/api/auth/login` verifies bcrypt hash in `data/laytime.db`.
@@ -144,7 +144,7 @@
   - Click the **Sign Out** button in the header/sidebar.
   - System calls POST `/api/auth/logout`, clears the HTTP-only cookie, and redirects to `/login`.
 * **Action 2 (Login as Reviewer):**
-  - Click quick-fill: `Reviewer (paraschougale558@gmail.com)` / `Paras@123`.
+  - Click quick-fill: `Reviewer (reviewer@laytime.demo)` / `Demo@12345`.
   - Click **Sign In**.
   - Profile header now shows: `Paras Chougale` with green `Reviewer` badge.
 * **Action 3 (Reviewer Negative Enforcement Test):**

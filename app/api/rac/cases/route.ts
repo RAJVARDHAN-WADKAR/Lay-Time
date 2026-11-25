@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromRequest } from "@/lib/auth/session";
-import { getRacCases, createRacCase } from "@/lib/db/queries";
+import { getRacCases, createRacCase, createNotificationRecord } from "@/lib/db/queries";
+import { logAudit } from "@/lib/db/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,12 +46,36 @@ export async function POST(request: NextRequest) {
 
     const { normalizeRole } = await import("@/app/access/roles");
     const userRoleNorm = normalizeRole(session.role);
-    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
-      return NextResponse.json({ error: "Forbidden: Reviewers and Clients have read-only access." }, { status: 403 });
+    if (
+      userRoleNorm === "REVIEWER_CLIENT" ||
+      userRoleNorm === "FINANCE" ||
+      session.role === "Reviewer" ||
+      session.role === "Client" ||
+      session.role === "Finance"
+    ) {
+      return NextResponse.json({ error: "Forbidden: Reviewers, Clients, and Finance cannot create RAC cases." }, { status: 403 });
     }
 
     const body = await request.json();
     const newCase = createRacCase(body, session.name || session.email || "System");
+
+    logAudit({
+      actorId: session.userId,
+      actorEmail: session.email,
+      actorRole: session.role,
+      action: "rac_create",
+      targetType: "rac_case",
+      targetId: newCase.id,
+      details: body
+    });
+
+    createNotificationRecord({
+      title: "New RAC Case Created",
+      message: `RAC Case ${newCase.racReference} has been created`,
+      type: "rac",
+      racCaseId: newCase.id,
+      racReference: newCase.racReference
+    });
 
     return NextResponse.json({
       success: true,

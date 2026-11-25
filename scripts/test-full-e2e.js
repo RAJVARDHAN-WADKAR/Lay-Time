@@ -1,4 +1,26 @@
-const BASE_URL = "http://localhost:3000";
+const fs = require("fs");
+const path = require("path");
+
+const envLocalPath = path.join(__dirname, "..", ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  const envContent = fs.readFileSync(envLocalPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx !== -1) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  }
+}
+
+const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const supervisorPassword = process.env.SUPERVISOR_PASSWORD || process.env.DEMO_SUPERVISOR_PASSWORD || "SuperSecurePass@2024!";
+const processorPassword = process.env.PROCESSOR1_PASSWORD || process.env.DEMO_PROCESSOR_PASSWORD || "Proc1SecurePass@2024!";
 
 async function runE2ETests() {
   console.log("=========================================================");
@@ -19,6 +41,13 @@ async function runE2ETests() {
   }
 
   function extractCookie(res) {
+    if (typeof res.headers.getSetCookie === "function") {
+      const cookies = res.headers.getSetCookie();
+      for (const c of cookies) {
+        const match = c.match(/laytime_auth_token=([^;]+)/);
+        if (match) return match[1];
+      }
+    }
     const raw = res.headers.get("set-cookie");
     if (!raw) return null;
     const match = raw.match(/laytime_auth_token=([^;]+)/);
@@ -32,7 +61,7 @@ async function runE2ETests() {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "swayamghatage3839@gmail.com", password: "Swayam@123" })
+      body: JSON.stringify({ email: "supervisor@laytime.demo", password: supervisorPassword })
     });
     assert(res.status === 200, "Supervisor login succeeded");
     supervisorCookie = extractCookie(res);
@@ -44,7 +73,7 @@ async function runE2ETests() {
     const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "rohitmengane2975@gmail.com", password: "Rohit@123" })
+      body: JSON.stringify({ email: "processor1@laytime.demo", password: processorPassword })
     });
     assert(res.status === 200, "Claim Processor login succeeded");
     processorCookie = extractCookie(res);

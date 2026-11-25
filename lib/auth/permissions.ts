@@ -1,56 +1,56 @@
 import { UserRole } from "@/lib/types";
 import {
-  RoleName,
-  ROLES_REGISTRY,
-  hasPermission as registryHasPermission,
-  normalizeRole as accessNormalizeRole,
-  isFieldHidden,
-  getRoleScope,
-  UserContext
-} from "@/app/access/roles";
+  Role,
+  Permission,
+  ROLE_PERMISSIONS,
+  normalizeRole,
+  can as canRole,
+  canAccessRoute as canAccessRouteRole,
+  getRoleDashboardPath
+} from "./rolePermissions";
 
-export { normalizeRole } from "@/app/access/roles";
+export { normalizeRole, canRole as can, getRoleDashboardPath, canAccessRouteRole as canAccessRoute };
 
 export function isProcessor(role?: string): boolean {
-  return accessNormalizeRole(role) === "CLAIM_PROCESSOR";
+  return normalizeRole(role) === "CLAIM_PROCESSOR";
 }
 
 export function isSupervisor(role?: string): boolean {
-  return accessNormalizeRole(role) === "SUPERVISOR";
+  return normalizeRole(role) === "SUPERVISOR";
 }
 
 export function isAdmin(role?: string): boolean {
-  return accessNormalizeRole(role) === "ADMIN";
+  return normalizeRole(role) === "ADMIN";
 }
 
-export function isReviewerClient(role?: string): boolean {
-  return accessNormalizeRole(role) === "REVIEWER_CLIENT";
+export function isReviewer(role?: string): boolean {
+  return normalizeRole(role) === "REVIEWER";
+}
+
+export function isClient(role?: string, clientId?: string | null): boolean {
+  return normalizeRole(role, Boolean(clientId)) === "CLIENT";
 }
 
 export function checkRolePermission(
-  userRole: UserRole,
-  allowedRoles: (UserRole | RoleName)[]
+  userRole: UserRole | string,
+  allowedRoles: (UserRole | Role | string)[]
 ): boolean {
-  const normalized = accessNormalizeRole(userRole);
-  const normalizedAllowed = allowedRoles.map((r) => accessNormalizeRole(r));
+  const normalized = normalizeRole(userRole);
+  const normalizedAllowed = allowedRoles.map((r) => normalizeRole(r));
   return normalizedAllowed.includes(normalized);
 }
 
 // 1. CLAIMS
 export function canViewClaims(role?: string): boolean {
-  return !!role;
+  return canRole(role, "claims:view");
 }
 
 export function canViewAllClaims(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "ADMIN" || r === "SUPERVISOR") return true;
-  if (r === "REVIEWER_CLIENT") return !clientId; // Internal reviewer views all, external client only own
-  return false;
+  return canRole(role, "claims:view_all", Boolean(clientId));
 }
 
 export function canCreateClaim(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
+  return canRole(role, "claims:create");
 }
 
 export function canEditClaim(
@@ -62,8 +62,8 @@ export function canEditClaim(
   userClient?: string,
   userId?: string
 ): boolean {
-  const r = accessNormalizeRole(roleFromUnknown(userRole));
-  if (r === "SUPERVISOR") return true;
+  const r = normalizeRole(userRole);
+  if (r === "ADMIN" || r === "SUPERVISOR") return true;
   if (r === "CLAIM_PROCESSOR") {
     if (!claimAssignedTo || !claimAssignedTo.trim()) return false;
     const assignedLower = claimAssignedTo.trim().toLowerCase();
@@ -80,34 +80,30 @@ export function canEditClaim(
 }
 
 export function canDeleteClaim(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "ADMIN"; // Admin for cleanup, Supervisor operational
+  return canRole(role, "claims:delete");
 }
 
 export function canApproveClaim(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "claims:approve");
 }
 
 export function canSubmitClaim(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
+  const r = normalizeRole(role);
+  return r === "ADMIN" || r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
 }
 
 // 2. ASSIGN / REASSIGN
 export function canAssignClaim(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "ADMIN"; // Admin can reassign, Supervisor can assign & reassign
+  return canRole(role, "claims:assign");
+}
+
+export function canReassignClaim(role?: string): boolean {
+  return canRole(role, "claims:reassign");
 }
 
 // 3. SOF, PORTS, BERTHS
 export function canViewSoF(role?: string, claimStatus?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "REVIEWER_CLIENT" && clientId) {
-    // External client views final SoF
-    return true;
-  }
-  return true; // Admin, Supervisor, Processor, Reviewer can view
+  return canRole(role, "sof:view", Boolean(clientId));
 }
 
 export function canEditSoF(
@@ -121,26 +117,27 @@ export function canEditSoF(
 
 // 4. DOCUMENTS
 export function canViewDocuments(role?: string): boolean {
-  return !!role;
+  return canRole(role, "documents:view");
 }
 
-export function canUploadDocuments(role?: string, isClientUploadRequested?: boolean, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "SUPERVISOR" || r === "CLAIM_PROCESSOR") return true;
-  if (r === "REVIEWER_CLIENT" && clientId) {
-    return Boolean(isClientUploadRequested); // External client uploads requested documents only
-  }
+export function canUploadDocuments(
+  role?: string,
+  isClientUploadRequested?: boolean,
+  clientId?: string | null
+): boolean {
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "ADMIN" || r === "SUPERVISOR" || r === "CLAIM_PROCESSOR") return true;
+  if (r === "CLIENT") return Boolean(isClientUploadRequested);
   return false;
 }
 
 export function canDeleteDocuments(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "ADMIN";
+  return canRole(role, "documents:delete");
 }
 
 // 5. LAYTIME CALCULATION
 export function canViewLaytime(role?: string): boolean {
-  return !!role;
+  return canRole(role, "calculator:view");
 }
 
 export function canEditLaytime(
@@ -163,15 +160,12 @@ export function canRecalculateLaytime(
 
 // 6. CALCULATION OVERRIDE
 export function canOverrideCalculation(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "calculator:override");
 }
 
 // 7. RAC FINDINGS
 export function canViewRac(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "REVIEWER_CLIENT" && clientId) return false; // External client cannot view RAC
-  return true;
+  return canRole(role, "rac:view", Boolean(clientId));
 }
 
 export function canEditRac(
@@ -184,33 +178,29 @@ export function canEditRac(
 }
 
 export function canAuthorizeRac(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "rac:authorize");
 }
 
 export function canSubmitRac(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
+  return canRole(role, "rac:submit");
 }
 
 export function canResolveRacFindings(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
+  const r = normalizeRole(role);
+  return r === "ADMIN" || r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
 }
 
 export function canUploadOcr(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
+  return canRole(role, "ocr:use");
 }
 
 // 8. INITIATE NEGOTIATION
 export function canInitiateNegotiation(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "negotiations:initiate");
 }
 
 export function canRequestNegotiation(role?: string): boolean {
-  const r = accessNormalizeRole(role);
+  const r = normalizeRole(role);
   return r === "CLAIM_PROCESSOR";
 }
 
@@ -226,98 +216,91 @@ export function canLogCounterpartyOffers(
 
 // 10. DRAFT OUR OFFER
 export function canDraftOurOffer(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "CLAIM_PROCESSOR";
+  return canRole(role, "negotiations:offer");
 }
 
 export function canApproveOurOffer(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "negotiations:approve");
 }
 
 // 11. MINIMUM ACCEPTABLE AMOUNT
 export function canViewMinAcceptableAmount(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "REVIEWER_CLIENT" && clientId) return false; // External client cannot see min acceptable amount
-  if (r === "CLAIM_PROCESSOR") return false; // Claim Processor cannot see min acceptable amount
-  return r === "SUPERVISOR" || r === "REVIEWER_CLIENT" || r === "ADMIN";
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "CLAIM_PROCESSOR" || r === "CLIENT") return false;
+  return r === "ADMIN" || r === "SUPERVISOR" || r === "REVIEWER";
 }
 
 export function canSetMinAcceptableAmount(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  const r = normalizeRole(role);
+  return r === "ADMIN" || r === "SUPERVISOR";
 }
 
 // 12. ACCEPT / REJECT / CLOSE NEGOTIATION
 export function canAcceptRejectCloseNegotiation(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "negotiations:close");
 }
 
 export function canClientApproveFinalOffer(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "REVIEWER_CLIENT" && Boolean(clientId);
+  const r = normalizeRole(role, Boolean(clientId));
+  return r === "CLIENT";
 }
 
 // 13. NEGOTIATION HISTORY
-export function getNegotiationHistoryScope(role?: string, clientId?: string | null): "all" | "own" | "shared" | "none" {
-  const r = accessNormalizeRole(role);
-  if (r === "SUPERVISOR" || r === "ADMIN" || (r === "REVIEWER_CLIENT" && !clientId)) return "all";
+export function getNegotiationHistoryScope(
+  role?: string,
+  clientId?: string | null
+): "all" | "own" | "shared" | "none" {
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "ADMIN" || r === "SUPERVISOR" || r === "REVIEWER") return "all";
   if (r === "CLAIM_PROCESSOR") return "own";
-  if (r === "REVIEWER_CLIENT" && clientId) return "shared";
+  if (r === "CLIENT") return "shared";
   return "none";
 }
 
 // 14. REVIEW / SETTLE CLAIM
 export function canSettleClaim(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "claims:settle");
 }
 
 // 15. INVOICES
 export function canViewInvoices(role?: string): boolean {
-  return !!role;
+  return canRole(role, "invoices:view");
 }
 
 export function canCreateEditInvoices(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR"; // Processor creates draft invoices; Supervisor full edit/approval
+  return canRole(role, "invoices:manage");
 }
 
 export function canApproveInvoices(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "invoices:manage");
 }
 
 // 16. PAYMENTS
 export function canViewPayments(role?: string): boolean {
-  return !!role;
+  return canRole(role, "payments:view");
 }
 
 export function canRecordPayments(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
+  return canRole(role, "payments:manage");
 }
 
 export function canEditPayments(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  return canRole(role, "payments:manage");
 }
 
 // 17. OWNERS CLAIM / BILLABLE ($)
 export function canViewOwnersClaim(role?: string): boolean {
-  return !!role;
+  return true;
 }
 
 export function canEditBillableAmount(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "SUPERVISOR";
+  const r = normalizeRole(role);
+  return r === "ADMIN" || r === "SUPERVISOR";
 }
 
 export function canViewBillableAmount(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "CLAIM_PROCESSOR") return false; // Hidden from Processor
-  if (r === "REVIEWER_CLIENT" && clientId) return false; // Hidden from External Client
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "CLAIM_PROCESSOR" || r === "CLIENT") return false;
   return true;
 }
 
@@ -326,87 +309,80 @@ export function canViewDashboard(role?: string): boolean {
   return !!role;
 }
 
-export function getDashboardScope(role?: string, clientId?: string | null): "global" | "own" | "none" {
-  const r = accessNormalizeRole(role);
-  if (r === "ADMIN" || r === "SUPERVISOR" || (r === "REVIEWER_CLIENT" && !clientId)) return "global";
-  if (r === "CLAIM_PROCESSOR" || (r === "REVIEWER_CLIENT" && clientId)) return "own";
+export function getDashboardScope(
+  role?: string,
+  clientId?: string | null
+): "global" | "own" | "financial" | "none" {
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "ADMIN" || r === "SUPERVISOR" || r === "REVIEWER") return "global";
+  if (r === "CLAIM_PROCESSOR" || r === "CLIENT") return "own";
   return "none";
 }
 
 // 19. REPORTS
 export function canViewReports(role?: string): boolean {
-  return !!role;
+  return canRole(role, "reports:view");
 }
 
 export function canExportReports(role?: string): boolean {
-  return !!role;
+  return canRole(role, "reports:export");
 }
 
-export function getReportsScope(role?: string, clientId?: string | null): "all" | "own" | "financial" | "none" {
-  const r = accessNormalizeRole(role);
-  if (role === "Finance") return "financial";
-  if (r === "ADMIN" || r === "SUPERVISOR" || (r === "REVIEWER_CLIENT" && !clientId)) return "all";
-  if (r === "CLAIM_PROCESSOR" || (r === "REVIEWER_CLIENT" && clientId)) return "own";
+export function getReportsScope(
+  role?: string,
+  clientId?: string | null
+): "all" | "own" | "financial" | "none" {
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "ADMIN" || r === "SUPERVISOR" || r === "REVIEWER") return "all";
+  if (r === "CLAIM_PROCESSOR" || r === "CLIENT") return "own";
   return "none";
 }
 
 // 20. CLIENTS / VESSELS
 export function canViewClientsVessels(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "REVIEWER_CLIENT" && clientId) return false; // External client cannot see clients/vessels list
+  const r = normalizeRole(role, Boolean(clientId));
+  if (r === "CLIENT") return false;
   return true;
 }
 
 export function canCreateClientsVessels(role?: string): boolean {
-  const r = accessNormalizeRole(role);
+  const r = normalizeRole(role);
   return r === "ADMIN" || r === "SUPERVISOR" || r === "CLAIM_PROCESSOR";
 }
 
 export function canEditClientsVessels(role?: string): boolean {
-  const r = accessNormalizeRole(role);
+  const r = normalizeRole(role);
   return r === "ADMIN" || r === "SUPERVISOR";
 }
 
 export function canDeleteClientsVessels(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "ADMIN";
+  return canRole(role, "settings:manage");
 }
 
 // 21. USERS AND ROLES
 export function canManageUsers(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "ADMIN";
+  return canRole(role, "users:manage");
 }
 
 export function canViewUsers(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "ADMIN" || r === "SUPERVISOR"; // Supervisor has view only
+  return canRole(role, "users:view");
 }
 
 export function canAccessUsers(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "ADMIN" || r === "SUPERVISOR";
+  return canRole(role, "users:view");
 }
 
 // 22. COMPANY SETTINGS
 export function canManageSettings(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "ADMIN";
+  return canRole(role, "settings:manage");
 }
 
 export function canAccessSettings(role?: string): boolean {
-  const r = accessNormalizeRole(role);
-  return r === "ADMIN";
+  return canRole(role, "settings:manage");
 }
 
 // 23. AUDIT LOG
 export function canViewAuditLog(role?: string, clientId?: string | null): boolean {
-  const r = accessNormalizeRole(role);
-  if (r === "CLAIM_PROCESSOR") return false; // No access to audit log
-  if (r === "REVIEWER_CLIENT" && clientId) return false; // External Client cannot see audit log
-  return r === "ADMIN" || r === "SUPERVISOR" || r === "REVIEWER_CLIENT";
-}
-
-function roleFromUnknown(role?: string): string {
-  return role || "REVIEWER_CLIENT";
+  const r = normalizeRole(role, Boolean(clientId));
+  return r === "ADMIN";
 }

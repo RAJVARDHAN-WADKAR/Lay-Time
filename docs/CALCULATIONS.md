@@ -32,3 +32,38 @@ This document catalogs every mathematical formula, business calculation, and agg
 | **Total Exposure ($)** | $$\text{Exposure} = \sum (\text{Filed Amount} - \text{Payment Received})$$ | Array of claims | USD ($) | [lib/mock/aggregate.ts](file:///C:/Lay%20time/lib/mock/aggregate.ts) | Dashboard KPI cards |
 | **Amount Under Contention** | $$\text{Contention} = \sum \text{Filed Amount for Status 'Disputed'}$$| Array of claims | USD ($) | [lib/mock/aggregate.ts](file:///C:/Lay%20time/lib/mock/aggregate.ts) | Dashboard KPI cards |
 | **Average Processing Time** | $$\text{AvgDays} = \text{round}\left(\frac{\sum \text{Days Open}}{\text{Count of Claims}}\right)$$ | Array of claims | Days (Integer) | [lib/mock/aggregate.ts](file:///C:/Lay%20time/lib/mock/aggregate.ts) | Dashboard KPI cards |
+
+---
+
+## 2. Deduction Records and SoF Non-Duplication Rule
+
+To prevent double-counting of deductions when both Statement of Facts (SoF) events and dedicated deduction records are present:
+
+1. **Activity Deductions**:
+   Each SoF activity deducts time based on its percentage counted and prorata:
+   $$M_{\text{deducted, act}} = M_{\text{gross}} \times \left(1 - \frac{\text{percentageCounted}}{100} \times \frac{\text{prorata}}{100}\right)$$
+
+2. **Deduction Records Non-Duplication**:
+   When a deduction record has explicit `startTime` and `stopTime`, it is evaluated against all overlapping SoF activities. If an overlapping SoF activity already has $\text{percentageCounted} < 100$, the minutes already deducted during the overlap window are calculated:
+   $$M_{\text{overlap\_deducted}} = \sum_{\text{overlapping acts}} M_{\text{overlap}} \times \left(1 - \frac{\text{percentageCounted}}{100} \times \frac{\text{prorata}}{100}\right)$$
+   The net deduction added by the deduction record is:
+   $$M_{\text{deduction\_record\_net}} = \max\left(0, M_{\text{deduction\_record}} - M_{\text{overlap\_deducted}}\right)$$
+   This guarantees that an event below 100% and a deduction record for the same time window never subtract twice.
+
+---
+
+## 3. Port-Level and Claim-Level Agreement Rule
+
+To ensure financial and temporal integrity, minutes and money must always originate from the same single source of truth:
+
+1. **Allowed Laytime Agreement**:
+   $$\sum_{p \in \text{ports}} M_{\text{allowed, } p} = M_{\text{allowed, claim}}$$
+2. **Net Laytime Agreement**:
+   $$\sum_{p \in \text{ports}} M_{\text{net, } p} = M_{\text{net, claim}}$$
+3. **Financial Demurrage Agreement**:
+   $$\sum_{p \in \text{ports}} \$_{\text{demurrage, } p} = \$_{\text{demurrage, claim}}$$
+4. **Financial Despatch Agreement**:
+   $$\sum_{p \in \text{ports}} \$_{\text{despatch, } p} = \$_{\text{despatch, claim}}$$
+5. **Rate Consistency**:
+   Demurrage rate per minute $R_{\text{min}} = \frac{\text{Rate/Day}}{1440}$ is uniformly applied across all levels, ensuring that port-level totals and claim-level totals agree exactly.
+

@@ -185,17 +185,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       if (!email || !email.trim()) {
-        return { success: false, error: "Please enter your email address." };
+        return { success: false, error: "Please enter your email address or username." };
       }
       if (!password || !password.trim()) {
         return { success: false, error: "Please enter your password." };
+      }
+
+      let emailToSubmit = email.trim();
+      if (!emailToSubmit.includes("@")) {
+        emailToSubmit = `${emailToSubmit}@laytime.io`;
       }
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: email.trim(),
+          email: emailToSubmit,
           password: password.trim()
         })
       });
@@ -346,7 +351,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canManageSettings = isAuthenticated && canManageSettingsFn(user?.role);
   const canAccessSettings = isAuthenticated && canAccessSettingsFn(user?.role);
   const canViewAuditLog = isAuthenticated && canViewAuditLogFn(user?.role);
-  const isReadOnly = !isAuthenticated || userRole === "REVIEWER_CLIENT" || user?.role === "Reviewer" || user?.role === "Client";
+  const isReadOnly = !isAuthenticated || userRole === "REVIEWER" || userRole === "CLIENT" || user?.role === "Reviewer" || user?.role === "Client";
 
   return (
     <AuthContext.Provider

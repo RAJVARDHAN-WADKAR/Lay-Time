@@ -5,6 +5,7 @@ import { getCurrentUserFromRequest } from "@/lib/auth/session";
 import { getClaimById, saveActivitiesForClaim, getActivitiesForClaim } from "@/lib/db/queries";
 import { getDatabase } from "@/lib/db";
 import { SoFActivity } from "@/lib/types";
+import { calculateGrossMinutes, formatMinutes } from "@/lib/calculations/deductions";
 
 export async function POST(request: NextRequest) {
   try {
@@ -88,24 +89,29 @@ export async function POST(request: NextRequest) {
       const portId = claim.ports?.[0]?.id || "port-1";
       const berthId = claim.ports?.[0]?.berths?.[0]?.id || "berth-1-1";
 
-      const newActivities: SoFActivity[] = rowsToImport.map((row: any, i: number) => ({
-        id: `ts-${Date.now()}-${i + 1}`,
-        claimId,
-        portId,
-        berthId,
-        activityName: row.activityName,
-        startTime: row.startTime,
-        stopTime: row.stopTime,
-        durationMinutes: row.durationMinutes || 60,
-        durationFormatted: row.durationFormatted || "01h 00m",
-        percentageCounted: row.percentageCounted !== undefined ? row.percentageCounted : 100,
-        prorata: 100,
-        deductionCategory: row.category || "Other",
-        remarks: row.remarks || "Imported from Timesheet",
-        isOcrExtracted: false,
-        isCorrected: true,
-        ocrConfidence: 1.0
-      }));
+      const newActivities: SoFActivity[] = rowsToImport.map((row: any, i: number) => {
+        const grossMinutes = calculateGrossMinutes(row.startTime, row.stopTime);
+        const durationMinutes = grossMinutes > 0 ? grossMinutes : 60;
+        const durationFormatted = formatMinutes(durationMinutes);
+        return {
+          id: `ts-${Date.now()}-${i + 1}`,
+          claimId,
+          portId,
+          berthId,
+          activityName: row.activityName,
+          startTime: row.startTime,
+          stopTime: row.stopTime,
+          durationMinutes,
+          durationFormatted,
+          percentageCounted: row.percentageCounted !== undefined ? row.percentageCounted : 100,
+          prorata: 100,
+          deductionCategory: row.category || "Other",
+          remarks: row.remarks || "Imported from Timesheet",
+          isOcrExtracted: false,
+          isCorrected: true,
+          ocrConfidence: 1.0
+        };
+      });
 
       const merged = [...currentActivities, ...newActivities];
       saveActivitiesForClaim(claimId, merged);

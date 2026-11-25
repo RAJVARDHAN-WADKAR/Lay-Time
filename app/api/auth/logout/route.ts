@@ -5,6 +5,7 @@ import { AUTH_COOKIE_NAME } from "@/lib/auth/session";
 
 export async function POST(request: NextRequest) {
   const response = NextResponse.json({ success: true, message: "Logged out successfully" });
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
     value: "",

@@ -2,8 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromRequest } from "@/lib/auth/session";
-import { getRacCaseById, updateRacCase } from "@/lib/db/queries";
+import { getRacCaseById, updateRacCase, createNotificationRecord } from "@/lib/db/queries";
 import { getDatabase } from "@/lib/db";
+import { logAudit } from "@/lib/db/audit";
 
 export async function GET(
   request: NextRequest,
@@ -44,8 +45,14 @@ export async function PUT(
 
     const { normalizeRole } = await import("@/app/access/roles");
     const userRoleNorm = normalizeRole(session.role);
-    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
-      return NextResponse.json({ error: "Forbidden: Reviewers and Clients have read-only access." }, { status: 403 });
+    if (
+      userRoleNorm === "REVIEWER_CLIENT" ||
+      userRoleNorm === "FINANCE" ||
+      session.role === "Reviewer" ||
+      session.role === "Client" ||
+      session.role === "Finance"
+    ) {
+      return NextResponse.json({ error: "Forbidden: Reviewers, Clients, and Finance have read-only access to RAC cases." }, { status: 403 });
     }
 
     const existing = getRacCaseById(params.id);
@@ -65,6 +72,20 @@ export async function PUT(
 
     const body = await request.json();
 
+    // Optimistic concurrency check (Defect 8)
+    const clientUpdatedAt = body.updatedAt || body.updated_at;
+    if (clientUpdatedAt && existing.updatedAt) {
+      if (new Date(clientUpdatedAt).getTime() !== new Date(existing.updatedAt).getTime()) {
+        return NextResponse.json(
+          {
+            error: "Conflict: This RAC case has been modified by someone else. Please reload.",
+            currentRecord: existing
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Claim Processor restriction: cannot authorize, ignore findings, or close RAC cases
     if (userRoleNorm === "CLAIM_PROCESSOR" || session.role === "Claim Processor" || session.role === "Processor") {
       if (body.status && (body.status === "Reviewed" || body.status === "Closed" || body.status === "Authorized")) {
@@ -76,6 +97,26 @@ export async function PUT(
     }
 
     const updated = updateRacCase(params.id, body, session.name || session.email || "System");
+
+    logAudit({
+      actorId: session.userId,
+      actorEmail: session.email,
+      actorRole: session.role,
+      action: body.status && body.status !== existing.status ? "rac_status_transition" : "rac_update",
+      targetType: "rac_case",
+      targetId: params.id,
+      details: body
+    });
+
+    if (body.status && body.status !== existing.status) {
+      createNotificationRecord({
+        title: "RAC Case Status Changed",
+        message: `RAC Case ${existing.racReference} moved to ${body.status}`,
+        type: "rac",
+        racCaseId: existing.id,
+        racReference: existing.racReference
+      });
+    }
 
     return NextResponse.json({ success: true, case: updated });
   } catch (error: any) {
@@ -98,6 +139,15 @@ export async function DELETE(
     if (res.changes === 0) {
       return NextResponse.json({ error: "RAC case not found" }, { status: 404 });
     }
+
+    logAudit({
+      actorId: session.userId,
+      actorEmail: session.email,
+      actorRole: session.role,
+      action: "rac_delete",
+      targetType: "rac_case",
+      targetId: params.id
+    });
 
     return NextResponse.json({ success: true, message: "RAC case deleted" });
   } catch (error: any) {

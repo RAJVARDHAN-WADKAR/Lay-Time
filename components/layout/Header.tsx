@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
+import { getRoleDashboardPath } from "@/lib/auth/rolePermissions";
 import { getNotifications, markAllNotificationsRead } from "@/lib/api";
-import { NotificationRecord, UserRole } from "@/lib/types";
+import { NotificationRecord } from "@/lib/types";
 import {
   Menu,
   X,
@@ -19,11 +20,13 @@ import {
   Shield,
   ChevronRight,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  GraduationCap
 } from "lucide-react";
 import Link from "next/link";
 import { Sidebar } from "./Sidebar";
 import { Button } from "@/components/ui/button";
+import { DemoGuideDrawer } from "@/components/demo/DemoGuideDrawer";
 
 interface HeaderProps {
   onToggleDesktopSidebar?: () => void;
@@ -36,6 +39,7 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isDemoGuideOpen, setIsDemoGuideOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
@@ -69,39 +73,208 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
     }
   };
 
+  const [currentTab, setCurrentTab] = useState<string | null>(null);
+  const [isAssignedFilter, setIsAssignedFilter] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setCurrentTab(params.get("tab"));
+      setIsAssignedFilter(params.get("filter") === "assigned" || params.get("assigned") === "me");
+    }
+  }, [pathname]);
+
   // Compute current page title and breadcrumbs
   const getPageInfo = () => {
-    if (pathname === "/dashboard") return { title: "Dashboard", crumb: "Operations" };
-    if (pathname === "/dashboard/admin") return { title: "Admin Console", crumb: "System Administration" };
-    if (pathname === "/dashboard/supervisor") return { title: "Supervisor Dashboard", crumb: "Operations Oversight" };
-    if (pathname === "/dashboard/claim-processor") return { title: "Processor Dashboard", crumb: "Analyst Workbench" };
-    if (pathname === "/dashboard/reviewer-client") return { title: "Portal & Compliance", crumb: "Reviewer & Client Portal" };
-    if (pathname === "/dashboard/reviewer") return { title: "Reviewer Dashboard", crumb: "Compliance Oversight" };
-    if (pathname === "/dashboard/client") return { title: "Client Portal", crumb: "Counterparty Claims" };
-    if (pathname === "/claims") return { title: "Claims Ledger", crumb: "Claims" };
-    if (pathname === "/claims/create") return { title: "Create Claim", crumb: "Claims > New Claim Wizard" };
-    if (pathname.startsWith("/claims/")) return { title: "Claim Details", crumb: "Claims > File Inspection" };
-    if (pathname === "/calculator") return { title: "Laytime Calculator", crumb: "Engines > Calculator" };
-    if (pathname === "/calculations") return { title: "Laytime Calculator", crumb: "Engines > Calculator" };
-    if (pathname === "/sof") return { title: "Statement of Facts", crumb: "Operations > SoF Timeline" };
-    if (pathname === "/documents") return { title: "Documents", crumb: "Archive > Documents" };
-    if (pathname === "/ocr") return { title: "OCR & Statement of Facts", crumb: "Document AI > OCR Review" };
-    if (pathname.startsWith("/rac")) return { title: "RAC Review", crumb: "Recoverables > RAC Review" };
-    if (pathname === "/timebar") return { title: "Time-Bar Monitor", crumb: "Compliance > Time-Bar Deadlines" };
-    if (pathname === "/analytics") return { title: "Analytics", crumb: "Intelligence > Analytics" };
-    if (pathname === "/reports") return { title: "Reports", crumb: "Export > PDF Reports" };
-    if (pathname === "/notifications") return { title: "Notifications", crumb: "Alerts > Notifications" };
-    if (pathname === "/users") return { title: "User Management", crumb: "Admin > Users" };
-    if (pathname === "/settings") return { title: "Settings", crumb: "Configuration > Settings" };
-    return { title: "Laytime Calculation System", crumb: "Maritime Operations" };
+    const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id || role === "Client");
+    const roleDash = getRoleDashboardPath(role, isClient);
+
+    // 1. Dashboards
+    if (pathname === "/dashboard") return { title: "Operations Dashboard", crumbs: [{ label: "Dashboard" }] };
+    if (pathname === "/dashboard/admin") return { title: "Admin Console", crumbs: [{ label: "Admin Console" }] };
+    if (pathname === "/dashboard/supervisor") return { title: "Supervisor Dashboard", crumbs: [{ label: "Supervisor Dashboard" }] };
+    if (pathname === "/dashboard/claim-processor") return { title: "Processor Dashboard", crumbs: [{ label: "Processor Dashboard" }] };
+    if (pathname === "/dashboard/reviewer-client") return { title: isClient ? "Client Portal" : "Reviewer Portal", crumbs: [{ label: isClient ? "Client Portal" : "Reviewer Portal" }] };
+    if (pathname === "/dashboard/reviewer") return { title: "Reviewer Dashboard", crumbs: [{ label: "Reviewer Dashboard" }] };
+    if (pathname === "/dashboard/client") return { title: "Client Portal", crumbs: [{ label: "Client Portal" }] };
+
+    // 2. Claims
+    if (pathname === "/claims/create") {
+      return {
+        title: "Create Claim",
+        crumbs: [
+          { label: "Claims", href: "/claims" },
+          { label: "New Claim Wizard" }
+        ]
+      };
+    }
+    if (pathname === "/claims") {
+      const isAssigned = isAssignedFilter;
+      return {
+        title: isAssigned ? "Assigned Claims" : "Claims Ledger",
+        crumbs: [
+          { label: "Claims", href: "/claims" },
+          { label: isAssigned ? "Assigned to Me" : "Ledger" }
+        ]
+      };
+    }
+    if (pathname.startsWith("/claims/")) {
+      const claimId = pathname.replace("/claims/", "").split("/")[0];
+      const tabNames: Record<string, string> = {
+        overview: "Overview",
+        sof: "Statement of Facts",
+        calculations: "Laytime Calculation",
+        negotiations: "Negotiations",
+        documents: "Documents",
+        rac: "RAC Analysis",
+        audit: "Audit Log"
+      };
+      const tabLabel = currentTab && tabNames[currentTab] ? tabNames[currentTab] : "Claim Inspection";
+
+      return {
+        title: `Claim ${claimId} — ${tabLabel}`,
+        crumbs: [
+          { label: "Claims", href: "/claims" },
+          { label: claimId, href: `/claims/${claimId}` },
+          ...(currentTab ? [{ label: tabLabel }] : [])
+        ]
+      };
+    }
+
+    // 3. Calculator & Engines
+    if (pathname === "/calculator" || pathname === "/calculations") {
+      return {
+        title: "Laytime Calculator",
+        crumbs: [{ label: "Engines" }, { label: "Laytime Calculator" }]
+      };
+    }
+    if (pathname === "/ocr") {
+      return {
+        title: "OCR & Statement of Facts",
+        crumbs: [{ label: "Document AI" }, { label: "OCR Review" }]
+      };
+    }
+    if (pathname === "/sof") {
+      return {
+        title: "Statement of Facts",
+        crumbs: [{ label: "Operations" }, { label: "SoF Timeline" }]
+      };
+    }
+
+    // 4. RAC
+    if (pathname === "/rac/create") {
+      return {
+        title: "New RAC Case",
+        crumbs: [
+          { label: "RAC Portfolio", href: "/rac" },
+          { label: "Cases", href: "/rac/cases" },
+          { label: "Create Case" }
+        ]
+      };
+    }
+    if (pathname.startsWith("/rac/cases/")) {
+      const caseId = pathname.replace("/rac/cases/", "").split("/")[0];
+      return {
+        title: "RAC Case Details",
+        crumbs: [
+          { label: "RAC Portfolio", href: "/rac" },
+          { label: "Cases", href: "/rac/cases" },
+          { label: caseId }
+        ]
+      };
+    }
+    if (pathname === "/rac/cases") {
+      return {
+        title: "RAC Cases Ledger",
+        crumbs: [
+          { label: "RAC Portfolio", href: "/rac" },
+          { label: "Cases" }
+        ]
+      };
+    }
+    if (pathname === "/rac/calculations") {
+      return {
+        title: "RAC Calculations",
+        crumbs: [
+          { label: "RAC Portfolio", href: "/rac" },
+          { label: "Calculations" }
+        ]
+      };
+    }
+    if (pathname === "/rac/reports") {
+      return {
+        title: "RAC Reports",
+        crumbs: [
+          { label: "RAC Portfolio", href: "/rac" },
+          { label: "Reports" }
+        ]
+      };
+    }
+    if (pathname === "/rac") {
+      return {
+        title: "RAC Portfolio",
+        crumbs: [{ label: "Recoverables" }, { label: "RAC Portfolio" }]
+      };
+    }
+
+    // 5. Timebar, Analytics, Reports, Users, Settings
+    if (pathname === "/timebar") {
+      return {
+        title: "Time-Bar Monitor",
+        crumbs: [{ label: "Compliance" }, { label: "Time-Bar Deadlines" }]
+      };
+    }
+    if (pathname === "/analytics") {
+      return {
+        title: "Analytics",
+        crumbs: [{ label: "Intelligence" }, { label: "Analytics" }]
+      };
+    }
+    if (pathname === "/reports") {
+      return {
+        title: "Reports",
+        crumbs: [{ label: "Reports" }, { label: "PDF Reports" }]
+      };
+    }
+    if (pathname === "/documents") {
+      return {
+        title: "Documents",
+        crumbs: [{ label: "Archive" }, { label: "Documents" }]
+      };
+    }
+    if (pathname === "/notifications") {
+      return {
+        title: "Notifications",
+        crumbs: [{ label: "Alerts" }, { label: "Notifications" }]
+      };
+    }
+    if (pathname === "/users") {
+      return {
+        title: "User Management",
+        crumbs: [{ label: "Admin" }, { label: "Users" }]
+      };
+    }
+    if (pathname === "/settings") {
+      return {
+        title: "Settings",
+        crumbs: [{ label: "Configuration" }, { label: "Settings" }]
+      };
+    }
+
+    return {
+      title: "Laytime Calculation System",
+      crumbs: [{ label: "Maritime Operations" }]
+    };
   };
 
-  const { title, crumb } = getPageInfo();
+  const { title, crumbs } = getPageInfo();
+  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id || role === "Client");
+  const homeDashboardHref = getRoleDashboardPath(role, isClient);
 
   return (
     <>
       <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-4 md:px-6 shadow-2xs">
-        {/* Left: Sidebar toggle + Page Title + Breadcrumbs */}
+        {/* Left: Sidebar toggle + Page Title + Clickable Breadcrumbs */}
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -120,11 +293,23 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
           </button>
 
           <div className="flex flex-col">
-            <div className="flex items-center space-x-1.5 text-[10px] font-semibold text-slate-400">
-              <span>Laytime</span>
-              <ChevronRight className="h-2.5 w-2.5 text-slate-300" />
-              <span className="text-slate-500">{crumb}</span>
-            </div>
+            <nav aria-label="Breadcrumb" className="flex items-center space-x-1.5 text-[10px] font-semibold text-slate-400">
+              <Link href={homeDashboardHref} className="hover:text-blue-600 transition-colors">
+                Laytime
+              </Link>
+              {crumbs.map((c, idx) => (
+                <React.Fragment key={idx}>
+                  <ChevronRight className="h-2.5 w-2.5 text-slate-300 shrink-0" />
+                  {c.href ? (
+                    <Link href={c.href} className="hover:text-blue-600 transition-colors">
+                      {c.label}
+                    </Link>
+                  ) : (
+                    <span className="text-slate-600 font-semibold">{c.label}</span>
+                  )}
+                </React.Fragment>
+              ))}
+            </nav>
             <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-tight">
               {title}
             </h1>
@@ -156,6 +341,16 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
               </Button>
             </Link>
           )}
+
+          {/* Live Demo Walkthrough Guide Button */}
+          <button
+            onClick={() => setIsDemoGuideOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/90 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition shadow-xs cursor-pointer group"
+            title="Open Interactive Demo Walkthrough for Project Guide / Examiner"
+          >
+            <GraduationCap className="h-4 w-4 text-indigo-600 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Live Demo Guide</span>
+          </button>
 
           {/* Active Role Indicator */}
           <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
@@ -310,6 +505,12 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
           </div>
         </div>
       </header>
+
+      {/* Live Demo Guide Drawer */}
+      <DemoGuideDrawer
+        isOpen={isDemoGuideOpen}
+        onClose={() => setIsDemoGuideOpen(false)}
+      />
 
       {/* Mobile Drawer */}
       {isMobileMenuOpen && (

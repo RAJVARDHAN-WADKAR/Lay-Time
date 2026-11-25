@@ -36,7 +36,7 @@ export const GET = withApi({
 });
 
 export const POST = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance"],
+  roles: ["Admin", "Supervisor", "Claim Processor", "Processor"],
   handler: async () => {
     return NextResponse.json({
       success: true,

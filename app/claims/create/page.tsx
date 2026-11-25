@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClaim } from "@/lib/api";
 import { Claim } from "@/lib/types";
@@ -10,6 +10,7 @@ import { Input, Select } from "@/components/ui/inputs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/lib/hooks/useToast";
 import { formatCurrency } from "@/lib/utils/formatters";
+import { getTodayIso, validateDateChain } from "@/lib/utils/dateRules";
 import Link from "next/link";
 import {
   Check,
@@ -99,6 +100,43 @@ export default function CreateClaimWizardPage() {
   const [charterpartyDate, setCharterpartyDate] = useState("2024-06-20");
   const [claimTimebarDays, setClaimTimebarDays] = useState(90);
   const [noticeTimebarDays, setNoticeTimebarDays] = useState(30);
+
+  // Claim ID preview and date chain rules
+  const [previewClaimId, setPreviewClaimId] = useState<string>("");
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [dateErrors, setDateErrors] = useState<Record<string, string>>({});
+  const [dateWarnings, setDateWarnings] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    setPreviewLoading(true);
+    fetch(`/api/claims/next-id?date=${encodeURIComponent(instructionReceivedDate || "")}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (isMounted && data.success && data.nextId) {
+          setPreviewClaimId(data.nextId);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setPreviewLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [instructionReceivedDate]);
+
+  useEffect(() => {
+    const val = validateDateChain({
+      charterpartyDate,
+      instructionReceivedDate,
+      claimFiledDate: null,
+      agreedDate: null,
+      paymentReceivedDate: null
+    });
+    setDateErrors(val.errors);
+    setDateWarnings(val.warnings);
+  }, [charterpartyDate, instructionReceivedDate]);
 
   // Step 3: Ports
   const [ports, setPorts] = useState<PortState[]>([
@@ -239,11 +277,15 @@ export default function CreateClaimWizardPage() {
 
   // Submission handler
   const handleSaveClaim = async (asDraft = false) => {
+    if (dateErrors.instructionReceivedDate) {
+      error(dateErrors.instructionReceivedDate);
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const generatedClaimId = `CLM-2024-${Math.floor(1000 + Math.random() * 9000)}`;
+      const targetId = previewClaimId || "";
       const payload: Partial<Claim> = {
-        id: generatedClaimId,
+        id: targetId || undefined,
         claimName,
         accountName: client,
         brokerName: broker,
@@ -273,7 +315,7 @@ export default function CreateClaimWizardPage() {
         claimClosed: false,
         ports: ports.map(p => ({
           id: p.id,
-          claimId: generatedClaimId,
+          claimId: targetId,
           name: p.name,
           portType: p.portType,
           loadRate: p.loadRate,
@@ -289,7 +331,7 @@ export default function CreateClaimWizardPage() {
         })),
         activities: activities.map(a => ({
           id: a.id,
-          claimId: generatedClaimId,
+          claimId: targetId,
           berthId: a.berthId,
           activityName: a.activityName,
           startTime: a.startTime,
@@ -305,7 +347,7 @@ export default function CreateClaimWizardPage() {
         })),
         deductions: deductions.map(d => ({
           id: d.id,
-          claimId: generatedClaimId,
+          claimId: targetId,
           type: d.type,
           startTime: d.startTime,
           stopTime: d.stopTime,
@@ -323,7 +365,11 @@ export default function CreateClaimWizardPage() {
       };
 
       const result = await createClaim(payload);
-      success(asDraft ? "Draft claim saved successfully!" : "Claim submitted and registered successfully!");
+      if (result.id && previewClaimId && result.id !== previewClaimId) {
+        info(`Assigned Claim ID: ${result.id} (preview ${previewClaimId} was taken)`);
+      } else {
+        success(asDraft ? `Draft claim ${result.id || ""} saved successfully!` : `Claim ${result.id || ""} submitted and registered successfully!`);
+      }
       router.push(`/claims/${result.id}`);
     } catch (err: any) {
       error(err.message || "Failed to create claim");
@@ -447,6 +493,46 @@ export default function CreateClaimWizardPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Claim ID (Preview)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={previewLoading ? "Generating..." : previewClaimId || "DBLS..."}
+                      readOnly
+                      className="bg-white font-mono font-bold text-blue-700 cursor-not-allowed"
+                    />
+                    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs shrink-0 font-medium">
+                      Server Preview
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Format: DBLS + 2-digit year + sequence. Final ID verified & locked upon saving.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Instruction Received Date *
+                  </label>
+                  <Input
+                    type="date"
+                    max={getTodayIso()}
+                    value={instructionReceivedDate}
+                    onChange={e => setInstructionReceivedDate(e.target.value)}
+                    className={dateErrors.instructionReceivedDate ? "border-rose-500 focus:ring-rose-500" : ""}
+                  />
+                  {dateErrors.instructionReceivedDate ? (
+                    <p className="text-xs text-rose-600 mt-1">{dateErrors.instructionReceivedDate}</p>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Sets claim year sequence & base timebar anchor (cannot be in future).
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Claim Name *
@@ -639,6 +725,49 @@ export default function CreateClaimWizardPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Instruction Received Date *
+                </label>
+                <Input
+                  type="date"
+                  max={getTodayIso()}
+                  value={instructionReceivedDate}
+                  onChange={e => setInstructionReceivedDate(e.target.value)}
+                  className={dateErrors.instructionReceivedDate ? "border-rose-500 focus:ring-rose-500" : ""}
+                />
+                {dateErrors.instructionReceivedDate ? (
+                  <p className="text-xs text-rose-600 mt-1">{dateErrors.instructionReceivedDate}</p>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">Sets sequence year & preview ID</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Charterparty Date
+                </label>
+                <Input
+                  type="date"
+                  value={charterpartyDate}
+                  onChange={e => setCharterpartyDate(e.target.value)}
+                />
+                {dateWarnings.charterpartyDate && (
+                  <p className="text-xs text-amber-600 mt-1">{dateWarnings.charterpartyDate}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Voyage End Date (Discharge Complete) *
+                </label>
+                <Input
+                  type="date"
+                  value={voyageEndDate}
+                  onChange={e => setVoyageEndDate(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Laydays Commencement (Laycan From)
                 </label>
                 <Input
@@ -661,32 +790,11 @@ export default function CreateClaimWizardPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Charterparty Date
-                </label>
-                <Input
-                  type="date"
-                  value={charterpartyDate}
-                  onChange={e => setCharterpartyDate(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Voyage End Date (Discharge Complete) *
-                </label>
-                <Input
-                  type="date"
-                  value={voyageEndDate}
-                  onChange={e => setVoyageEndDate(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Notice Received Date
                 </label>
                 <Input
                   type="date"
+                  max={getTodayIso()}
                   value={noticeReceivedDate}
                   onChange={e => setNoticeReceivedDate(e.target.value)}
                 />
@@ -698,6 +806,7 @@ export default function CreateClaimWizardPage() {
                 </label>
                 <Input
                   type="date"
+                  max={getTodayIso()}
                   value={claimReceivedDate}
                   onChange={e => setClaimReceivedDate(e.target.value)}
                 />

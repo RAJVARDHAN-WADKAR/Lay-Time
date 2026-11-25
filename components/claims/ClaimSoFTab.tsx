@@ -69,13 +69,25 @@ export function ClaimSoFTab({
                     <td className="p-3">{act.percentageCounted}%</td>
                     <td className="p-3 text-slate-600">{act.deductionCategory}</td>
                     <td className="p-3">
-                      {act.isCorrected ? (
-                        <Badge variant="corrected">Corrected</Badge>
-                      ) : act.isOcrExtracted ? (
-                        <Badge variant="ocr">OCR Extracted</Badge>
-                      ) : (
-                        <span className="text-slate-400 text-[10px]">Manual</span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1">
+                        {act.isCorrected ? (
+                          <Badge variant="corrected">Corrected</Badge>
+                        ) : act.isOcrExtracted ? (
+                          <>
+                            <Badge variant="ocr">OCR Extracted</Badge>
+                            {act.ocrConfidence !== undefined && act.ocrConfidence < 0.8 && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300"
+                                title={`Low OCR Confidence: ${Math.round(act.ocrConfidence * 100)}% - Manual verification recommended`}
+                              >
+                                ⚠️ {Math.round(act.ocrConfidence * 100)}% Low Conf
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">Manual</span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 text-right">
                       {userCanEdit ? (

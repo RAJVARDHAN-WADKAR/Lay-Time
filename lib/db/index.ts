@@ -4,19 +4,23 @@ import fs from "fs";
 import { SCHEMA_SQL } from "./schema";
 import { seedDatabase } from "./seed";
 
-const DB_PATH = path.join(process.cwd(), "data", "laytime.db");
-
-// Ensure data folder exists
-const dataDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
 let dbInstance: Database.Database | null = null;
 
 export function getDatabase(): Database.Database {
   if (!dbInstance) {
-    dbInstance = new Database(DB_PATH);
+    const dbPath = process.env.DATABASE_PATH
+      ? (path.isAbsolute(process.env.DATABASE_PATH)
+          ? process.env.DATABASE_PATH
+          : path.join(process.cwd(), process.env.DATABASE_PATH))
+      : path.join(process.cwd(), "data", "laytime.db");
+
+    // Ensure data folder exists
+    const dataDir = path.dirname(dbPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    dbInstance = new Database(dbPath);
     dbInstance.pragma("journal_mode = WAL");
     dbInstance.pragma("foreign_keys = ON");
     dbInstance.pragma("busy_timeout = 5000");
@@ -32,10 +36,9 @@ export function getDatabase(): Database.Database {
       seedDatabase(dbInstance);
     } catch (e) {
       console.error("Error running database seed:", e);
+      throw e;
     }
   }
 
   return dbInstance;
 }
-
-export const db = getDatabase();

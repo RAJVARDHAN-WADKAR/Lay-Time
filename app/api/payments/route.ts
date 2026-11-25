@@ -14,14 +14,16 @@ export const GET = withApi({
 });
 
 export const POST = withApi({
-  roles: ["Finance", "Supervisor"],
+  permission: "payments:manage",
+  roles: ["Admin", "Supervisor"],
   handler: async ({ body }) => {
     return NextResponse.json({ success: true, message: "Payment recorded" }, { status: 201 });
   }
 });
 
 export const PUT = withApi({
-  roles: ["Finance", "Supervisor"],
+  permission: "payments:manage",
+  roles: ["Admin", "Supervisor"],
   handler: async () => {
     return NextResponse.json({ success: true, message: "Payment updated" });
   }

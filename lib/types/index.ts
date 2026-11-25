@@ -1,4 +1,4 @@
-export type ExactRole = "ADMIN" | "SUPERVISOR" | "CLAIM_PROCESSOR" | "REVIEWER_CLIENT";
+export type ExactRole = "ADMIN" | "SUPERVISOR" | "CLAIM_PROCESSOR" | "REVIEWER" | "CLIENT" | "REVIEWER_CLIENT" | "FINANCE";
 
 export type UserRole =
   | ExactRole
@@ -212,6 +212,7 @@ export interface Discrepancy {
     | "invalid_date"
     | "impossible_duration"
     | "conflicting_timestamps"
+    | "overlapping_timestamps"
     | "invalid_sequence"
     | "low_confidence"
     | "missing_mandatory_doc"

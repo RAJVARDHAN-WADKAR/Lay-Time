@@ -41,7 +41,7 @@ All roles share one SQLite database (`data/laytime.db`) and one Prisma schema en
   - Can export reports and clean up / delete records for administrative maintenance.
 - **Separation of Duties**:
   - Cannot review, approve settlements, apply calculation overrides, or accept commercial negotiations (these duties belong to the Supervisor).
-- **Default Account**: `rajvardhanwadkar76@gmail.com` / `Raj@123`
+- **Default Account**: `admin@laytime.demo` / `Demo@12345`
 
 ### 2. SUPERVISOR (Claim Manager & Approver)
 - **Purpose**: Operational lead, calculation approver, and financial settlement authority.
@@ -57,7 +57,7 @@ All roles share one SQLite database (`data/laytime.db`) and one Prisma schema en
   - Access to Owners Claim, Billable ($), and all financial fields.
   - Clients and vessels: `view`, `create`, `edit` (no delete). Users: `view` only.
   - Global dashboards, analytics, reports, and the audit log.
-- **Default Account**: `swayamghatage3839@gmail.com` / `Swayam@123`
+- **Default Account**: `supervisor@laytime.demo` / `Demo@12345`
 
 ### 3. CLAIM_PROCESSOR (Claim Preparer)
 - **Purpose**: Voyage demurrage preparer and frontline claim handler.
@@ -72,7 +72,7 @@ All roles share one SQLite database (`data/laytime.db`) and one Prisma schema en
   - Clients and vessels: `view` and `create` (no edit or delete).
   - Dashboards, analytics, and reports for own claims only.
   - No access to users, settings, claim assignment, or the audit log.
-- **Default Account**: `rohitmengane2975@gmail.com` / `Rohit@123`
+- **Default Account**: `processor1@laytime.demo` / `Demo@12345`
 
 ### 4. REVIEWER_CLIENT (Strictly Read-Only Auditor or External Client)
 - **Purpose**: Strictly read-only role for internal legal/auditors or external counterparty portals.
@@ -80,12 +80,12 @@ All roles share one SQLite database (`data/laytime.db`) and one Prisma schema en
   - **Internal Reviewer** (`clientId` is null): `company-wide` scope.
     - Can view claims, SoF, ports, berths, documents, stored calculation results, RAC findings and status, payments, invoices, negotiation history (in oversight mode including minimum acceptable amount), clients, vessels, dashboards, existing reports, and audit logs.
     - Strictly forbidden from modifying, calculating, overriding, assigning, settling, running OCR, or triggering any write endpoint.
-    - Credentials: `paraschougale558@gmail.com` / `Paras@123`
+    - Credentials: `reviewer@laytime.demo` / `Demo@12345`
   - **External Client** (`clientId` is set): `own client only` scope (`client_id = assignedClientId`).
     - Receives a restricted DTO: claim reference, vessel, port, status, total demurrage claimed, agreed amount, and shared documents.
     - Strictly forbidden from SoF, deductions, calculations, overrides, RAC data, internal notes, minimum acceptable amount, clients/vessels master lists, users, settings, and audit logs.
     - Client Exceptions: Can upload requested documents and approve final settlement offers in the negotiation room.
-    - Credentials: `client@trafigura.com` / `Client@123` (Linked to `client-trafigura`)
+    - Credentials: `client1@laytime.demo` / `Demo@12345` (Linked to `client-trafigura`)
 
 ---
 

@@ -112,10 +112,10 @@ The system implements four distinct user roles, each rigorously verified on both
 
 | Role | Default Seed Email | Password | Primary Scope & System Authority |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `rajvardhanwadkar76@gmail.com` | `Raj@123` | Master system control, user provisioning, role promotion/deactivation, full access to all claims, calculations, and settings |
-| **Claim Processor** | `rohitmengane2975@gmail.com` | `Rohit@123` | Creation, editing, calculation, and document upload for assigned claims and RAC entries |
-| **Supervisor** | `swayamghatage3839@gmail.com` | `Swayam@123` | High-level operational oversight, claim approvals, dispute settlements, analytics, and timebar escalation |
-| **Reviewer** | `paraschougale558@gmail.com` | `Paras@123` | Strict read-only audit access across all dashboards, claim calculations, and reports. Editing is strictly disabled |
+| **Admin** | `admin@laytime.demo` | `Demo@12345` | Master system control, user provisioning, role promotion/deactivation, full access to all claims, calculations, and settings |
+| **Claim Processor** | `processor1@laytime.demo` | `Demo@12345` | Creation, editing, calculation, and document upload for assigned claims and RAC entries |
+| **Supervisor** | `supervisor@laytime.demo` | `Demo@12345` | High-level operational oversight, claim approvals, dispute settlements, analytics, and timebar escalation |
+| **Reviewer** | `reviewer@laytime.demo` | `Demo@12345` | Strict read-only audit access across all dashboards, claim calculations, and reports. Editing is strictly disabled |
 
 ### Role × Permission Matrix
 
@@ -249,10 +249,10 @@ PS C:\Lay time> npm run test:auth
   ✔ Validated: Wrong password returns 401 Unauthorized
 
 [2] Testing Development Accounts...
-  ✔ Validated: Admin login (rajvardhanwadkar76@gmail.com) -> HTTP 200, role=Admin
-  ✔ Validated: Claim Processor login (rohitmengane2975@gmail.com) -> HTTP 200, role=Claim Processor
-  ✔ Validated: Supervisor login (swayamghatage3839@gmail.com) -> HTTP 200, role=Supervisor
-  ✔ Validated: Reviewer login (paraschougale558@gmail.com) -> HTTP 200, role=Reviewer
+  ✔ Validated: Admin login (admin@laytime.demo) -> HTTP 200, role=Admin
+  ✔ Validated: Claim Processor login (processor1@laytime.demo) -> HTTP 200, role=Claim Processor
+  ✔ Validated: Supervisor login (supervisor@laytime.demo) -> HTTP 200, role=Supervisor
+  ✔ Validated: Reviewer login (reviewer@laytime.demo) -> HTTP 200, role=Reviewer
 
 [3] Testing Route Protection (Unauthenticated)...
   ✔ Validated: GET /dashboard redirects to /login?from=%2Fdashboard

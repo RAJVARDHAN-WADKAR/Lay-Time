@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { getDocuments, uploadDocument, deleteDocument, getClaims } from "@/lib/api";
-import { DocumentRecord, Claim } from "@/lib/types";
+import { DocumentRecord, Claim, DocumentType } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Select, Input } from "@/components/ui/inputs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/lib/utils/formatters";
 import { useToast } from "@/lib/hooks/useToast";
 import { useAuth } from "@/lib/context/AuthContext";
+import { Modal } from "@/components/ui/modal";
 import Link from "next/link";
 import {
   UploadCloud,
@@ -18,33 +19,70 @@ import {
   Trash2,
   Download,
   Eye,
-  PlusCircle,
   FileSpreadsheet,
   Layers,
   FileCheck,
+  LayoutGrid,
+  List,
+  RefreshCw,
+  FolderOpen,
+  History,
+  Tag,
+  CheckCircle2,
+  AlertCircle,
+  FileUp,
 } from "lucide-react";
 
-export default function DocumentsPage() {
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "csv", "tsv"];
+
+function DocumentsContent() {
+  const searchParams = useSearchParams();
+  const urlClaimId = searchParams.get("claimId") || "";
+
   const { canUploadDocuments, canDeleteDocuments } = useAuth();
   const { success, error, info } = useToast();
+
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [selectedClaimId, setSelectedClaimId] = useState("");
-  const [docType, setDocType] = useState<DocumentRecord["type"]>("SOF");
+  const [selectedClaimId, setSelectedClaimId] = useState(urlClaimId);
+  const [docType, setDocType] = useState<DocumentType>("SOF");
+  const [customTitle, setCustomTitle] = useState("");
+  const [tags, setTags] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // Document Preview Modal
+  const [previewDoc, setPreviewDoc] = useState<DocumentRecord | null>(null);
+
+  // Replace Document Modal
+  const [replaceTarget, setReplaceTarget] = useState<DocumentRecord | null>(null);
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [isReplacing, setIsReplacing] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
-    const [docs, cls] = await Promise.all([getDocuments(), getClaims()]);
-    setDocuments(docs);
-    setClaims(cls);
-    if (cls.length > 0 && !selectedClaimId) {
-      setSelectedClaimId(cls[0].id);
+    try {
+      const [docs, cls] = await Promise.all([getDocuments(), getClaims()]);
+      setDocuments(docs);
+      setClaims(cls);
+      if (urlClaimId) {
+        setSelectedClaimId(urlClaimId);
+      } else if (cls.length > 0 && !selectedClaimId) {
+        setSelectedClaimId(cls[0].id);
+      }
+    } catch (e: any) {
+      error("Fetch Error", e.message || "Could not load documents");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [selectedClaimId]);
+  }, [selectedClaimId, urlClaimId, error]);
 
   useEffect(() => {
     fetchAll();
@@ -54,10 +92,63 @@ export default function DocumentsPage() {
     return () => window.removeEventListener("demurrage_storage_change", handleStorage);
   }, [fetchAll]);
 
+  const validateFile = (file: File): { valid: boolean; error?: string } => {
+    if (file.size > MAX_FILE_SIZE) {
+      return { valid: false, error: "File exceeds 20MB limit." };
+    }
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+      return {
+        valid: false,
+        error: `Invalid file type (.${ext}). Allowed: PDF, PNG, JPG, CSV, TSV.`,
+      };
+    }
+    return { valid: true };
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const check = validateFile(file);
+      if (!check.valid) {
+        error("Invalid File", check.error || "File not allowed");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
       setSelectedFile(file);
+      if (!customTitle) {
+        setCustomTitle(file.name);
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      const check = validateFile(file);
+      if (!check.valid) {
+        error("Invalid File", check.error || "File not allowed");
+        return;
+      }
+      setSelectedFile(file);
+      if (!customTitle) {
+        setCustomTitle(file.name);
+      }
     }
   };
 
@@ -71,32 +162,112 @@ export default function DocumentsPage() {
     setIsUploading(true);
     try {
       const targetClaim = claims.find((c) => c.id === selectedClaimId);
+      const fileNameToUse = (customTitle.trim() || selectedFile.name).trim();
+
       const newDoc = await uploadDocument(
-        { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type },
-        selectedClaimId || "General",
-        targetClaim ? targetClaim.claimName : "General Port File",
+        {
+          fileName: fileNameToUse,
+          fileSize: selectedFile.size,
+          fileType: selectedFile.type || "application/pdf",
+          category: docType,
+          type: docType,
+        },
+        selectedClaimId && selectedClaimId !== "General" ? selectedClaimId : undefined,
+        targetClaim ? targetClaim.claimName : "General Maritime File",
         docType
       );
 
-      setDocuments((prev) => [newDoc, ...prev]);
+      setDocuments((prev) => {
+        const idx = prev.findIndex((d) => d.id === newDoc.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = newDoc;
+          return updated;
+        }
+        return [newDoc, ...prev];
+      });
+
       setSelectedFile(null);
+      setCustomTitle("");
+      setTags("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setIsUploading(false);
-      success("Document Uploaded", `"${newDoc.fileName}" (${newDoc.type}) has been stored.`);
-    } catch {
+      success("Document Uploaded", `"${newDoc.fileName}" (${newDoc.version || "v1.0"}) saved.`);
+    } catch (err: any) {
       setIsUploading(false);
-      error("Upload Failed", "Could not upload document.");
+      error("Upload Failed", err.message || "Could not upload document.");
+    }
+  };
+
+  const handleReplaceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replaceTarget || !replaceFile) {
+      info("Select File", "Please choose a replacement file.");
+      return;
+    }
+
+    setIsReplacing(true);
+    try {
+      const targetClaim = claims.find((c) => c.id === replaceTarget.claimId);
+      const updatedDoc = await uploadDocument(
+        {
+          fileName: replaceTarget.fileName,
+          fileSize: replaceFile.size,
+          fileType: replaceFile.type || "application/pdf",
+          category: replaceTarget.category || replaceTarget.type || "SOF",
+          type: replaceTarget.type || "SOF",
+        },
+        replaceTarget.claimId,
+        targetClaim ? targetClaim.claimName : replaceTarget.claimName,
+        replaceTarget.type
+      );
+
+      setDocuments((prev) => {
+        const idx = prev.findIndex((d) => d.id === updatedDoc.id);
+        if (idx >= 0) {
+          const arr = [...prev];
+          arr[idx] = updatedDoc;
+          return arr;
+        }
+        return [updatedDoc, ...prev];
+      });
+
+      setReplaceTarget(null);
+      setReplaceFile(null);
+      if (replaceInputRef.current) replaceInputRef.current.value = "";
+      setIsReplacing(false);
+      success("Version Updated", `Uploaded new version (${updatedDoc.version}) of "${updatedDoc.fileName}".`);
+    } catch (err: any) {
+      setIsReplacing(false);
+      error("Replace Failed", err.message || "Failed to replace document.");
     }
   };
 
   const handleDelete = async (id: string) => {
-    await deleteDocument(id);
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-    success("Document Deleted", "The document has been removed.");
+    try {
+      await deleteDocument(id);
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
+      success("Document Deleted", "The document has been removed.");
+    } catch (err: any) {
+      error("Delete Failed", err.message || "Failed to delete document.");
+    }
   };
 
   const handleDownload = (doc: DocumentRecord) => {
-    // Generate simple downloadable text file simulation
-    const blob = new Blob([`Laytime Calculation System\nDocument: ${doc.fileName}\nType: ${doc.type}\nClaim: ${doc.claimId}\nUploaded: ${doc.uploadedAt}`], { type: "text/plain" });
+    const content = `Laytime Calculation System - Maritime Document
+--------------------------------------------------
+File Name:    ${doc.fileName}
+Version:      ${doc.version || "v1.0"}
+Category:     ${doc.category || doc.type || "SOF"}
+Claim ID:     ${doc.claimId || "General"}
+Vessel:       ${doc.claimName || "N/A"}
+Status:       ${doc.status}
+Uploaded On:  ${formatDateTime(doc.uploadedAt)}
+File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
+--------------------------------------------------
+[End of document stream archive]`;
+
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -108,6 +279,12 @@ export default function DocumentsPage() {
     success("Download Started", `Downloading ${doc.fileName}`);
   };
 
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return "0 KB";
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${Math.round(bytes / 1024)} KB`;
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
@@ -117,14 +294,57 @@ export default function DocumentsPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Voyage Documents
             </h1>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              {documents.length} Files
+            </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Store, categorize, and inspect Statement of Facts, Charterparties, Timesheets, and Notices
           </p>
         </div>
+
+        {/* View mode toggle */}
+        <div className="flex items-center space-x-2">
+          <div className="inline-flex rounded-xl border border-slate-200 p-1 bg-slate-50">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition ${
+                viewMode === "list"
+                  ? "bg-white text-blue-600 shadow-2xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition ${
+                viewMode === "grid"
+                  ? "bg-white text-blue-600 shadow-2xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="hidden sm:inline">Grid</span>
+            </button>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchAll}
+            className="h-9 px-3 text-xs text-slate-600 hover:text-slate-900"
+            title="Refresh repository"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
 
-      {/* TOP SECTION: Upload Document matching Section 15 */}
+      {/* UPLOAD DOCUMENT ZONE (Only if user can upload documents) */}
       {canUploadDocuments() && (
         <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
           <CardHeader className="p-5 pb-3 border-b border-slate-100">
@@ -133,68 +353,138 @@ export default function DocumentsPage() {
               <span>Upload Document</span>
             </CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              Upload supporting maritime documents for voyage files and claims
+              Upload supporting maritime documents (PDF, PNG, JPG, CSV, TSV — max 20MB)
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="p-5">
-            <form onSubmit={handleUpload} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-left">
-              {/* File Selector */}
-              <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-                <label className="font-bold text-slate-700 block">Choose File</label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    onChange={handleFileChange}
-                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-300 rounded-xl p-1 bg-slate-50/50"
+          <CardContent className="p-5 space-y-4">
+            <form onSubmit={handleUpload} className="space-y-4">
+              {/* Drag and Drop Zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer ${
+                  isDragOver
+                    ? "border-blue-500 bg-blue-50/50"
+                    : selectedFile
+                    ? "border-emerald-400 bg-emerald-50/30"
+                    : "border-slate-300 hover:border-blue-400 bg-slate-50/50"
+                }`}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".pdf,.png,.jpg,.jpeg,.csv,.tsv"
+                  className="hidden"
+                />
+
+                <div className="flex flex-col items-center justify-center space-y-2">
+                  <div className="p-3 bg-white rounded-full border border-slate-200 shadow-2xs">
+                    {selectedFile ? (
+                      <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                    ) : (
+                      <FileUp className="h-6 w-6 text-blue-600" />
+                    )}
+                  </div>
+                  <div>
+                    {selectedFile ? (
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">{selectedFile.name}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {formatFileSize(selectedFile.size)} • Click or drop another file to change
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">
+                          Click to browse or drag and drop your file here
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Supports PDF, PNG, JPG, CSV, TSV up to 20MB
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Metadata Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-left">
+                {/* Title / Document Name */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Document Title / File Name</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Statement of Facts Port Talbot.pdf"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    className="h-9 text-xs bg-white"
+                  />
+                </div>
+
+                {/* Document Type */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Category</label>
+                  <Select
+                    value={docType}
+                    onChange={(e) => setDocType(e.target.value as any)}
+                    className="h-9 text-xs bg-white"
+                  >
+                    <option value="SOF">SOF (Statement of Facts)</option>
+                    <option value="Charterparty">Charterparty</option>
+                    <option value="Timesheet">Timesheet</option>
+                    <option value="NOR">NOR (Notice of Readiness)</option>
+                    <option value="Notice">Notice</option>
+                    <option value="Pumping Log">Pumping Log</option>
+                    <option value="Ullage Report">Ullage Report</option>
+                    <option value="Bill of Lading">Bill of Lading</option>
+                    <option value="Other">Other supporting documents</option>
+                  </Select>
+                </div>
+
+                {/* Link to Claim */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Link to Claim (Optional)</label>
+                  <Select
+                    value={selectedClaimId}
+                    onChange={(e) => setSelectedClaimId(e.target.value)}
+                    className="h-9 text-xs bg-white"
+                  >
+                    <option value="">General (No specific claim)</option>
+                    {claims.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.id} — {c.shipName}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Tags */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Tags / Reference</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Final, Signed, Disputed"
+                    value={tags}
+                    onChange={(e) => setTags(e.target.value)}
+                    className="h-9 text-xs bg-white"
                   />
                 </div>
               </div>
 
-              {/* Document Type */}
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 block">Document Type</label>
-                <Select
-                  value={docType}
-                  onChange={(e) => setDocType(e.target.value as any)}
-                  className="h-9 text-xs bg-white"
-                >
-                  <option value="SOF">SOF (Statement of Facts)</option>
-                  <option value="Charterparty">Charterparty</option>
-                  <option value="Timesheet">Timesheet</option>
-                  <option value="NOR">NOR (Notice of Readiness)</option>
-                  <option value="Notice">Notice</option>
-                  <option value="Other">Other supporting documents</option>
-                </Select>
-              </div>
-
-              {/* Link to Claim */}
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 block">Link to Claim (Optional)</label>
-                <Select
-                  value={selectedClaimId}
-                  onChange={(e) => setSelectedClaimId(e.target.value)}
-                  className="h-9 text-xs bg-white"
-                >
-                  <option value="">General (No specific claim)</option>
-                  {claims.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id} — {c.shipName}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              {/* Upload Button */}
-              <div className="flex items-end">
+              {/* Submit Button */}
+              <div className="flex justify-end pt-2">
                 <Button
                   type="submit"
                   isLoading={isUploading}
                   disabled={!selectedFile}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 rounded-xl flex items-center justify-center space-x-1.5 shadow-xs"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 px-6 rounded-xl flex items-center space-x-1.5 shadow-xs"
                 >
                   <UploadCloud className="h-4 w-4" />
-                  <span>Upload</span>
+                  <span>Upload Document</span>
                 </Button>
               </div>
             </form>
@@ -202,7 +492,7 @@ export default function DocumentsPage() {
         </Card>
       )}
 
-      {/* DOCUMENT TABLE matching Section 15 */}
+      {/* DOCUMENT REPOSITORY */}
       <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
         <CardHeader className="p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
           <div>
@@ -218,81 +508,198 @@ export default function DocumentsPage() {
 
         <CardContent className="p-5">
           {documents.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border border-slate-200 rounded-xl overflow-hidden">
-                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
-                  <tr>
-                    <th className="py-3 px-4">Document Name</th>
-                    <th className="py-3 px-4">Claim No.</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Uploaded On</th>
-                    <th className="py-3 px-4">Version</th>
-                    <th className="py-3 px-4 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                  {documents.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-slate-50/80 transition">
-                      {/* Document Name */}
-                      <td className="py-3 px-4 font-semibold text-slate-900 flex items-center space-x-2">
-                        <FileText className="h-4 w-4 text-blue-600 shrink-0" />
-                        <span className="truncate max-w-xs">{doc.fileName}</span>
-                      </td>
+            viewMode === "list" ? (
+              /* LIST VIEW */
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border border-slate-200 rounded-xl overflow-hidden">
+                  <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                    <tr>
+                      <th className="py-3 px-4">Document Name</th>
+                      <th className="py-3 px-4">Claim No.</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Size</th>
+                      <th className="py-3 px-4">Uploaded On</th>
+                      <th className="py-3 px-4">Version</th>
+                      <th className="py-3 px-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                    {documents.map((doc) => (
+                      <tr key={doc.id} className="hover:bg-slate-50/80 transition">
+                        {/* Document Name */}
+                        <td className="py-3 px-4 font-semibold text-slate-900 flex items-center space-x-2">
+                          <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                          <span className="truncate max-w-xs">{doc.fileName}</span>
+                        </td>
 
-                      {/* Claim No. */}
-                      <td className="py-3 px-4 font-mono font-medium text-slate-600">
-                        {doc.claimId !== "General" ? (
-                          <Link href={`/claims/${doc.claimId}`} className="text-blue-600 hover:underline">
+                        {/* Claim No. */}
+                        <td className="py-3 px-4 font-mono font-medium text-slate-600">
+                          {doc.claimId && doc.claimId !== "General" ? (
+                            <Link href={`/claims/${doc.claimId}`} className="text-blue-600 hover:underline">
+                              {doc.claimId}
+                            </Link>
+                          ) : (
+                            <span className="text-slate-400">General</span>
+                          )}
+                        </td>
+
+                        {/* Type */}
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200">
+                            {doc.category || doc.type || "SOF"}
+                          </span>
+                        </td>
+
+                        {/* Size */}
+                        <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                          {formatFileSize(doc.fileSize)}
+                        </td>
+
+                        {/* Uploaded On */}
+                        <td className="py-3 px-4 text-slate-500">
+                          {formatDateTime(doc.uploadedAt)}
+                        </td>
+
+                        {/* Version */}
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 font-bold text-[10px]">
+                            {doc.version || "v1.0"}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center space-x-1.5">
+                            <button
+                              onClick={() => setPreviewDoc(doc)}
+                              className="p-1 text-slate-400 hover:text-blue-600 transition"
+                              title="Preview Document Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDownload(doc)}
+                              className="p-1 text-slate-400 hover:text-emerald-600 transition"
+                              title="Download Document"
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                            {canUploadDocuments() && (
+                              <button
+                                onClick={() => {
+                                  setReplaceTarget(doc);
+                                  setReplaceFile(null);
+                                }}
+                                className="p-1 text-slate-400 hover:text-amber-600 transition"
+                                title="Upload New Version"
+                              >
+                                <History className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDeleteDocuments && (
+                              <button
+                                onClick={() => handleDelete(doc.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                title="Delete Document"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* GRID VIEW */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-xs transition space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-600">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <h4 className="font-bold text-slate-900 text-xs truncate max-w-[170px]" title={doc.fileName}>
+                            {doc.fileName}
+                          </h4>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {formatFileSize(doc.fileSize)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold text-[10px]">
+                        {doc.version || "v1.0"}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                      <div>
+                        {doc.claimId && doc.claimId !== "General" ? (
+                          <Link href={`/claims/${doc.claimId}`} className="text-blue-600 hover:underline font-mono">
                             {doc.claimId}
                           </Link>
                         ) : (
-                          <span className="text-slate-400">General</span>
+                          <span>General File</span>
                         )}
-                      </td>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                        {doc.category || doc.type || "SOF"}
+                      </span>
+                    </div>
 
-                      {/* Type */}
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200">
-                          {doc.type || "SOF"}
-                        </span>
-                      </td>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-400">
+                      <span>{formatDateTime(doc.uploadedAt)}</span>
 
-                      {/* Uploaded On */}
-                      <td className="py-3 px-4 text-slate-500">
-                        {formatDateTime(doc.uploadedAt)}
-                      </td>
-
-                      {/* Version */}
-                      <td className="py-3 px-4 font-mono text-slate-600">
-                        {doc.version || "v1.0"}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center space-x-2">
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => setPreviewDoc(doc)}
+                          className="p-1 hover:text-blue-600 text-slate-400"
+                          title="Preview"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDownload(doc)}
+                          className="p-1 hover:text-emerald-600 text-slate-400"
+                          title="Download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                        {canUploadDocuments() && (
                           <button
-                            onClick={() => handleDownload(doc)}
-                            className="p-1 text-slate-400 hover:text-blue-600 transition"
-                            title="Download Document"
+                            onClick={() => {
+                              setReplaceTarget(doc);
+                              setReplaceFile(null);
+                            }}
+                            className="p-1 hover:text-amber-600 text-slate-400"
+                            title="New Version"
                           >
-                            <Download className="h-4 w-4" />
+                            <History className="h-3.5 w-3.5" />
                           </button>
-                          {canDeleteDocuments && (
-                            <button
-                              onClick={() => handleDelete(doc.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 transition"
-                              title="Delete Document"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        )}
+                        {canDeleteDocuments && (
+                          <button
+                            onClick={() => handleDelete(doc.id)}
+                            className="p-1 hover:text-rose-600 text-slate-400"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           ) : (
             <div className="py-8">
               <EmptyState
@@ -304,6 +711,176 @@ export default function DocumentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* PREVIEW MODAL */}
+      {previewDoc && (
+        <Modal
+          isOpen={Boolean(previewDoc)}
+          onClose={() => setPreviewDoc(null)}
+          title="Document Details & Revision History"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm">{previewDoc.fileName}</h3>
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[10px]">
+                  {previewDoc.version || "v1.0"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-slate-600 text-[11px] pt-2 border-t border-slate-200">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Category</span>
+                  <span className="font-semibold text-slate-800">{previewDoc.category || previewDoc.type || "SOF"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Associated Claim</span>
+                  <span className="font-mono font-semibold text-slate-800">{previewDoc.claimId || "General"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">File Size</span>
+                  <span className="font-semibold text-slate-800">{formatFileSize(previewDoc.fileSize)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Upload Date</span>
+                  <span className="font-semibold text-slate-800">{formatDateTime(previewDoc.uploadedAt)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Revisions History */}
+            <div>
+              <h4 className="font-bold text-slate-800 mb-2 flex items-center space-x-1">
+                <History className="h-3.5 w-3.5 text-blue-600" />
+                <span>Version History</span>
+              </h4>
+
+              {previewDoc.revisions && previewDoc.revisions.length > 0 ? (
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                  {previewDoc.revisions.map((rev) => (
+                    <div key={rev.id} className="p-3 bg-white flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-mono font-bold text-slate-900 text-[11px]">{rev.version}</span>
+                          <span className="text-slate-400 text-[10px]">by {rev.uploadedBy}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{rev.changeSummary || "Revision record"}</p>
+                      </div>
+                      <span className="text-slate-400 text-[10px]">{formatDateTime(rev.uploadedAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 text-center text-[11px]">
+                  Current version: {previewDoc.version || "v1.0"} (Initial upload)
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownload(previewDoc)}
+                className="text-xs"
+              >
+                <Download className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                Download
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setPreviewDoc(null)}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* REPLACE DOCUMENT MODAL */}
+      {replaceTarget && (
+        <Modal
+          isOpen={Boolean(replaceTarget)}
+          onClose={() => {
+            setReplaceTarget(null);
+            setReplaceFile(null);
+          }}
+          title={`Upload New Version of "${replaceTarget.fileName}"`}
+        >
+          <form onSubmit={handleReplaceSubmit} className="space-y-4 text-xs">
+            <p className="text-slate-500">
+              Uploading a replacement file will automatically increment the version (e.g. {replaceTarget.version || "v1.0"} → v1.1) and record a revision entry in the audit history.
+            </p>
+
+            <div
+              onClick={() => replaceInputRef.current?.click()}
+              className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-5 text-center cursor-pointer bg-slate-50"
+            >
+              <input
+                type="file"
+                ref={replaceInputRef}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    const check = validateFile(f);
+                    if (!check.valid) {
+                      error("Invalid File", check.error || "File not allowed");
+                      return;
+                    }
+                    setReplaceFile(f);
+                  }
+                }}
+                accept=".pdf,.png,.jpg,.jpeg,.csv,.tsv"
+                className="hidden"
+              />
+              <FileUp className="h-6 w-6 text-blue-600 mx-auto mb-1.5" />
+              {replaceFile ? (
+                <div>
+                  <p className="font-bold text-slate-800">{replaceFile.name}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{formatFileSize(replaceFile.size)}</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="font-bold text-slate-700">Click to select new file version</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">PDF, PNG, JPG, CSV, TSV (max 20MB)</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReplaceTarget(null);
+                  setReplaceFile(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!replaceFile}
+                isLoading={isReplacing}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Upload Revision
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+export default function DocumentsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-slate-500">Loading documents...</div>}>
+      <DocumentsContent />
+    </Suspense>
   );
 }

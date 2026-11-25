@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { getScopedClaimById } from "@/lib/db/scoped";
 import { updateActivityInClaim, deleteActivityFromClaim, getClaimById } from "@/lib/db/queries";
+import { logAudit } from "@/lib/db/audit";
 
 export const PUT = withApi({
   roles: ["Supervisor", "Claim Processor", "Processor"],
@@ -18,13 +19,27 @@ export const PUT = withApi({
       return NextResponse.json({ error: "Activity ID is required" }, { status: 400 });
     }
 
-    const updated = updateActivityInClaim(params.id, activityId, body);
-    if (!updated) {
-      return NextResponse.json({ error: "Activity not found" }, { status: 404 });
-    }
+    try {
+      const updated = updateActivityInClaim(params.id, activityId, body);
+      if (!updated) {
+        return NextResponse.json({ error: "Activity not found" }, { status: 404 });
+      }
 
-    const updatedClaim = getClaimById(params.id);
-    return NextResponse.json({ success: true, activity: updated, claim: updatedClaim });
+      logAudit({
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        action: "sof_update",
+        targetType: "statement_of_facts",
+        targetId: activityId,
+        details: body
+      });
+
+      const updatedClaim = getClaimById(params.id);
+      return NextResponse.json({ success: true, activity: updated, claim: updatedClaim });
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message || "Failed to update activity" }, { status: err.statusCode || 400 });
+    }
   }
 });
 
@@ -45,6 +60,16 @@ export const DELETE = withApi({
     if (!success) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
+
+    logAudit({
+      actorId: user.id,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: "sof_delete",
+      targetType: "statement_of_facts",
+      targetId: activityId,
+      details: { claimId: params.id }
+    });
 
     const updatedClaim = getClaimById(params.id);
     return NextResponse.json({ success: true, claim: updatedClaim });

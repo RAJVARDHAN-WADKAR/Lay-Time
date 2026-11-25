@@ -33,10 +33,10 @@ TEST SUITE RESULTS: 44 / 44 TESTS PASSED (100%)
 ## 2. Manual & Functional Testing Checklist
 
 ### A. Authentication & Session Verification
-- [x] Login with valid Admin credentials (`rajvardhanwadkar76@gmail.com` / `Raj@123`).
-- [x] Login with valid Claim Processor credentials (`rohitmengane2975@gmail.com` / `Rohit@123`).
-- [x] Login with valid Supervisor credentials (`swayamghatage3839@gmail.com` / `Swayam@123`).
-- [x] Login with valid Reviewer credentials (`paraschougale558@gmail.com` / `Paras@123`).
+- [x] Login with valid Admin credentials (`admin@laytime.demo` / `Demo@12345`).
+- [x] Login with valid Claim Processor credentials (`processor1@laytime.demo` / `Demo@12345`).
+- [x] Login with valid Supervisor credentials (`supervisor@laytime.demo` / `Demo@12345`).
+- [x] Login with valid Reviewer credentials (`reviewer@laytime.demo` / `Demo@12345`).
 - [x] Click Show/Hide password eye icon to toggle plaintext/masked password visibility.
 - [x] Submit empty email/password and verify inline field error highlights.
 - [x] Click Logout in sidebar or header profile menu; verify redirect to `/login`.

@@ -35,11 +35,15 @@ export function getSubtreeUserIds(actorId: string): string[] {
 
 /**
  * Verifies if targetUserId is strictly inside the actor's created_by subtree.
- * Root Admin also has oversight over users directly or indirectly created.
+ * Root Admin also has oversight over all users.
  */
 export function isUserInActorSubtree(actor: ScopedUser, targetUserId: string): boolean {
   if (actor.id === targetUserId) {
     return false; // Actor is not in their own created subtree
+  }
+
+  if (actor.role === "Admin" || actor.role === "ADMIN") {
+    return true;
   }
 
   const subtree = getSubtreeUserIds(actor.id);
@@ -51,6 +55,28 @@ export function isUserInActorSubtree(actor: ScopedUser, targetUserId: string): b
  */
 export function getSubtreeUsers(actor: ScopedUser): User[] {
   const db = getDatabase();
+
+  if (actor.role === "Admin" || actor.role === "ADMIN") {
+    const rows = db
+      .prepare(`SELECT * FROM users ORDER BY created_at DESC`)
+      .all() as any[];
+
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      username: r.username,
+      role: r.role as UserRole,
+      clientId: r.client_id,
+      clientName: r.client_name,
+      status: r.status,
+      tokenVersion: r.token_version,
+      roleDescription: r.role_description,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  }
+
   const subtreeIds = getSubtreeUserIds(actor.id);
 
   if (subtreeIds.length === 0) {

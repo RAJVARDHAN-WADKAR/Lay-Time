@@ -11,41 +11,39 @@ import { adminRole } from "./admin.role";
 import { supervisorRole } from "./supervisor.role";
 import { claimProcessorRole } from "./claim-processor.role";
 import { reviewerClientRole } from "./reviewer-client.role";
+import { financeRole } from "./finance.role";
 
 export * from "./permissions.types";
 export * from "./admin.role";
 export * from "./supervisor.role";
 export * from "./claim-processor.role";
 export * from "./reviewer-client.role";
+export * from "./finance.role";
 
 export const ROLES_REGISTRY: Record<RoleName, RoleDefinition> = {
   ADMIN: adminRole,
   SUPERVISOR: supervisorRole,
   CLAIM_PROCESSOR: claimProcessorRole,
-  REVIEWER_CLIENT: reviewerClientRole
+  REVIEWER_CLIENT: reviewerClientRole,
+  FINANCE: financeRole
 };
 
 export const EXACT_ROLES: RoleName[] = [
   "ADMIN",
   "SUPERVISOR",
   "CLAIM_PROCESSOR",
-  "REVIEWER_CLIENT"
+  "REVIEWER_CLIENT",
+  "FINANCE"
 ];
 
-/**
- * Normalizes any incoming role string into one of the exact 4 roles:
- * ADMIN, SUPERVISOR, CLAIM_PROCESSOR, REVIEWER_CLIENT
- */
+import { normalizeRole as baseNormalizeRole } from "@/lib/auth/rolePermissions";
+
 export function normalizeRole(role?: string | null): RoleName {
-  if (!role) return "REVIEWER_CLIENT";
-  const upper = role.trim().toUpperCase().replace(/[\s-]+/g, "_");
-
-  if (upper === "ADMIN") return "ADMIN";
-  if (upper === "SUPERVISOR") return "SUPERVISOR";
-  if (upper === "CLAIM_PROCESSOR" || upper === "PROCESSOR") return "CLAIM_PROCESSOR";
-  if (upper === "REVIEWER" || upper === "CLIENT" || upper === "REVIEWER_CLIENT") return "REVIEWER_CLIENT";
-  if (upper === "FINANCE") return "SUPERVISOR"; // Invoices/payments managed by Supervisor
-
+  const norm = baseNormalizeRole(role);
+  if (norm === "ADMIN") return "ADMIN";
+  if (norm === "SUPERVISOR") return "SUPERVISOR";
+  if (norm === "CLAIM_PROCESSOR") return "CLAIM_PROCESSOR";
+  if (norm === "CLIENT") return "REVIEWER_CLIENT";
   return "REVIEWER_CLIENT";
 }
 

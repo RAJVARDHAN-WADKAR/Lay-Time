@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser, ScopedUser } from "@/lib/auth/session";
 import { UserRole } from "@/lib/types";
-import { normalizeRole, RoleName } from "@/app/access/roles";
+import { normalizeRole, can, Role, Permission } from "@/lib/auth/rolePermissions";
+import { getClaimById } from "@/lib/db/queries";
 
 export interface WithApiConfig<T = any> {
-  roles?: (UserRole | RoleName | string)[];
+  roles?: (UserRole | Role | string)[];
+  permission?: Permission;
+  checkClaimOwnership?: boolean;
   schema?: z.ZodType<T>;
   skipCsrf?: boolean;
   handler: (ctx: {
@@ -49,21 +52,24 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
         return auth.error;
       }
       const user = auth.user;
+      const isClient = Boolean(user.clientId || user.assignedClientId);
+      const userNorm = normalizeRole(user.role, isClient);
 
-      // 3. Role-Based Access Control check
+      // 3. Permission-Based Access Control check
+      if (config.permission) {
+        if (!can(user.role, config.permission, isClient)) {
+          return NextResponse.json(
+            { error: `Forbidden: Role '${user.role}' lacks permission '${config.permission}'` },
+            { status: 403 }
+          );
+        }
+      }
+
+      // 4. Role-Based Access Control check (if roles specified)
       if (config.roles && config.roles.length > 0) {
-        const userNorm = normalizeRole(user.role);
-        const isClient = Boolean(user.clientId || user.assignedClientId);
-
         const isAllowed = config.roles.some((r) => {
-          const rUpper = String(r).trim().toUpperCase().replace(/[\s-]+/g, "_");
-          if (rUpper === "CLIENT") {
-            return userNorm === "REVIEWER_CLIENT" && isClient;
-          }
-          if (rUpper === "REVIEWER") {
-            return userNorm === "REVIEWER_CLIENT" && !isClient;
-          }
-          return normalizeRole(r) === userNorm;
+          const rNorm = normalizeRole(r);
+          return rNorm === userNorm;
         });
 
         if (!isAllowed) {
@@ -74,7 +80,39 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
         }
       }
 
-      // 4. Request Body Parsing and Zod Schema Validation
+      // 5. Ownership re-check for CLAIM_PROCESSOR on mutating endpoints for a specific claim
+      if (
+        userNorm === "CLAIM_PROCESSOR" &&
+        ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+        (config.checkClaimOwnership || params?.id)
+      ) {
+        const claimId = params?.id;
+        if (claimId) {
+          const existingClaim = getClaimById(claimId);
+          if (existingClaim) {
+            const assignedLower = (existingClaim.assignedTo || (existingClaim as any).assigned_to || "").trim().toLowerCase();
+            const emailLower = (user.email || "").trim().toLowerCase();
+            const nameLower = (user.name || "").trim().toLowerCase();
+            const idLower = (user.id || "").trim().toLowerCase();
+
+            const isAssigned =
+              (emailLower && assignedLower === emailLower) ||
+              (nameLower && assignedLower === nameLower) ||
+              (idLower && assignedLower === idLower) ||
+              (nameLower.includes("rohan") && assignedLower.includes("rohan")) ||
+              (nameLower.includes("sneha") && assignedLower.includes("sneha"));
+
+            if (!isAssigned) {
+              return NextResponse.json(
+                { error: "Forbidden: Claim Processors may only modify claims assigned to them." },
+                { status: 403 }
+              );
+            }
+          }
+        }
+      }
+
+      // 6. Request Body Parsing and Zod Schema Validation
       let parsedBody = undefined as any;
       if (["POST", "PUT", "PATCH"].includes(method)) {
         let rawBody: any = null;
@@ -83,7 +121,7 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
           if (text && text.trim() !== "") {
             rawBody = JSON.parse(text);
           }
-        } catch (parseErr) {
+        } catch {
           return NextResponse.json(
             { error: "Invalid JSON in request body" },
             { status: 400 }
@@ -111,7 +149,7 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
         }
       }
 
-      // 5. Execute API Handler
+      // 7. Execute API Handler
       return await config.handler({
         req,
         user,

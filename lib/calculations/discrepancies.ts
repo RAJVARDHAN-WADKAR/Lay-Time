@@ -5,15 +5,19 @@ import { Discrepancy, Port, SoFActivity } from "@/lib/types";
  * Scans SoF activities and ports for maritime sequence errors, timestamp conflicts, and data inconsistencies.
  */
 export function detectDiscrepancies(
-  activities: SoFActivity[],
-  ports: Port[],
+  activities: SoFActivity[] = [],
+  ports: Port[] = [],
   confidenceThreshold: number = 0.8
 ): Discrepancy[] {
+  // Support passing a Claim object directly as first parameter
+  let acts: SoFActivity[] = Array.isArray(activities) ? activities : (activities as any)?.activities || [];
+  let pts: Port[] = Array.isArray(ports) && ports.length > 0 ? ports : (activities as any)?.ports || [];
+
   const discrepancies: Discrepancy[] = [];
   const berthMap = new Map<string, string>();
   const portMap = new Map<string, string>();
 
-  ports.forEach((p) => {
+  (pts || []).forEach((p) => {
     portMap.set(p.id, p.name);
     (p.berths || []).forEach((b) => {
       berthMap.set(b.id, b.name);
@@ -24,7 +28,7 @@ export function detectDiscrepancies(
   const seenKeys = new Map<string, string>();
 
   // Sort activities chronologically by start time for sequence checking
-  const sortedActivities = [...activities].sort(
+  const sortedActivities = [...acts].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
 
@@ -149,16 +153,17 @@ export function detectDiscrepancies(
 
     // 7. Low OCR Confidence
     if (act.isOcrExtracted && (act.ocrConfidence ?? 1.0) < confidenceThreshold) {
+      const confPct = Math.round((act.ocrConfidence ?? 0) * 100);
       discrepancies.push({
         id: `disc-conf-${act.id}`,
         claimId: act.claimId,
         activityId: act.id,
         type: "low_confidence",
         severity: "warning",
-        title: "Low OCR Extraction Confidence",
-        description: `OCR model returned ${Math.round((act.ocrConfidence ?? 0) * 100)}% confidence on "${act.activityName}". Manual verification advised.`,
+        title: `Low OCR Extraction Confidence (${confPct}%)`,
+        description: `OCR model returned ${confPct}% confidence on "${act.activityName}". Manual verification advised against original document scan.`,
         field: "ocrConfidence",
-        currentValue: `${Math.round((act.ocrConfidence ?? 0) * 100)}%`,
+        currentValue: `${confPct}%`,
         suggestedValue: "Verify against original PDF scan",
         isResolved: false,
       });
@@ -221,6 +226,38 @@ export function detectDiscrepancies(
         });
       }
       hasCompleted = true;
+    }
+  }
+
+  // 9. Overlapping Activities on Same Berth
+  for (let i = 0; i < sortedActivities.length; i++) {
+    for (let j = i + 1; j < sortedActivities.length; j++) {
+      const actA = sortedActivities[i];
+      const actB = sortedActivities[j];
+      if (actA.berthId && actB.berthId && actA.berthId === actB.berthId) {
+        const startA = new Date(actA.startTime).getTime();
+        const stopA = new Date(actA.stopTime).getTime();
+        const startB = new Date(actB.startTime).getTime();
+        const stopB = new Date(actB.stopTime).getTime();
+        if (!isNaN(startA) && !isNaN(stopA) && !isNaN(startB) && !isNaN(stopB)) {
+          // Check overlap: startB is before stopA and stopB is after startA
+          if (startB < stopA && stopB > startA) {
+            discrepancies.push({
+              id: `disc-overlap-${actA.id}-${actB.id}`,
+              claimId: actB.claimId || actA.claimId,
+              activityId: actB.id,
+              type: "overlapping_timestamps",
+              severity: "warning",
+              title: "Overlapping Activity Timestamps",
+              description: `Activity "${actB.activityName}" overlaps with "${actA.activityName}" on the same berth between ${new Date(startB).toISOString().substring(11, 16)} and ${new Date(stopA).toISOString().substring(11, 16)}.`,
+              field: "startTime",
+              currentValue: actB.startTime,
+              suggestedValue: actA.stopTime,
+              isResolved: false,
+            });
+          }
+        }
+      }
     }
   }
 

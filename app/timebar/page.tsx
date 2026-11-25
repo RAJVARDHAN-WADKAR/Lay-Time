@@ -329,14 +329,23 @@ export default function TimeBarMonitorPage() {
 
                       {/* Timebar Deadline Date */}
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        {row.deadlineDate !== "—" ? formatDate(row.deadlineDate) : "—"}
+                        <div>{row.deadlineDate !== "—" ? formatDate(row.deadlineDate) : "—"}</div>
+                        {row.timebar.isBaseDateEstimated && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 border border-slate-200 mt-0.5">
+                            Base date estimated
+                          </span>
+                        )}
                       </td>
 
                       {/* Days Remaining Countdown */}
                       <td className="py-3.5 px-4 text-center">
-                        {isLate ? (
+                        {row.timebar.isSubmittedOnTime ? (
+                          <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                            Submitted on time
+                          </span>
+                        ) : isLate ? (
                           <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-black bg-rose-100 text-rose-800">
-                            EXPIRED
+                            TIMEBARRED
                           </span>
                         ) : (
                           <div className="inline-flex flex-col items-center">
@@ -349,7 +358,7 @@ export default function TimeBarMonitorPage() {
                                   : "text-emerald-600"
                               }`}
                             >
-                              {row.daysRemaining} days
+                              {row.daysRemaining} days remaining
                             </span>
                             <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
                               <div
@@ -362,7 +371,7 @@ export default function TimeBarMonitorPage() {
                                 }`}
                                 style={{
                                   width: `${Math.min(
-                                    Math.max((row.daysRemaining / (row.claim.claimTimebarDays || 90)) * 100, 5),
+                                    Math.max((row.daysRemaining / (row.claim.claimTimebarDays || 45)) * 100, 5),
                                     100
                                   )}%`
                                 }}
@@ -376,7 +385,9 @@ export default function TimeBarMonitorPage() {
                       <td className="py-3.5 px-4 text-center">
                         <span
                           className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase ${
-                            isLate
+                            row.timebar.isSubmittedOnTime
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                              : isLate
                               ? "bg-rose-100 text-rose-800 border border-rose-200"
                               : isUrgent
                               ? "bg-rose-50 text-rose-700 border border-rose-300 animate-pulse"
@@ -385,7 +396,7 @@ export default function TimeBarMonitorPage() {
                               : "bg-emerald-50 text-emerald-800 border border-emerald-300"
                           }`}
                         >
-                          {row.computedStatus}
+                          {row.timebar.statusBadgeText || row.computedStatus}
                         </span>
                       </td>
 

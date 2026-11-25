@@ -9,13 +9,35 @@ import { z } from "zod";
  * Client and Reviewer -> []
  */
 export const CREATE_MATRIX: Record<string, UserRole[]> = {
-  ADMIN: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT", "Admin", "Supervisor", "Reviewer"],
-  Admin: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT", "Admin", "Supervisor", "Reviewer"],
-  SUPERVISOR: ["CLAIM_PROCESSOR", "Claim Processor", "Processor"],
-  Supervisor: ["CLAIM_PROCESSOR", "Claim Processor", "Processor"],
-  CLAIM_PROCESSOR: ["REVIEWER_CLIENT", "Client"],
-  "Claim Processor": ["REVIEWER_CLIENT", "Client"],
-  Processor: ["REVIEWER_CLIENT", "Client"],
+  ADMIN: [
+    "ADMIN",
+    "SUPERVISOR",
+    "CLAIM_PROCESSOR",
+    "REVIEWER_CLIENT",
+    "Admin",
+    "Supervisor",
+    "Claim Processor",
+    "Processor",
+    "Reviewer",
+    "Client"
+  ],
+  Admin: [
+    "ADMIN",
+    "SUPERVISOR",
+    "CLAIM_PROCESSOR",
+    "REVIEWER_CLIENT",
+    "Admin",
+    "Supervisor",
+    "Claim Processor",
+    "Processor",
+    "Reviewer",
+    "Client"
+  ],
+  SUPERVISOR: [],
+  Supervisor: [],
+  CLAIM_PROCESSOR: [],
+  "Claim Processor": [],
+  Processor: [],
   REVIEWER_CLIENT: [],
   Reviewer: [],
   Client: [],

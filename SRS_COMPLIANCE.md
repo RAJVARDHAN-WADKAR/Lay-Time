@@ -37,12 +37,12 @@ The **Laytime Calculation System** is an enterprise-grade maritime application b
 | **Allowed Created Roles** | Admin, Supervisor, Reviewer | Claim Processor | Client | None (`[]`) | None (`[]`) | None (`[]`) |
 
 ### Pre-Seeded Test Credentials
-- **Admin**: `rajvardhanwadkar76@gmail.com` / `Raj@123`
-- **Supervisor**: `swayamghatage3839@gmail.com` / `Swayam@123`
-- **Claim Processor**: `rohitmengane2975@gmail.com` / `Rohit@123`
-- **Reviewer**: `paraschougale558@gmail.com` / `Paras@123`
+- **Admin**: `admin@laytime.demo` / `Demo@12345`
+- **Supervisor**: `supervisor@laytime.demo` / `Demo@12345`
+- **Claim Processor**: `processor1@laytime.demo` / `Demo@12345`
+- **Reviewer**: `reviewer@laytime.demo` / `Demo@12345`
 - **Finance**: `anita.sharma@laytime.com` / `Finance@123`
-- **Client**: `client@trafigura.com` / `Client@123` (Linked to Client Account: `Trafigura`)
+- **Client**: `client1@laytime.demo` / `Demo@12345` (Linked to Client Account: `Trafigura`)
 
 ---
 

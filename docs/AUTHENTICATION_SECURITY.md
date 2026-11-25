@@ -17,7 +17,7 @@ This document details the security posture, authentication protocols, cryptograp
   ```json
   {
     "userId": "usr-001",
-    "email": "rajvardhanwadkar76@gmail.com",
+    "email": "admin@laytime.demo",
     "name": "Rajvardhan Wadkar",
     "role": "Admin",
     "iat": 1790952237,
@@ -71,10 +71,10 @@ Four pre-configured role test accounts are seeded in the database for evaluation
 
 | Role | Email | Password |
 | :--- | :--- | :--- |
-| **Admin** | `rajvardhanwadkar76@gmail.com` | `Raj@123` |
-| **Claim Processor** | `rohitmengane2975@gmail.com` | `Rohit@123` |
-| **Supervisor** | `swayamghatage3839@gmail.com` | `Swayam@123` |
-| **Reviewer** | `paraschougale558@gmail.com` | `Paras@123` |
+| **Admin** | `admin@laytime.demo` | `Demo@12345` |
+| **Claim Processor** | `processor1@laytime.demo` | `Demo@12345` |
+| **Supervisor** | `supervisor@laytime.demo` | `Demo@12345` |
+| **Reviewer** | `reviewer@laytime.demo` | `Demo@12345` |
 
 ---
 

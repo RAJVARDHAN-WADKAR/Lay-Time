@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromRequest } from "@/lib/auth/session";
 import { getDocumentById, updateDocument } from "@/lib/db/queries";
 import { getDatabase } from "@/lib/db";
+import { logAudit } from "@/lib/db/audit";
 
 export async function GET(
   request: NextRequest,
@@ -28,8 +29,14 @@ export async function PUT(
     const session = getCurrentUserFromRequest(request);
     const { normalizeRole } = await import("@/app/access/roles");
     const userRoleNorm = session ? normalizeRole(session.role) : null;
-    if (!session || session.role === "Reviewer" || userRoleNorm === "REVIEWER_CLIENT") {
-      return NextResponse.json({ error: "Forbidden: Reviewers and Clients cannot modify documents." }, { status: 403 });
+    if (
+      !session ||
+      session.role === "Reviewer" ||
+      session.role === "Finance" ||
+      userRoleNorm === "FINANCE" ||
+      userRoleNorm === "REVIEWER_CLIENT"
+    ) {
+      return NextResponse.json({ error: "Forbidden: Reviewers, Clients, and Finance cannot modify documents." }, { status: 403 });
     }
 
     const body = await request.json();
@@ -58,6 +65,15 @@ export async function DELETE(
     if (res.changes === 0) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
+
+    logAudit({
+      actorId: session.userId,
+      actorEmail: session.email,
+      actorRole: session.role,
+      action: "document_delete",
+      targetType: "document",
+      targetId: params.id
+    });
 
     return NextResponse.json({ success: true, message: "Document deleted" });
   } catch (error: any) {

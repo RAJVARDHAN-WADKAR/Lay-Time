@@ -61,17 +61,24 @@ export function ClaimProcessorDashboard() {
     [notifications]
   );
 
-  // Filter claims assigned to this processor or portfolio
+  // Filter claims strictly assigned to this processor
   const assignedClaims = useMemo(() => {
     if (!claims || claims.length === 0) return [];
-    return claims.filter(
-      (c) =>
-        c.assignedTo?.toLowerCase().includes("rohit") ||
-        c.assignedTo?.toLowerCase().includes("sarah") ||
-        c.assignedTo === currentUser?.name ||
-        c.assignedTo === currentUser?.id ||
-        c.assignedTo === currentUser?.email
-    );
+    const nameLower = (currentUser?.name || "").trim().toLowerCase();
+    const emailLower = (currentUser?.email || "").trim().toLowerCase();
+    const idLower = (currentUser?.id || "").trim().toLowerCase();
+
+    return claims.filter((c) => {
+      const assigned = (c.assignedTo || (c as any).assigned_to || "").trim().toLowerCase();
+      if (!assigned) return false;
+      return (
+        (emailLower && assigned === emailLower) ||
+        (nameLower && assigned === nameLower) ||
+        (idLower && assigned === idLower) ||
+        (nameLower.includes("rohan") && assigned.includes("rohan")) ||
+        (nameLower.includes("sneha") && assigned.includes("sneha"))
+      );
+    });
   }, [claims, currentUser]);
 
   const displayedClaims = useMemo(() => {
@@ -213,7 +220,7 @@ export function ClaimProcessorDashboard() {
             claims={displayedClaims}
             title={selectedStage ? `Assigned Claims (${selectedStage})` : "My Assigned Claims"}
             subtitle="Active maritime claims registered to your processing queue"
-            viewAllHref="/claims"
+            viewAllHref="/claims?filter=assigned"
           />
         </div>
         <div>

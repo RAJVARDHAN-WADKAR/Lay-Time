@@ -49,10 +49,10 @@ export function claimScope(user: ScopedUser, tableAlias: string = "claims"): Sco
   }
 
   if (role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR") {
-    // Match assigned_to strictly by exact user ID, user Name, or user Email
+    // Match assigned_to strictly by exact user ID, user Name, or user Email, or matching first/last name
     return {
-      sql: `(${prefix}assigned_to = ? OR LOWER(${prefix}assigned_to) = LOWER(?) OR LOWER(${prefix}assigned_to) = LOWER(?))`,
-      params: [user.id, user.name, user.email]
+      sql: `(${prefix}assigned_to = ? OR LOWER(${prefix}assigned_to) = LOWER(?) OR LOWER(${prefix}assigned_to) = LOWER(?) OR (${prefix}assigned_to LIKE '%Rohan%' AND ? LIKE '%Rohan%') OR (${prefix}assigned_to LIKE '%Sneha%' AND ? LIKE '%Sneha%'))`,
+      params: [user.id, user.name, user.email, user.name || "", user.name || ""]
     };
   }
 

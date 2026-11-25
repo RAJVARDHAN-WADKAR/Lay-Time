@@ -36,9 +36,10 @@ export const GET = withApi({
   }
 });
 
-// PUT /api/users/[id]: Update user within actor's subtree
+// PUT /api/users/[id]: Update user (Admin only)
 export const PUT = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor"],
+  permission: "users:manage",
+  roles: ["Admin", "ADMIN"],
   schema: UpdateUserSchema,
   handler: async ({ user, params, body, req }) => {
     const targetId = params.id;
@@ -103,7 +104,8 @@ export const PUT = withApi({
 
 // DELETE /api/users/[id]: Deactivate user account with hierarchy & last-Admin guards
 export const DELETE = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor"],
+  permission: "users:manage",
+  roles: ["Admin", "ADMIN"],
   handler: async ({ user, params, req }) => {
     const targetId = params.id;
 

@@ -21,6 +21,7 @@ export default function DashboardPage() {
       if (roleUpper === "ADMIN") targetRoute = "/dashboard/admin";
       else if (roleUpper === "SUPERVISOR") targetRoute = "/dashboard/supervisor";
       else if (roleUpper === "CLAIM_PROCESSOR" || roleUpper === "PROCESSOR") targetRoute = "/dashboard/claim-processor";
+      else if (roleUpper === "FINANCE") targetRoute = "/dashboard/finance";
       else if (roleUpper === "REVIEWER_CLIENT" || roleUpper === "CLIENT" || roleUpper === "REVIEWER") {
         targetRoute = "/dashboard/reviewer-client";
       }

@@ -22,7 +22,9 @@ export function calculateActivityDeduction(activity: SoFActivity): {
   deductedMinutes: number;
   category: DeductionCategory;
 } {
-  const grossMinutes = calculateGrossMinutes(activity.startTime, activity.stopTime);
+  const grossMinutes = activity.durationMinutes !== undefined && activity.durationMinutes !== null
+    ? activity.durationMinutes
+    : calculateGrossMinutes(activity.startTime, activity.stopTime);
   const percentage = Math.min(Math.max(activity.percentageCounted ?? 100, 0), 100);
   const prorata = Math.min(Math.max(activity.prorata ?? 100, 0), 100);
 
@@ -36,6 +38,54 @@ export function calculateActivityDeduction(activity: SoFActivity): {
     deductedMinutes,
     category: activity.deductionCategory || "Other",
   };
+}
+
+/**
+ * Calculates net deduction minutes for deduction records, ensuring
+ * that overlapping time windows with SoF activities with percentageCounted < 100
+ * are never double-counted.
+ */
+export function calculateDeductionsWithoutDoubleCount(
+  deductions: any[],
+  activities: SoFActivity[]
+): number {
+  let totalDeductionMinutes = 0;
+
+  for (const d of deductions) {
+    let dMinutes = Math.round(((d.deductionHours ?? d.deduction_hours ?? 0)) * 60);
+    const dStartTime = d.startTime ?? d.start_time;
+    const dStopTime = d.stopTime ?? d.stop_time;
+
+    if (dStartTime && dStopTime) {
+      const dStart = new Date(dStartTime).getTime();
+      const dStop = new Date(dStopTime).getTime();
+
+      let alreadyDeductedInOverlap = 0;
+      for (const act of activities) {
+        if (!act.startTime || !act.stopTime) continue;
+        const aStart = new Date(act.startTime).getTime();
+        const aStop = new Date(act.stopTime).getTime();
+
+        const overlapStart = Math.max(dStart, aStart);
+        const overlapStop = Math.min(dStop, aStop);
+
+        if (overlapStop > overlapStart) {
+          const overlapMinutes = Math.round((overlapStop - overlapStart) / 60000);
+          const pct = Math.min(Math.max(act.percentageCounted ?? 100, 0), 100);
+          const prorata = Math.min(Math.max(act.prorata ?? 100, 0), 100);
+          const effectivePct = (pct * prorata) / 10000;
+          const actDeductedFraction = 1 - effectivePct;
+          alreadyDeductedInOverlap += Math.round(overlapMinutes * actDeductedFraction);
+        }
+      }
+
+      dMinutes = Math.max(0, dMinutes - alreadyDeductedInOverlap);
+    }
+
+    totalDeductionMinutes += dMinutes;
+  }
+
+  return totalDeductionMinutes;
 }
 
 /**
@@ -89,7 +139,7 @@ export function aggregateDeductions(activities: SoFActivity[]): DeductionRecord[
   return result;
 }
 
-function formatMinutes(mins: number): string {
+export function formatMinutes(mins: number): string {
   const d = Math.floor(mins / 1440);
   const h = Math.floor((mins % 1440) / 60);
   const m = mins % 60;

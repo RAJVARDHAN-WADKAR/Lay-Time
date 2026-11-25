@@ -35,7 +35,7 @@ import {
 
 export default function OcrSoFReviewPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [selectedClaimId, setSelectedClaimId] = useState<string>("CLM-2024-004");
+  const [selectedClaimId, setSelectedClaimId] = useState<string>("");
   const [claim, setClaim] = useState<Claim | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,7 +55,7 @@ export default function OcrSoFReviewPage() {
     setIsLoading(true);
     const allClaims = await getClaims();
     setClaims(allClaims);
-    const target = allClaims.find((c) => c.id === selectedClaimId) || allClaims[3] || allClaims[0];
+    const target = (selectedClaimId ? allClaims.find((c) => c.id === selectedClaimId) : null) || allClaims[0] || null;
     setClaim(target);
     if (target && target.id !== selectedClaimId) {
       setSelectedClaimId(target.id);

@@ -751,40 +751,53 @@ export default function ClaimDetailPage() {
                 <p className="text-slate-500 text-xs">Mandatory documentation, OCR extractions, and version archives.</p>
               </div>
               {!isReadOnly && userCanEdit && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    info("File upload simulated: Added additional bunker receipt.");
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Upload className="w-3.5 h-3.5 mr-1" />
-                  Upload New Document
-                </Button>
+                <Link href={`/documents?claimId=${claim.id}`}>
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 mr-1" />
+                    Upload to this Claim
+                  </Button>
+                </Link>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {[
-                { name: "Statement of Facts (SoF) - Verified.pdf", size: "1.8 MB", date: "2024-07-16", status: "OCR Verified", conf: "98%" },
-                { name: "Notice of Readiness (NOR) Signed.pdf", size: "640 KB", date: "2024-07-10", status: "Verified", conf: "99%" },
-                { name: "Charterparty Agreement - BPVOY4.pdf", size: "4.2 MB", date: "2024-06-20", status: "Contract", conf: "100%" },
-                { name: "Pumping Logs & Manifold Pressure Record.pdf", size: "2.1 MB", date: "2024-07-15", status: "Dispute Evidence", conf: "95%" }
-              ].map((doc, idx) => (
-                <div key={idx} className="p-3 border border-slate-200 rounded-lg flex items-center justify-between bg-slate-50">
-                  <div className="flex items-center gap-2.5">
-                    <FileSpreadsheet className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-800 text-xs">{doc.name}</p>
-                      <p className="text-slate-400 text-[10px] mt-0.5">{doc.size} • Uploaded {doc.date}</p>
+            {claim.documents && claim.documents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {claim.documents.map((doc, idx) => (
+                  <div key={doc.id || idx} className="p-3 border border-slate-200 rounded-lg flex items-center justify-between bg-slate-50">
+                    <div className="flex items-center gap-2.5">
+                      <FileSpreadsheet className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-slate-800 text-xs">{doc.fileName}</p>
+                        <p className="text-slate-400 text-[10px] mt-0.5">
+                          {doc.version || "v1.0"} • {doc.category || doc.type || "SOF"}
+                        </p>
+                      </div>
                     </div>
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                      {doc.status || "Uploaded"}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                    {doc.status} ({doc.conf})
-                  </Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-2">
+                <FileText className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-xs font-semibold text-slate-700">No documents attached to this claim yet</p>
+                <p className="text-[11px] text-slate-400">Upload Statement of Facts, Charterparties, or Notice of Readiness</p>
+                {!isReadOnly && userCanEdit && (
+                  <div className="pt-2">
+                    <Link href={`/documents?claimId=${claim.id}`}>
+                      <Button size="sm" variant="outline" className="text-xs text-blue-600 border-blue-200 hover:bg-blue-50">
+                        Upload First Document
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <ClaimMissingDocsTab claim={claim} />

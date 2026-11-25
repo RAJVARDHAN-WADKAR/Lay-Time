@@ -1,5 +1,8 @@
 import { getDatabase } from "./index";
 export { getDatabase };
+import { calculateClaimLaytime } from "@/lib/calculations/laytime";
+import { isStatusUnderContention, normalizeClaimStatus } from "@/lib/calculations/status";
+import { generateNextClaimId } from "@/lib/utils/claimId";
 import {
   Claim,
   ClaimCalculation,
@@ -349,7 +352,13 @@ function mapRowToClaim(row: any, includeRelations = false): Claim {
 export function createClaim(claim: Partial<Claim>, userEmail: string): Claim {
   const db = getDatabase();
   const now = new Date().toISOString();
-  const id = claim.id || `CLM-2024-${String(Date.now()).slice(-4)}`;
+  
+  // Requirement 4.1: Claim ID generated on the SERVER: DBLS + 2-digit year + sequence
+  let id = claim.id;
+  const isExisting = id ? db.prepare("SELECT id FROM claims WHERE id = ?").get(id) : null;
+  if (!id || id.startsWith("CLM-") || isExisting) {
+    id = generateNextClaimId(db, claim.instructionReceivedDate);
+  }
 
   const insert = db.prepare(`
     INSERT INTO claims (
@@ -523,7 +532,126 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     saveDeductionsForClaim(id, updates.deductions);
   }
 
+  if (
+    updates.demurrageRatePerDay !== undefined ||
+    updates.isOverridden !== undefined ||
+    updates.overriddenDemurrage !== undefined ||
+    updates.ports !== undefined ||
+    updates.activities !== undefined ||
+    updates.deductions !== undefined
+  ) {
+    persistCalculationForClaim(id);
+  }
+
   return getClaimById(id);
+}
+
+export function persistCalculationForClaim(claimId: string, calculatedBy?: string): ClaimCalculation {
+  const db = getDatabase();
+  let resultCalc!: ClaimCalculation;
+
+  const runPersist = () => {
+    const fullClaim = getClaimById(claimId);
+    if (!fullClaim) {
+      throw new Error(`Claim not found: ${claimId}`);
+    }
+
+    const calc = calculateClaimLaytime(fullClaim);
+    resultCalc = calc;
+    const now = new Date().toISOString();
+    const calcId = `calc-${claimId}`;
+    const actor = calculatedBy || fullClaim.assignedTo || "System";
+
+    const portJson = JSON.stringify(
+      calc.portCalculations.length > 0
+        ? calc.portCalculations.map((p) => ({
+            portName: p.portName,
+            allowedMinutes: p.totalAllowedMinutes,
+            netLaytimeMinutes: p.totalNetUsedMinutes,
+          }))
+        : [
+            {
+              portName: fullClaim.shipName || "Port Call",
+              allowedMinutes: calc.totalAllowedMinutes,
+              netLaytimeMinutes: calc.totalNetLaytimeMinutes,
+            },
+          ]
+    );
+
+    const timebarJson = JSON.stringify(calc.timebarCompliance || {});
+    const assumptionsJson = JSON.stringify(calc.assumptions || {});
+
+    db.prepare(`
+      INSERT INTO laytime_calculations (
+        id, claim_id, demurrage_rate_per_day, total_gross_minutes,
+        total_deductions_minutes, total_net_laytime_minutes, total_allowed_minutes,
+        net_demurrage_minutes, net_despatch_minutes, calculated_demurrage_amount,
+        calculated_despatch_amount, final_payable_amount, port_calculations_json,
+        timebar_compliance_json, assumptions_json, calculated_by, calculated_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      ON CONFLICT(claim_id) DO UPDATE SET
+        demurrage_rate_per_day = excluded.demurrage_rate_per_day,
+        total_gross_minutes = excluded.total_gross_minutes,
+        total_deductions_minutes = excluded.total_deductions_minutes,
+        total_net_laytime_minutes = excluded.total_net_laytime_minutes,
+        total_allowed_minutes = excluded.total_allowed_minutes,
+        net_demurrage_minutes = excluded.net_demurrage_minutes,
+        net_despatch_minutes = excluded.net_despatch_minutes,
+        calculated_demurrage_amount = excluded.calculated_demurrage_amount,
+        calculated_despatch_amount = excluded.calculated_despatch_amount,
+        final_payable_amount = excluded.final_payable_amount,
+        port_calculations_json = excluded.port_calculations_json,
+        timebar_compliance_json = excluded.timebar_compliance_json,
+        assumptions_json = excluded.assumptions_json,
+        calculated_by = excluded.calculated_by,
+        calculated_at = excluded.calculated_at
+    `).run(
+      calcId,
+      claimId,
+      calc.demurrageRatePerDay,
+      calc.totalGrossMinutes,
+      calc.totalDeductionsMinutes,
+      calc.totalNetLaytimeMinutes,
+      calc.totalAllowedMinutes,
+      calc.netDemurrageMinutes,
+      calc.netDespatchMinutes,
+      calc.calculatedDemurrageAmount,
+      calc.calculatedDespatchAmount,
+      calc.finalPayableAmount,
+      portJson,
+      timebarJson,
+      assumptionsJson,
+      actor,
+      now
+    );
+
+    // Update claims financial fields from the result
+    db.prepare(`
+      UPDATE claims SET
+        billable_amount = ?,
+        claim_filed_amount = CASE
+          WHEN claim_status LIKE '%Nil Demurrage%' OR claim_status LIKE '%No Claim%' THEN 0
+          ELSE ?
+        END,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      calc.finalPayableAmount,
+      calc.calculatedDemurrageAmount,
+      now,
+      claimId
+    );
+  };
+
+  if (db.inTransaction) {
+    runPersist();
+  } else {
+    db.transaction(runPersist)();
+  }
+
+  return resultCalc;
 }
 
 export function deleteClaim(id: string): boolean {
@@ -582,6 +710,7 @@ export function savePortsForClaim(claimId: string, ports: Port[]): void {
         insertBerth.run(berthId, portId, b.name, b.quantity, b.prorataShare, b.isProrataOverridden ? 1 : 0, b.loadRate, b.cargoType || "", b.receiverName || "");
       }
     }
+    persistCalculationForClaim(claimId);
   })();
 }
 
@@ -624,15 +753,23 @@ export function saveActivitiesForClaim(claimId: string, activities: SoFActivity[
   db.transaction(() => {
     db.prepare("DELETE FROM statement_of_facts WHERE claim_id = ?").run(claimId);
     const insert = db.prepare(`
-      INSERT INTO statement_of_facts (
+      INSERT OR REPLACE INTO statement_of_facts (
         id, claim_id, port_id, berth_id, activity_name, start_time, stop_time, duration_minutes,
         duration_formatted, percentage_counted, prorata, deduction_category, remarks, is_ocr_extracted,
         is_corrected, ocr_confidence, original_ocr_values
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    const usedIds = new Set<string>();
+    let aIdx = 0;
     for (const a of activities) {
-      const actId = a.id || `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      aIdx++;
+      let actId = a.id;
+      if (!actId || usedIds.has(actId) || db.prepare("SELECT 1 FROM statement_of_facts WHERE id = ? AND claim_id != ?").get(actId, claimId)) {
+        actId = `act-${claimId}-${aIdx}-${uuidv4().slice(0, 8)}`;
+      }
+      usedIds.add(actId);
+
       insert.run(
         actId, claimId, a.portId || null, a.berthId || null, a.activityName, a.startTime, a.stopTime,
         a.durationMinutes, a.durationFormatted, a.percentageCounted, a.prorata, a.deductionCategory,
@@ -640,52 +777,144 @@ export function saveActivitiesForClaim(claimId: string, activities: SoFActivity[
         a.originalOcrValues ? JSON.stringify(a.originalOcrValues) : null
       );
     }
+    persistCalculationForClaim(claimId);
   })();
+}
+
+export function validatePortAndBerth(claimId: string, portId?: string | null, berthId?: string | null): void {
+  const db = getDatabase();
+  if (portId) {
+    const port = db.prepare("SELECT id FROM ports WHERE id = ? AND claim_id = ?").get(portId, claimId);
+    if (!port) {
+      const err = new Error(`Invalid portId: port '${portId}' does not belong to claim '${claimId}'`);
+      (err as any).statusCode = 400;
+      throw err;
+    }
+  }
+  if (berthId) {
+    if (!portId) {
+      const err = new Error("Invalid berthId: portId must be provided when berthId is specified");
+      (err as any).statusCode = 400;
+      throw err;
+    }
+    const berth = db.prepare("SELECT id FROM berths WHERE id = ? AND port_id = ?").get(berthId, portId);
+    if (!berth) {
+      const err = new Error(`Invalid berthId: berth '${berthId}' does not belong to port '${portId}'`);
+      (err as any).statusCode = 400;
+      throw err;
+    }
+  }
+}
+
+export function validateAndComputeDuration(startTime?: string | null, stopTime?: string | null): {
+  startTime: string;
+  stopTime: string;
+  durationMinutes: number;
+  durationFormatted: string;
+} {
+  if (!startTime || !stopTime) {
+    const err = new Error("Both startTime and stopTime are required");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+  const start = new Date(startTime).getTime();
+  const stop = new Date(stopTime).getTime();
+  if (isNaN(start)) {
+    const err = new Error("Invalid startTime format");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+  if (isNaN(stop)) {
+    const err = new Error("Invalid stopTime format");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+  if (stop <= start) {
+    const err = new Error("Invalid time window: stopTime must be strictly after startTime");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+  const durationMinutes = Math.round((stop - start) / 60000);
+  const d = Math.floor(durationMinutes / 1440);
+  const h = Math.floor((durationMinutes % 1440) / 60);
+  const m = durationMinutes % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const durationFormatted = d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m` : `${pad(h)}h ${pad(m)}m`;
+
+  return { startTime, stopTime, durationMinutes, durationFormatted };
 }
 
 export function addActivityToClaim(claimId: string, activity: Partial<SoFActivity>): SoFActivity {
   const db = getDatabase();
-  const actId = activity.id || `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-  const durationMinutes = activity.durationMinutes || 120;
-  const durationFormatted = activity.durationFormatted || "02h 00m";
+  let actId = activity.id;
+  if (!actId || db.prepare("SELECT 1 FROM statement_of_facts WHERE id = ?").get(actId)) {
+    actId = `act-${claimId}-${Date.now()}-${uuidv4().slice(0, 8)}`;
+  }
 
-  db.prepare(`
-    INSERT INTO statement_of_facts (
-      id, claim_id, port_id, berth_id, activity_name, start_time, stop_time,
-      duration_minutes, duration_formatted, percentage_counted, prorata,
-      deduction_category, remarks, is_ocr_extracted, is_corrected, ocr_confidence, original_ocr_values
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    actId,
-    claimId,
-    activity.portId || null,
-    activity.berthId || null,
-    activity.activityName || "Operational Activity",
-    activity.startTime || new Date().toISOString(),
-    activity.stopTime || new Date().toISOString(),
-    durationMinutes,
-    durationFormatted,
-    activity.percentageCounted ?? 100,
-    activity.prorata ?? 100,
-    activity.deductionCategory || "Other",
-    activity.remarks || "",
-    activity.isOcrExtracted ? 1 : 0,
-    activity.isCorrected ? 1 : 0,
-    activity.ocrConfidence ?? 1.0,
-    activity.originalOcrValues ? JSON.stringify(activity.originalOcrValues) : null
+  // 1. Validate port and berth
+  validatePortAndBerth(claimId, activity.portId, activity.berthId);
+
+  // 2. Validate timestamps and compute duration from timestamps (never trust client)
+  const { startTime, stopTime, durationMinutes, durationFormatted } = validateAndComputeDuration(
+    activity.startTime,
+    activity.stopTime
   );
+
+  // 3. Validate percentageCounted (0 to 100)
+  const percentageCounted = activity.percentageCounted ?? 100;
+  if (typeof percentageCounted !== "number" || isNaN(percentageCounted) || percentageCounted < 0 || percentageCounted > 100) {
+    const err = new Error("percentageCounted must be a number between 0 and 100");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+
+  const runAdd = () => {
+    db.prepare(`
+      INSERT OR REPLACE INTO statement_of_facts (
+        id, claim_id, port_id, berth_id, activity_name, start_time, stop_time,
+        duration_minutes, duration_formatted, percentage_counted, prorata,
+        deduction_category, remarks, is_ocr_extracted, is_corrected, ocr_confidence, original_ocr_values
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      actId,
+      claimId,
+      activity.portId || null,
+      activity.berthId || null,
+      activity.activityName || "Operational Activity",
+      startTime,
+      stopTime,
+      durationMinutes,
+      durationFormatted,
+      percentageCounted,
+      activity.prorata ?? 100,
+      activity.deductionCategory || "Other",
+      activity.remarks || "",
+      activity.isOcrExtracted ? 1 : 0,
+      activity.isCorrected ? 1 : 0,
+      activity.ocrConfidence ?? 1.0,
+      activity.originalOcrValues ? JSON.stringify(activity.originalOcrValues) : null
+    );
+
+    persistCalculationForClaim(claimId);
+  };
+
+  if (db.inTransaction) {
+    runAdd();
+  } else {
+    db.transaction(runAdd)();
+  }
 
   return {
     id: actId,
     claimId,
-    portId: activity.portId,
-    berthId: activity.berthId,
+    portId: activity.portId || undefined,
+    berthId: activity.berthId || undefined,
     activityName: activity.activityName || "Operational Activity",
-    startTime: activity.startTime || new Date().toISOString(),
-    stopTime: activity.stopTime || new Date().toISOString(),
+    startTime,
+    stopTime,
     durationMinutes,
     durationFormatted,
-    percentageCounted: activity.percentageCounted ?? 100,
+    percentageCounted,
     prorata: activity.prorata ?? 100,
     deductionCategory: activity.deductionCategory || "Other",
     remarks: activity.remarks || "",
@@ -701,50 +930,73 @@ export function updateActivityInClaim(claimId: string, activityId: string, updat
   const existing = db.prepare("SELECT * FROM statement_of_facts WHERE id = ? AND claim_id = ?").get(activityId, claimId) as any;
   if (!existing) return null;
 
-  const activityName = updates.activityName ?? existing.activity_name;
+  const portId = updates.portId !== undefined ? updates.portId : existing.port_id;
+  const berthId = updates.berthId !== undefined ? updates.berthId : existing.berth_id;
+
+  // 1. Validate port and berth
+  validatePortAndBerth(claimId, portId, berthId);
+
   const startTime = updates.startTime ?? existing.start_time;
   const stopTime = updates.stopTime ?? existing.stop_time;
-  const durationMinutes = updates.durationMinutes ?? existing.duration_minutes;
-  const durationFormatted = updates.durationFormatted ?? existing.duration_formatted;
-  const percentageCounted = updates.percentageCounted ?? existing.percentage_counted;
+
+  // 2. Validate timestamps and compute duration from timestamps
+  const { durationMinutes, durationFormatted } = validateAndComputeDuration(startTime, stopTime);
+
+  // 3. Validate percentageCounted (0 to 100)
+  const percentageCounted = updates.percentageCounted !== undefined ? updates.percentageCounted : existing.percentage_counted;
+  if (typeof percentageCounted !== "number" || isNaN(percentageCounted) || percentageCounted < 0 || percentageCounted > 100) {
+    const err = new Error("percentageCounted must be a number between 0 and 100");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+
+  const activityName = updates.activityName ?? existing.activity_name;
   const prorata = updates.prorata ?? existing.prorata;
   const deductionCategory = updates.deductionCategory ?? existing.deduction_category;
   const remarks = updates.remarks ?? existing.remarks;
-  const berthId = updates.berthId !== undefined ? updates.berthId : existing.berth_id;
-  const portId = updates.portId !== undefined ? updates.portId : existing.port_id;
   const isCorrected = updates.isCorrected !== undefined ? (updates.isCorrected ? 1 : 0) : existing.is_corrected;
 
-  db.prepare(`
-    UPDATE statement_of_facts SET
-      activity_name = ?,
-      start_time = ?,
-      stop_time = ?,
-      duration_minutes = ?,
-      duration_formatted = ?,
-      percentage_counted = ?,
-      prorata = ?,
-      deduction_category = ?,
-      remarks = ?,
-      berth_id = ?,
-      port_id = ?,
-      is_corrected = ?
-    WHERE id = ? AND claim_id = ?
-  `).run(
-    activityName,
-    startTime,
-    stopTime,
-    durationMinutes,
-    durationFormatted,
-    percentageCounted,
-    prorata,
-    deductionCategory,
-    remarks,
-    berthId || null,
-    portId || null,
-    isCorrected,
-    activityId,
-    claimId
-  );
+  const runUpdate = () => {
+    db.prepare(`
+      UPDATE statement_of_facts SET
+        activity_name = ?,
+        start_time = ?,
+        stop_time = ?,
+        duration_minutes = ?,
+        duration_formatted = ?,
+        percentage_counted = ?,
+        prorata = ?,
+        deduction_category = ?,
+        remarks = ?,
+        berth_id = ?,
+        port_id = ?,
+        is_corrected = ?
+      WHERE id = ? AND claim_id = ?
+    `).run(
+      activityName,
+      startTime,
+      stopTime,
+      durationMinutes,
+      durationFormatted,
+      percentageCounted,
+      prorata,
+      deductionCategory,
+      remarks,
+      berthId || null,
+      portId || null,
+      isCorrected,
+      activityId,
+      claimId
+    );
+
+    persistCalculationForClaim(claimId);
+  };
+
+  if (db.inTransaction) {
+    runUpdate();
+  } else {
+    db.transaction(runUpdate)();
+  }
 
   return {
     id: activityId,
@@ -769,24 +1021,55 @@ export function updateActivityInClaim(claimId: string, activityId: string, updat
 
 export function deleteActivityFromClaim(claimId: string, activityId: string): boolean {
   const db = getDatabase();
-  const info = db.prepare("DELETE FROM statement_of_facts WHERE id = ? AND claim_id = ?").run(activityId, claimId);
-  return info.changes > 0;
+  let success = false;
+  const runDelete = () => {
+    const info = db.prepare("DELETE FROM statement_of_facts WHERE id = ? AND claim_id = ?").run(activityId, claimId);
+    success = info.changes > 0;
+    if (success) {
+      persistCalculationForClaim(claimId);
+    }
+  };
+  if (db.inTransaction) {
+    runDelete();
+  } else {
+    db.transaction(runDelete)();
+  }
+  return success;
 }
 
 export function getDeductionsForClaim(claimId: string) {
   const db = getDatabase();
-  return db.prepare("SELECT * FROM deductions WHERE claim_id = ?").all(claimId) as any[];
+  const rows = db.prepare("SELECT * FROM deductions WHERE claim_id = ?").all(claimId) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    claimId: r.claim_id,
+    type: r.type,
+    startTime: r.start_time,
+    stopTime: r.stop_time,
+    percentageTime: r.percentage_time,
+    prorata: r.prorata,
+    deductionHours: r.deduction_hours,
+    remarks: r.remarks,
+  }));
 }
 
 export function saveDeductionsForClaim(claimId: string, deductions: any[]) {
   const db = getDatabase();
   db.transaction(() => {
     db.prepare("DELETE FROM deductions WHERE claim_id = ?").run(claimId);
-    const insert = db.prepare("INSERT INTO deductions (id, claim_id, type, start_time, stop_time, percentage_time, prorata, deduction_hours, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const insert = db.prepare("INSERT OR REPLACE INTO deductions (id, claim_id, type, start_time, stop_time, percentage_time, prorata, deduction_hours, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const usedIds = new Set<string>();
+    let dIdx = 0;
     for (const d of deductions) {
-      const id = d.id || `ded-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-      insert.run(id, claimId, d.type, d.startTime, d.stopTime, d.percentageTime, d.prorata, d.deductionHours, d.remarks || "");
+      dIdx++;
+      let dedId = d.id;
+      if (!dedId || usedIds.has(dedId) || db.prepare("SELECT 1 FROM deductions WHERE id = ? AND claim_id != ?").get(dedId, claimId)) {
+        dedId = `ded-${claimId}-${dIdx}-${uuidv4().slice(0, 8)}`;
+      }
+      usedIds.add(dedId);
+      insert.run(dedId, claimId, d.type, d.startTime, d.stopTime, d.percentageTime, d.prorata, d.deductionHours, d.remarks || "");
     }
+    persistCalculationForClaim(claimId);
   })();
 }
 
@@ -943,9 +1226,42 @@ function mapRowToDocument(r: any): DocumentRecord {
 
 export function createDocument(doc: Partial<DocumentRecord>, uploader: string): DocumentRecord {
   const db = getDatabase();
-  const id = doc.id || `doc-${Date.now()}`;
   const now = new Date().toISOString();
-  const version = doc.version || "1.0";
+  const fileName = doc.fileName || "document.pdf";
+  const claimId = doc.claimId && doc.claimId !== "General" ? doc.claimId : null;
+  const fileSize = doc.fileSize || 1024;
+  const fileType = doc.fileType || "application/pdf";
+  const category = doc.category || doc.type || "SOF";
+  const filePath = doc.filePath || `/uploads/${fileName}`;
+
+  // Check if existing document with same file_name and claim_id exists
+  const existing = claimId
+    ? (db.prepare("SELECT * FROM documents WHERE file_name = ? AND claim_id = ? ORDER BY uploaded_at DESC LIMIT 1").get(fileName, claimId) as any)
+    : (db.prepare("SELECT * FROM documents WHERE file_name = ? AND (claim_id IS NULL OR claim_id = 'General') ORDER BY uploaded_at DESC LIMIT 1").get(fileName) as any);
+
+  if (existing) {
+    const prevVersion = existing.version || "v1.0";
+    const num = parseFloat(prevVersion.replace(/[^\d.]/g, "")) || 1.0;
+    const nextVersion = `v${(num + 0.1).toFixed(1)}`;
+
+    db.prepare(`
+      UPDATE documents
+      SET version = ?, file_size = ?, file_type = ?, category = ?, uploaded_by = ?, uploaded_at = ?, status = 'Uploaded'
+      WHERE id = ?
+    `).run(nextVersion, fileSize, fileType, category, uploader, now, existing.id);
+
+    const revRows = db.prepare("SELECT COUNT(*) as count FROM document_revisions WHERE document_id = ?").get(existing.id) as any;
+    const revNum = (revRows?.count || 1) + 1;
+    db.prepare(`
+      INSERT INTO document_revisions (id, document_id, version, file_name, file_size, uploaded_by, uploaded_at, change_summary, file_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(`rev-${existing.id}-${revNum}`, existing.id, nextVersion, fileName, fileSize, uploader, now, `Version update to ${nextVersion}`, filePath);
+
+    return getDocumentById(existing.id)!;
+  }
+
+  const id = doc.id || `doc-${Date.now()}`;
+  const version = doc.version || "v1.0";
 
   db.prepare(`
     INSERT INTO documents (
@@ -954,17 +1270,17 @@ export function createDocument(doc: Partial<DocumentRecord>, uploader: string): 
       error_reason, file_path
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    id, doc.claimId || null, doc.claimName || null, doc.racCaseId || null, doc.fileName || "document.pdf",
-    doc.fileSize || 1024, doc.fileType || "application/pdf", doc.category || "SOF", version,
+    id, claimId, doc.claimName || null, doc.racCaseId || null, fileName,
+    fileSize, fileType, category, version,
     uploader, now, doc.status || "Uploaded", doc.ocrConfidence || 0, doc.extractedItemsCount || 0,
-    doc.errorReason || null, doc.filePath || `/uploads/${doc.fileName}`
+    doc.errorReason || null, filePath
   );
 
   // Initial Revision
   db.prepare(`
     INSERT INTO document_revisions (id, document_id, version, file_name, file_size, uploaded_by, uploaded_at, change_summary, file_path)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(`rev-${id}-1`, id, version, doc.fileName || "document.pdf", doc.fileSize || 1024, uploader, now, "Initial document upload", doc.filePath || `/uploads/${doc.fileName}`);
+  `).run(`rev-${id}-1`, id, version, fileName, fileSize, uploader, now, "Initial document upload", filePath);
 
   return getDocumentById(id)!;
 }
@@ -1368,7 +1684,7 @@ export function getDashboardAnalytics(role?: UserRole, userEmail?: string): Dash
   const totalExposure = Math.max(totalOwed - totalReceived, 0);
 
   const underContention = claims
-    .filter((c) => c.claimStatus === "Disputed" || c.claimStatus === "Review")
+    .filter((c) => isStatusUnderContention(c.claimStatus))
     .reduce((acc, c) => acc + (c.claimFiledAmount || 0), 0);
 
   const openCount = claims.filter((c) => !c.claimClosed).length;
@@ -1496,11 +1812,16 @@ export function getDashboardAnalytics(role?: UserRole, userEmail?: string): Dash
 // =========================================================================
 
 export function getBusinessRule(key: string): any {
+  const meta = getBusinessRuleMeta(key);
+  return meta ? meta.value : null;
+}
+
+export function getBusinessRuleMeta(key: string): { value: any; updatedAt: string } | null {
   const db = getDatabase();
-  const row = db.prepare("SELECT value_json FROM business_rules WHERE key = ?").get(key) as any;
+  const row = db.prepare("SELECT value_json, updated_at FROM business_rules WHERE key = ?").get(key) as any;
   if (!row) return null;
   try {
-    return JSON.parse(row.value_json);
+    return { value: JSON.parse(row.value_json), updatedAt: row.updated_at };
   } catch (e) {
     return null;
   }

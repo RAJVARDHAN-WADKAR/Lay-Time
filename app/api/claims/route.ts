@@ -3,7 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { getScopedClaims } from "@/lib/db/scoped";
-import { createClaim } from "@/lib/db/queries";
+import { createClaim, createNotificationRecord } from "@/lib/db/queries";
+import { logAudit } from "@/lib/db/audit";
+import { validateDateChain } from "@/lib/utils/dateRules";
 import { z } from "zod";
 
 const CreateClaimSchema = z.object({
@@ -60,12 +62,53 @@ export const GET = withApi({
   }
 });
 
-// POST /api/claims: Create a new claim (Supervisor & Processor only)
+// POST /api/claims: Create a new claim (Admin, Supervisor, Claim Processor)
 export const POST = withApi({
-  roles: ["Supervisor", "Claim Processor", "Processor"],
+  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"],
+  permission: "claims:create",
   schema: CreateClaimSchema,
   handler: async ({ user, body }) => {
-    const newClaim = createClaim(body as any, user.name || user.email);
+    const claimData = { ...(body as any) };
+
+    const dateValidation = validateDateChain({
+      charterpartyDate: claimData.charterpartyDate,
+      instructionReceivedDate: claimData.instructionReceivedDate,
+      claimFiledDate: claimData.noticeReceivedDate || claimData.claimReceivedDate,
+      agreedDate: claimData.claimAgreedDate,
+      paymentReceivedDate: claimData.paymentReceivedDate
+    });
+
+    if (!dateValidation.isValid) {
+      return NextResponse.json(
+        { error: "Date validation error: milestones cannot be in future and must follow chronological order", details: dateValidation.errors },
+        { status: 400 }
+      );
+    }
+
+    const norm = user.role.toUpperCase().replace(/[\s-]+/g, "_");
+    if (norm === "CLAIM_PROCESSOR" || norm === "PROCESSOR") {
+      claimData.assignedTo = user.name || user.email;
+    }
+
+    const newClaim = createClaim(claimData, user.name || user.email);
+
+    logAudit({
+      actorId: user.id,
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: "claim_create",
+      targetType: "claim",
+      targetId: newClaim.id,
+      details: { claimName: newClaim.claimName, shipName: newClaim.shipName }
+    });
+
+    createNotificationRecord({
+      title: "New Claim Created",
+      message: `Claim ${newClaim.claimName} has been created`,
+      type: "claim",
+      claimId: newClaim.id,
+      claimName: newClaim.claimName
+    });
 
     return NextResponse.json(
       {

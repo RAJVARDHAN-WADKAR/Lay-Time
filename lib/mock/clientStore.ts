@@ -48,9 +48,9 @@ const DEFAULT_NOTIFICATIONS: NotificationRecord[] = [
   {
     id: "notif-1",
     title: "Time-Bar Approaching (15 Days)",
-    message: "Claim CLM-2024-001 (MV Ocean Titan) has 15 days remaining before notice time-bar expiration.",
+    message: "Claim CLM-2026-001 (MV Ocean Titan) has 15 days remaining before notice time-bar expiration.",
     type: "timebar",
-    claimId: "CLM-2024-001",
+    claimId: "CLM-2026-001",
     claimName: "MV Ocean Titan",
     isRead: false,
     createdAt: new Date(Date.now() - 3600000 * 2).toISOString()

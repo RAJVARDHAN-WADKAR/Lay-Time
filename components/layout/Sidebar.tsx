@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
-import { getVisibleScreens, normalizeRole } from "@/app/access/roles";
+import { normalizeRole, canAccessRoute, getRoleDashboardPath } from "@/lib/auth/rolePermissions";
 import { getNotifications } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -21,10 +21,7 @@ import {
   Settings,
   Users,
   LogOut,
-  Anchor,
-  Layers,
-  ChevronRight,
-  Shield
+  Anchor
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -38,26 +35,11 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
-  roles?: string[];
 }
 
 export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const {
-    currentUser,
-    role,
-    logout,
-    canAccessUsers,
-    canAccessSettings,
-    canCreateClaim,
-    canViewDashboard,
-    canViewLaytime,
-    canViewDocuments,
-    canUploadOcr,
-    canViewRac,
-    canViewReports
-  } = useAuth();
+  const { currentUser, role, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchUnread = async () => {
@@ -80,37 +62,9 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
     };
   }, []);
 
-  // Navigation Items adhering strictly to the Single Source of Truth RBAC Role Definitions
-  const userContext = useMemo(
-    () => ({
-      role: normalizeRole(role),
-      userId: currentUser?.id,
-      email: currentUser?.email,
-      clientId:
-        currentUser?.clientId ||
-        (currentUser as any)?.client_id ||
-        (currentUser as any)?.assignedClientId
-    }),
-    [role, currentUser]
-  );
-
-  const visibleScreens = useMemo(
-    () => getVisibleScreens(role, userContext),
-    [role, userContext]
-  );
-
-  const isClient = Boolean(userContext.clientId || role === "Client");
-  const normRole = normalizeRole(role);
-
-  const roleDashboardHref = isClient
-    ? "/dashboard/reviewer-client"
-    : normRole === "ADMIN"
-    ? "/dashboard/admin"
-    : normRole === "SUPERVISOR"
-    ? "/dashboard/supervisor"
-    : normRole === "CLAIM_PROCESSOR"
-    ? "/dashboard/claim-processor"
-    : "/dashboard/reviewer-client";
+  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id || role === "Client");
+  const normRole = normalizeRole(role, isClient);
+  const roleDashboardHref = getRoleDashboardPath(role, isClient);
 
   const roleDashboardLabel = isClient
     ? "Client Portal"
@@ -122,23 +76,15 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
     ? "Analyst Workbench"
     : "Reviewer Dashboard";
 
-  const allPossibleItems: {
-    screen: string;
-    href: string;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-    badge?: number;
-  }[] = useMemo(
+  const allPossibleItems = useMemo(
     () => [
       {
-        screen: roleDashboardHref,
         href: roleDashboardHref,
         label: roleDashboardLabel,
         icon: LayoutDashboard
       },
       {
-        screen: "/claims",
-        href: "/claims",
+        href: normRole === "CLAIM_PROCESSOR" ? "/claims?filter=assigned" : "/claims",
         label: isClient
           ? "My Claims"
           : normRole === "CLAIM_PROCESSOR"
@@ -147,68 +93,57 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
         icon: FileSpreadsheet
       },
       {
-        screen: "/claims/create",
         href: "/claims/create",
         label: "Create Claim",
         icon: PlusCircle
       },
       {
-        screen: "/calculator",
         href: "/calculator",
         label: "Laytime Calculator",
         icon: Calculator
       },
       {
-        screen: "/documents",
         href: "/documents",
         label: "Documents",
         icon: FileText
       },
       {
-        screen: "/ocr",
         href: "/ocr",
         label: "OCR & SoF",
         icon: ScanText
       },
       {
-        screen: "/rac",
         href: "/rac",
         label: normRole === "SUPERVISOR" ? "RAC Portfolio" : "RAC Review",
         icon: Briefcase
       },
       {
-        screen: "/timebar",
         href: "/timebar",
         label: "Time-Bar Monitor",
         icon: Clock
       },
       {
-        screen: "/analytics",
         href: "/analytics",
         label: "Analytics",
         icon: BarChart3
       },
       {
-        screen: "/reports",
         href: "/reports",
         label: normRole === "ADMIN" ? "Audit Reports" : "Reports",
         icon: FileBarChart
       },
       {
-        screen: "/notifications",
         href: "/notifications",
         label: "Notifications",
         icon: Bell,
         badge: unreadCount
       },
       {
-        screen: "/users",
         href: "/users",
         label: normRole === "SUPERVISOR" ? "Team & Users" : "User Management",
         icon: Users
       },
       {
-        screen: "/settings",
         href: "/settings",
         label: "Company Settings",
         icon: Settings
@@ -217,15 +152,41 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
     [roleDashboardHref, roleDashboardLabel, isClient, normRole, unreadCount]
   );
 
+  // An item appears in the sidebar if and only if the route is allowed for that role
   const navItems: NavItem[] = useMemo(() => {
     return allPossibleItems.filter((item) => {
-      if (item.screen === "/notifications") return true;
-      return (
-        visibleScreens.includes(item.screen) ||
-        visibleScreens.some((s) => item.screen.startsWith(s))
-      );
+      if (item.href === "/notifications") return true;
+      const baseRoute = item.href.split("?")[0];
+      return canAccessRoute(role, baseRoute, isClient);
     });
-  }, [allPossibleItems, visibleScreens]);
+  }, [allPossibleItems, role, isClient]);
+
+  // Section 3.1 Longest-Match: compute the single nav item whose href is the longest prefix of pathname
+  const activeItemHref = useMemo(() => {
+    let bestMatchHref = "";
+    let longestPrefixLen = -1;
+    const pathBase = pathname.split("?")[0];
+
+    for (const item of navItems) {
+      const itemBase = item.href.split("?")[0];
+
+      if (itemBase.startsWith("/dashboard")) {
+        if (pathBase === itemBase || pathBase.startsWith(itemBase + "/")) {
+          if (itemBase.length > longestPrefixLen) {
+            longestPrefixLen = itemBase.length;
+            bestMatchHref = item.href;
+          }
+        }
+      } else if (pathBase === itemBase || pathBase.startsWith(itemBase + "/")) {
+        if (itemBase.length > longestPrefixLen) {
+          longestPrefixLen = itemBase.length;
+          bestMatchHref = item.href;
+        }
+      }
+    }
+
+    return bestMatchHref;
+  }, [navItems, pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -235,7 +196,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "bg-[#0B192C] text-slate-200 flex flex-col h-screen select-none border-r border-slate-800/80 transition-all duration-300",
+        "bg-[#071322] text-slate-200 flex flex-col h-screen select-none border-r border-slate-800/80 transition-all duration-300",
         isCollapsed ? "w-20" : "w-64"
       )}
     >
@@ -246,19 +207,19 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
           className="flex items-center space-x-3 group"
           onClick={onCloseMobile}
         >
-          <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-900/40 group-hover:scale-105 transition-transform flex items-center justify-center">
+          <div className="bg-gradient-to-tr from-cyan-600 to-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-cyan-950/40 group-hover:scale-105 transition-transform flex items-center justify-center">
             <Anchor className="h-5 w-5" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-black text-sm text-white tracking-wider leading-none">
-                LAYTIME
+                LAY-TIME
               </span>
-              <span className="text-[10px] text-blue-400 font-bold tracking-wider uppercase mt-1">
+              <span className="text-[10px] text-cyan-400 font-bold tracking-wider uppercase mt-1">
                 SYSTEM SUITE
               </span>
               <span className="text-[9px] text-slate-400 font-medium tracking-tight mt-0.5">
-                Demurrage & RAC Hub
+                Demurrage &amp; RAC Hub
               </span>
             </div>
           )}
@@ -275,9 +236,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
         <nav className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            const isActive = item.href === activeItemHref;
 
             return (
               <Link
@@ -287,7 +246,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
                 className={cn(
                   "flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors group relative",
                   isActive
-                    ? "bg-blue-600 text-white font-semibold shadow-md shadow-blue-900/30"
+                    ? "bg-cyan-600 text-white font-semibold shadow-md shadow-cyan-900/30"
                     : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                 )}
                 title={isCollapsed ? item.label : undefined}
@@ -319,7 +278,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
         {!isCollapsed ? (
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5 min-w-0">
-              <div className="h-8 w-8 rounded-full bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-300 shrink-0">
+              <div className="h-8 w-8 rounded-full bg-cyan-600/30 border border-cyan-500/50 flex items-center justify-center text-xs font-bold text-cyan-300 shrink-0">
                 {currentUser?.name ? currentUser.name.charAt(0) : "U"}
               </div>
               <div className="min-w-0 flex-1">
@@ -328,21 +287,19 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
                 </p>
                 <span
                   className={cn(
-                    "text-[9px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5",
-                    role === "Admin"
+                    "text-[9px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5 uppercase tracking-wide",
+                    normRole === "ADMIN"
                       ? "bg-purple-900/80 text-purple-300 border border-purple-700/50"
-                      : role === "Supervisor"
+                      : normRole === "SUPERVISOR"
                       ? "bg-amber-900/80 text-amber-300 border border-amber-700/50"
-                      : role === "Finance"
-                      ? "bg-emerald-900/80 text-emerald-300 border border-emerald-700/50"
-                      : role === "Client"
+                      : normRole === "CLAIM_PROCESSOR"
+                      ? "bg-blue-900/80 text-blue-300 border border-blue-700/50"
+                      : normRole === "CLIENT"
                       ? "bg-cyan-900/80 text-cyan-300 border border-cyan-700/50"
-                      : role === "Reviewer"
-                      ? "bg-slate-800 text-slate-300 border border-slate-700"
-                      : "bg-blue-900/80 text-blue-300 border border-blue-700/50"
+                      : "bg-slate-800 text-slate-300 border border-slate-700"
                   )}
                 >
-                  {role}
+                  {normRole.replace("_", " ")}
                 </span>
               </div>
             </div>

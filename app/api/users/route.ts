@@ -33,9 +33,10 @@ export const GET = withApi({
   }
 });
 
-// POST /api/users: Hierarchical User Creation
+// POST /api/users: User Creation (Admin only)
 export const POST = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor"],
+  permission: "users:manage",
+  roles: ["Admin", "ADMIN"],
   schema: CreateUserSchema,
   handler: async ({ user, body, req }) => {
     const db = getDatabase();

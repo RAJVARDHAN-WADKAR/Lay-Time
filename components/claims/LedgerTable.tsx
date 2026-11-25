@@ -52,17 +52,18 @@ export const SRS_COLUMNS: ColumnDef[] = [
   { key: "claimStatus", label: "Claim Status", category: "General", defaultVisible: true },
   { key: "claimType", label: "Claim Type", category: "General", defaultVisible: true },
   { key: "brokerName", label: "Broker Name", category: "General", defaultVisible: true },
+  { key: "taxYear", label: "Tax Year", category: "General", defaultVisible: true },
   { key: "claimName", label: "Claim Name", category: "General", defaultVisible: false },
   { key: "cpType", label: "CP Form", category: "General", defaultVisible: false },
   { key: "counterpartyType", label: "Counterparty Role", category: "General", defaultVisible: false },
   { key: "assignedTo", label: "Assigned To", category: "General", defaultVisible: false },
-  { key: "daysOpen", label: "Days Open", category: "General", defaultVisible: true },
+  { key: "daysOpen", label: "Open Days", category: "General", defaultVisible: true },
   { key: "claimClosed", label: "Claim Closed", category: "General", defaultVisible: false },
 
   // 14-21 Financials
   { key: "claimFiledAmount", label: "Demurrage (USD)", category: "Financials", defaultVisible: true },
   { key: "agreedAmount", label: "Agreed Settlement ($)", category: "Financials", defaultVisible: true },
-  { key: "billableAmount", label: "Billable Fee ($)", category: "Financials", defaultVisible: true },
+  { key: "billableAmount", label: "Service Fee ($)", category: "Financials", defaultVisible: true },
   { key: "demurrageRatePerDay", label: "Demurrage Rate ($/d)", category: "Financials", defaultVisible: false },
   { key: "receivedClaimAmount", label: "Received Claim ($)", category: "Financials", defaultVisible: false },
   { key: "paymentReceived", label: "Payment Collected ($)", category: "Financials", defaultVisible: false },
@@ -100,6 +101,9 @@ export function LedgerTable({
   const [selectedClient, setSelectedClient] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedBroker, setSelectedBroker] = useState("ALL");
+  const [selectedCharterer, setSelectedCharterer] = useState("ALL");
+  const [selectedTaxYear, setSelectedTaxYear] = useState("ALL");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -149,9 +153,24 @@ export function LedgerTable({
   const { success } = useToast();
   const { canDeleteClaim, canCreateClaim } = useAuth();
 
-  // Unique clients for dropdown
+  // Unique lists for dropdowns
   const uniqueClients = useMemo(() => {
     const set = new Set(initialClaims.map((c) => c.accountName).filter(Boolean));
+    return Array.from(set);
+  }, [initialClaims]);
+
+  const uniqueBrokers = useMemo(() => {
+    const set = new Set(initialClaims.map((c) => c.brokerName).filter(Boolean));
+    return Array.from(set);
+  }, [initialClaims]);
+
+  const uniqueCharterers = useMemo(() => {
+    const set = new Set(initialClaims.map((c) => c.counterpartyName).filter(Boolean));
+    return Array.from(set);
+  }, [initialClaims]);
+
+  const uniqueTaxYears = useMemo(() => {
+    const set = new Set(initialClaims.map((c) => (c as any).taxYear || (c as any).tax_year).filter(Boolean));
     return Array.from(set);
   }, [initialClaims]);
 
@@ -171,12 +190,13 @@ export function LedgerTable({
           (claim.brokerName && claim.brokerName.toLowerCase().includes(query)) ||
           (claim.claimName && claim.claimName.toLowerCase().includes(query)) ||
           (claim.claimNotes && claim.claimNotes.toLowerCase().includes(query)) ||
-          (claim.claimType && claim.claimType.toLowerCase().includes(query));
+          (claim.claimType && claim.claimType.toLowerCase().includes(query)) ||
+          (((claim as any).taxYear || (claim as any).tax_year) && ((claim as any).taxYear || (claim as any).tax_year).toLowerCase().includes(query));
 
         if (!matches) return false;
       }
 
-      // Client filter
+      // Client / Account filter
       if (selectedClient !== "ALL" && claim.accountName !== selectedClient) {
         return false;
       }
@@ -191,9 +211,24 @@ export function LedgerTable({
         return false;
       }
 
+      // Broker filter
+      if (selectedBroker !== "ALL" && claim.brokerName !== selectedBroker) {
+        return false;
+      }
+
+      // Charterer filter
+      if (selectedCharterer !== "ALL" && claim.counterpartyName !== selectedCharterer) {
+        return false;
+      }
+
+      // Tax Year filter
+      if (selectedTaxYear !== "ALL" && ((claim as any).taxYear || (claim as any).tax_year) !== selectedTaxYear) {
+        return false;
+      }
+
       return true;
     });
-  }, [initialClaims, searchTerm, selectedClient, selectedStatus, selectedType]);
+  }, [initialClaims, searchTerm, selectedClient, selectedStatus, selectedType, selectedBroker, selectedCharterer, selectedTaxYear]);
 
   // Pagination
   const totalPages = Math.ceil(filteredClaims.length / pageSize) || 1;
@@ -221,11 +256,20 @@ export function LedgerTable({
     setSelectedClient("ALL");
     setSelectedStatus("ALL");
     setSelectedType("ALL");
+    setSelectedBroker("ALL");
+    setSelectedCharterer("ALL");
+    setSelectedTaxYear("ALL");
     setCurrentPage(1);
   };
 
   const hasActiveFilters =
-    searchTerm || selectedClient !== "ALL" || selectedStatus !== "ALL" || selectedType !== "ALL";
+    searchTerm ||
+    selectedClient !== "ALL" ||
+    selectedStatus !== "ALL" ||
+    selectedType !== "ALL" ||
+    selectedBroker !== "ALL" ||
+    selectedCharterer !== "ALL" ||
+    selectedTaxYear !== "ALL";
 
   return (
     <div className="space-y-4">
@@ -341,18 +385,19 @@ export function LedgerTable({
                   {visibleColumns.claimStatus && <th className="py-3.5 px-4">Status</th>}
                   {visibleColumns.claimType && <th className="py-3.5 px-4">Claim Type</th>}
                   {visibleColumns.brokerName && <th className="py-3.5 px-4">Broker</th>}
+                  {visibleColumns.taxYear && <th className="py-3.5 px-4">Tax Year</th>}
                   {visibleColumns.claimName && <th className="py-3.5 px-4">Claim Name</th>}
                   {visibleColumns.cpType && <th className="py-3.5 px-4">CP Form</th>}
                   {visibleColumns.counterpartyName && <th className="py-3.5 px-4">Counterparty</th>}
                   {visibleColumns.counterpartyType && <th className="py-3.5 px-4">Role</th>}
                   {visibleColumns.assignedTo && <th className="py-3.5 px-4">Assigned To</th>}
-                  {visibleColumns.daysOpen && <th className="py-3.5 px-4 text-right">Days Open</th>}
+                  {visibleColumns.daysOpen && <th className="py-3.5 px-4 text-right">Open Days</th>}
                   {visibleColumns.claimClosed && <th className="py-3.5 px-4 text-center">Closed</th>}
                   {visibleColumns.claimFiledAmount && <th className="py-3.5 px-4 text-right">Demurrage (USD)</th>}
                   {visibleColumns.demurrageRatePerDay && <th className="py-3.5 px-4 text-right">Rate ($/d)</th>}
                   {visibleColumns.receivedClaimAmount && <th className="py-3.5 px-4 text-right">Received ($)</th>}
                   {visibleColumns.agreedAmount && <th className="py-3.5 px-4 text-right">Agreed ($)</th>}
-                  {visibleColumns.billableAmount && <th className="py-3.5 px-4 text-right">Billable ($)</th>}
+                  {visibleColumns.billableAmount && <th className="py-3.5 px-4 text-right">Service Fee ($)</th>}
                   {visibleColumns.paymentReceived && <th className="py-3.5 px-4 text-right">Collected ($)</th>}
                   {visibleColumns.paymentConcluded && <th className="py-3.5 px-4 text-center">Concluded</th>}
                   {visibleColumns.daysAwaitingPayment && <th className="py-3.5 px-4 text-right">Awaiting (d)</th>}
@@ -375,8 +420,16 @@ export function LedgerTable({
                   <tr key={c.id} className="hover:bg-blue-50/30 transition-colors whitespace-nowrap">
                     {visibleColumns.id && (
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        <Link href={`/claims/${c.id}`} className="hover:text-blue-600 hover:underline">
-                          {c.id}
+                        <Link href={`/claims/${c.id}`} className="hover:text-blue-600 hover:underline inline-flex items-center gap-1.5">
+                          <span>{c.id}</span>
+                          {Boolean((c as any).is_incomplete) && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300"
+                              title={`Incomplete for laytime calculation: ${((c as any).missing_fields || "Missing required fields")}`}
+                            >
+                              Incomplete
+                            </span>
+                          )}
                         </Link>
                       </td>
                     )}
@@ -427,6 +480,11 @@ export function LedgerTable({
                     )}
 
                     {visibleColumns.brokerName && <td className="py-3.5 px-4 text-slate-600">{c.brokerName || "—"}</td>}
+                    {visibleColumns.taxYear && (
+                      <td className="py-3.5 px-4 font-mono text-slate-600">
+                        {(c as any).taxYear || (c as any).tax_year || "—"}
+                      </td>
+                    )}
                     {visibleColumns.cpType && (
                       <td className="py-3.5 px-4 font-medium text-slate-700">{c.cpType || "—"}</td>
                     )}
@@ -631,6 +689,8 @@ export function LedgerTable({
             >
               <option value="ALL">All Statuses</option>
               <optgroup label="Operational Tracker Stages">
+                <option value="1. New / Instruction Received">1. New / Instruction Received</option>
+                <option value="2. Nil Demurrage (No Claim)">2. Nil Demurrage (No Claim)</option>
                 <option value="3. Pending Info from Owners">3. Pending Info from Owners</option>
                 <option value="4. Calculation Sent to Owners">4. Calculation Sent to Owners</option>
                 <option value="5. Claim Filed">5. Claim Filed</option>
@@ -638,7 +698,6 @@ export function LedgerTable({
                 <option value="7. Agreed">7. Agreed</option>
                 <option value="8. Disputed">8. Disputed</option>
                 <option value="9. Legal">9. Legal</option>
-                <option value="2. Nil Demurrage (No Claim)">2. Nil Demurrage (No Claim)</option>
                 <option value="10. Claim Closed">10. Claim Closed</option>
                 <option value="11. Commercial Write Off">11. Commercial Write Off</option>
               </optgroup>
@@ -670,18 +729,69 @@ export function LedgerTable({
             </select>
           </div>
 
-          {/* Client Filter */}
+          {/* Client / Account Filter */}
           <div className="space-y-1">
-            <label className="font-bold text-slate-700">Client / Account</label>
+            <label className="font-bold text-slate-700">Account / Client</label>
             <select
               value={selectedClient}
               onChange={(e) => setSelectedClient(e.target.value)}
               className="w-full rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500"
             >
-              <option value="ALL">All Clients</option>
+              <option value="ALL">All Accounts</option>
               {uniqueClients.map((client) => (
                 <option key={client} value={client}>
                   {client}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Broker Filter */}
+          <div className="space-y-1">
+            <label className="font-bold text-slate-700">Broker</label>
+            <select
+              value={selectedBroker}
+              onChange={(e) => setSelectedBroker(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">All Brokers</option>
+              {uniqueBrokers.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Charterer Filter */}
+          <div className="space-y-1">
+            <label className="font-bold text-slate-700">Charterer / Counterparty</label>
+            <select
+              value={selectedCharterer}
+              onChange={(e) => setSelectedCharterer(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">All Charterers</option>
+              {uniqueCharterers.map((ch) => (
+                <option key={ch} value={ch}>
+                  {ch}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tax Year Filter */}
+          <div className="space-y-1">
+            <label className="font-bold text-slate-700">Tax Year</label>
+            <select
+              value={selectedTaxYear}
+              onChange={(e) => setSelectedTaxYear(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">All Tax Years</option>
+              {uniqueTaxYears.map((ty) => (
+                <option key={ty} value={ty}>
+                  {ty}
                 </option>
               ))}
             </select>

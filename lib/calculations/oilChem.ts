@@ -25,8 +25,13 @@ export function calculateOilChemPumping(input: OilChemInput): OilChemCalculation
   const alpha = 0.00065; // standard thermal expansion coefficient
   const vcfFactor = Math.round((1 - alpha * deltaT) * 10000) / 10000;
 
-  const correctedQuantity = Math.round(input.quantityMetricTons * vcfFactor * 100) / 100;
-  const volumeM3 = density > 0 ? correctedQuantity / density : correctedQuantity;
+  // Section 6.6: Fix ASTM 54B:
+  // Volume at 15°C = Mass / Density; Observed Volume = Volume at 15°C / VCF. Do NOT multiply mass by VCF.
+  // Note: This is an ASTM Table 54B approximation.
+  const volume15C = density > 0 ? input.quantityMetricTons / density : input.quantityMetricTons;
+  const observedVolumeM3 = vcfFactor > 0 ? volume15C / vcfFactor : volume15C;
+  const volumeM3 = Math.round(observedVolumeM3 * 100) / 100;
+  const correctedQuantity = Math.round(volume15C * 100) / 100;
 
   // Allowed Pumping Time (Hours) = Volume (M3) / Pumping Warranty Rate (M3/Hr) + COW + Manifold
   const purePumpingAllowed = input.pumpingWarrantyRateM3H > 0 ? volumeM3 / input.pumpingWarrantyRateM3H : 24.0;
@@ -34,6 +39,9 @@ export function calculateOilChemPumping(input: OilChemInput): OilChemCalculation
 
   const excessHours = Math.max(0, Math.round((input.actualPumpingHours - totalAllowedHours) * 100) / 100);
   const excessDemurrage = Math.round(excessHours * (input.hourlyRate || 1500) * 100) / 100;
+
+  const approxNote = "ASTM Table 54B approximation applied for Volume Correction Factor (VCF) and observed volume determination.";
+  const combinedNotes = input.notes ? `${input.notes} | ${approxNote}` : approxNote;
 
   return {
     id: `oil-${Date.now()}`,
@@ -53,7 +61,7 @@ export function calculateOilChemPumping(input: OilChemInput): OilChemCalculation
     excessPumpingHours: excessHours,
     excessPumpingDemurrage: excessDemurrage,
     hourlyRate: input.hourlyRate,
-    notes: input.notes,
+    notes: combinedNotes,
     createdAt: new Date().toISOString()
   };
 }

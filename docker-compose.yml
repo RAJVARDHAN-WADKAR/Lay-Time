@@ -31,9 +31,9 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/laytime_db?schema=public
-      JWT_SECRET: super_secret_jwt_key_for_laytime_dev_change_in_production
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       JWT_EXPIRATION: 3600s
-      JWT_REFRESH_SECRET: super_secret_refresh_jwt_key_change_in_production
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set}
       JWT_REFRESH_EXPIRATION: 7d
       CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
       STORAGE_PATH: ./uploads

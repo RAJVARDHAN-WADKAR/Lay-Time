@@ -3,7 +3,54 @@ const bcrypt = require("bcryptjs");
 const path = require("path");
 const fs = require("fs");
 
-const dbPath = path.join(__dirname, "..", "data", "laytime.db");
+// Load .env.local if present
+const envLocalPath = path.join(__dirname, "..", ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  const envContent = fs.readFileSync(envLocalPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx !== -1) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  }
+}
+
+// 1. Validate mandatory password environment variables (NO HARDCODED DEFAULTS ALLOWED)
+const adminPassword = process.env.ADMIN_PASSWORD || process.env.DEMO_ADMIN_PASSWORD;
+const supervisorPassword = process.env.SUPERVISOR_PASSWORD || process.env.DEMO_SUPERVISOR_PASSWORD;
+const processor1Password = process.env.PROCESSOR1_PASSWORD || process.env.DEMO_PROCESSOR_PASSWORD;
+const processor2Password = process.env.PROCESSOR2_PASSWORD || process.env.DEMO_PROCESSOR2_PASSWORD;
+const reviewerPassword = process.env.REVIEWER_PASSWORD || process.env.DEMO_REVIEWER_PASSWORD;
+const clientPassword = process.env.CLIENT_PASSWORD || process.env.DEMO_CLIENT_PASSWORD;
+
+const missing = [];
+if (!adminPassword) missing.push("ADMIN_PASSWORD");
+if (!supervisorPassword) missing.push("SUPERVISOR_PASSWORD");
+if (!processor1Password) missing.push("PROCESSOR1_PASSWORD");
+if (!processor2Password) missing.push("PROCESSOR2_PASSWORD");
+if (!reviewerPassword) missing.push("REVIEWER_PASSWORD");
+
+if (missing.length > 0) {
+  console.error("================================================================================");
+  console.error("FATAL ERROR: scripts/seed-users.js refuses to execute without environment variables!");
+  console.error(`Missing mandatory passwords: ${missing.join(", ")}`);
+  console.error("Configure these in .env.local or pass them via environment variables.");
+  console.error("Hardcoded fallback passwords ('Raj@123', 'Demo@12345') have been strictly prohibited.");
+  console.error("================================================================================");
+  process.exit(1);
+}
+
+const dbPath = process.env.DATABASE_PATH
+  ? (path.isAbsolute(process.env.DATABASE_PATH)
+      ? process.env.DATABASE_PATH
+      : path.join(__dirname, "..", process.env.DATABASE_PATH))
+  : path.join(__dirname, "..", "data", "laytime.db");
 
 if (!fs.existsSync(path.dirname(dbPath))) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -13,190 +60,196 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = OFF");
 
-console.log("Ensuring users table supports the 6-Role matrix...");
+console.log("Setting up database user schema for Lay-Time...");
 
-// Ensure all necessary columns exist on the users table
+// Ensure user columns exist
 try {
   const cols = db.pragma("table_info(users)").map((c) => c.name);
-  if (!cols.includes("client_id")) {
-    db.exec("ALTER TABLE users ADD COLUMN client_id TEXT");
-    console.log("✓ Added client_id column to users table");
-  }
-  if (!cols.includes("client_name")) {
-    db.exec("ALTER TABLE users ADD COLUMN client_name TEXT");
-    console.log("✓ Added client_name column to users table");
-  }
-  if (!cols.includes("created_by")) {
-    db.exec("ALTER TABLE users ADD COLUMN created_by TEXT");
-    console.log("✓ Added created_by column to users table");
-  }
-  if (!cols.includes("token_version")) {
-    db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1");
-    console.log("✓ Added token_version column to users table");
-  }
-
-  // Check if inserting a temporary Finance test row works or fails CHECK constraint
-  try {
-    const testStmt = db.prepare("INSERT INTO users (id, name, email, password_hash, role, created_at, updated_at) VALUES ('__test__', 'Test', '__test__@test.com', 'h', 'Finance', '2024-01-01', '2024-01-01')");
-    testStmt.run();
-    db.prepare("DELETE FROM users WHERE id = '__test__'").run();
-  } catch (checkErr) {
-    if (checkErr.message.includes("CHECK constraint failed")) {
-      console.log("Migrating users table to remove restrictive CHECK constraint...");
-      db.exec(`
-        CREATE TABLE users_migrated (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          email TEXT NOT NULL UNIQUE,
-          username TEXT UNIQUE,
-          password_hash TEXT NOT NULL,
-          role TEXT NOT NULL,
-          client_id TEXT,
-          client_name TEXT,
-          created_by TEXT,
-          token_version INTEGER NOT NULL DEFAULT 1,
-          avatar TEXT,
-          status TEXT NOT NULL DEFAULT 'Active',
-          role_description TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        INSERT INTO users_migrated (id, name, email, username, password_hash, role, client_name, avatar, status, role_description, created_at, updated_at)
-          SELECT id, name, email, username, password_hash, role, client_name, avatar, status, role_description, created_at, updated_at FROM users;
-        DROP TABLE users;
-        ALTER TABLE users_migrated RENAME TO users;
-      `);
-      console.log("✓ Successfully migrated users table schema");
-    } else {
-      throw checkErr;
-    }
-  }
+  if (!cols.includes("client_id")) db.exec("ALTER TABLE users ADD COLUMN client_id TEXT");
+  if (!cols.includes("client_name")) db.exec("ALTER TABLE users ADD COLUMN client_name TEXT");
+  if (!cols.includes("created_by")) db.exec("ALTER TABLE users ADD COLUMN created_by TEXT");
+  if (!cols.includes("token_version")) db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1");
 } catch (e) {
-  console.error("Migration warning:", e.message);
+  console.error("Schema check notice:", e.message);
 }
 
 db.pragma("foreign_keys = ON");
 
-console.log("Seeding/updating the 6 role matrix accounts in database...");
+// Ensure default client exists
+const insertClient = db.prepare(`
+  INSERT OR IGNORE INTO clients (client_id, name, created_at)
+  VALUES (?, ?, ?)
+`);
+const now = new Date().toISOString();
+insertClient.run("client-trafigura", "Trafigura Trading Pte Ltd", now);
+insertClient.run("client-sokana3", "Sokana3", now);
+insertClient.run("client-eastport", "Eastport USA LLC", now);
+insertClient.run("client-peregrine", "Peregrine Tankers", now);
+insertClient.run("client-norstar", "Norstar", now);
 
-const adminPassword = process.env.DEMO_ADMIN_PASSWORD || "Raj@123";
-const processorPassword = process.env.DEMO_PROCESSOR_PASSWORD || "Rohit@123";
-const supervisorPassword = process.env.DEMO_SUPERVISOR_PASSWORD || "Swayam@123";
-const reviewerPassword = process.env.DEMO_REVIEWER_PASSWORD || "Paras@123";
-const financePassword = process.env.DEMO_FINANCE_PASSWORD || "Finance@123";
-const clientPassword = process.env.DEMO_CLIENT_PASSWORD || "Client@123";
-
-const users = [
+// Define clean seed users: 1 Admin, 1 Supervisor, 2 Claim Processors, 1 Reviewer (+ 1 Client Portal)
+const seedUsers = [
   {
-    id: "usr-001",
-    name: "Rajvardhan Wadkar",
-    email: "rajvardhanwadkar76@gmail.com",
-    username: "rajvardhan.wadkar",
+    id: "usr-admin-01",
+    name: "System Administrator",
+    email: "admin@laytime.io",
+    altEmail: "admin@laytime.demo",
+    username: "admin.laytime",
     password: adminPassword,
     role: "Admin",
-    roleDescription: "Principal Administrator & Master Mariner. System users and company settings management."
+    roleDescription: "Principal Administrator & Master Mariner. System governance, users, and audit logs."
   },
   {
-    id: "usr-002",
-    name: "Rohit Mengane",
-    email: "rohitmengane2975@gmail.com",
-    username: "rohit.mengane",
-    password: processorPassword,
-    role: "Claim Processor",
-    roleDescription: "Senior Demurrage Analyst. Manages primary assigned claims, SoF logging, and RAC cases."
-  },
-  {
-    id: "usr-003",
-    name: "Swayam Ghatage",
-    email: "swayamghatage3839@gmail.com",
-    username: "swayam.ghatage",
+    id: "usr-supervisor-01",
+    name: "Operations Supervisor",
+    email: "supervisor@laytime.io",
+    altEmail: "supervisor@laytime.demo",
+    username: "supervisor.laytime",
     password: supervisorPassword,
     role: "Supervisor",
-    roleDescription: "Operations Supervisor & Lead. Claim approvals, overrides, negotiations, and settlements."
+    roleDescription: "Operations Supervisor. Claim reviews, overrides, assignments, and RAC authorisation."
   },
   {
-    id: "usr-004",
-    name: "Paras Chougale",
-    email: "paraschougale558@gmail.com",
-    username: "paras.chougale",
+    id: "usr-processor-01",
+    name: "Rohan Patil",
+    email: "processor1@laytime.io",
+    altEmail: "processor1@laytime.demo",
+    username: "processor1.laytime",
+    password: processor1Password,
+    role: "Claim Processor",
+    roleDescription: "Senior Demurrage Analyst. Assigned claims, SoF timeline logging, and calculation engine."
+  },
+  {
+    id: "usr-processor-02",
+    name: "Sneha Joshi",
+    email: "processor2@laytime.io",
+    altEmail: "processor2@laytime.demo",
+    username: "processor2.laytime",
+    password: processor2Password,
+    role: "Claim Processor",
+    roleDescription: "Voyage Claim Analyst. Operational claims processing and timesheet reconciliations."
+  },
+  {
+    id: "usr-reviewer-01",
+    name: "Compliance Reviewer",
+    email: "reviewer@laytime.io",
+    altEmail: "reviewer@laytime.demo",
+    username: "reviewer.laytime",
     password: reviewerPassword,
     role: "Reviewer",
-    roleDescription: "Legal Counsel & External Auditor. Read-only compliance inspection mode across all claims."
-  },
-  {
-    id: "usr-005",
-    name: "Anita Sharma",
-    email: "anita.sharma@laytime.com",
-    username: "anita.sharma",
-    password: financePassword,
-    role: "Finance",
-    roleDescription: "Financial Controller. Invoice generation, payments recording, and financial dashboard metrics."
-  },
-  {
-    id: "usr-006",
-    name: "Trafigura Commercial",
-    email: "client@trafigura.com",
-    username: "client.trafigura",
-    password: clientPassword,
-    role: "Client",
-    clientId: "client-trafigura",
-    clientName: "Trafigura Trading Pte Ltd",
-    createdBy: "usr-002",
-    roleDescription: "External Client Counterparty Portal. View own claims, summaries, and approve final offers."
+    roleDescription: "Compliance Reviewer & External Auditor. Read-only audit inspection across claims."
   }
 ];
 
-// Map created_by
-const createdByMap = {
-  "usr-001": null,
-  "usr-003": "usr-001",
-  "usr-004": "usr-001",
-  "usr-005": "usr-001",
-  "usr-002": "usr-003",
-  "usr-006": "usr-002"
-};
+if (clientPassword) {
+  seedUsers.push({
+    id: "usr-client-01",
+    name: "Sokana Commercial",
+    email: "client@laytime.io",
+    altEmail: "client1@laytime.demo",
+    username: "client1.laytime",
+    password: clientPassword,
+    role: "Client",
+    clientId: "client-sokana",
+    clientName: "Sokana Commercial",
+    roleDescription: "External Client Portal. Read-only access to Sokana claims and counter-offers."
+  });
+}
 
-const now = new Date().toISOString();
+// Clean up old legacy/test accounts
+console.log("Purging deprecated test and demo accounts...");
+try {
+  db.prepare("DELETE FROM users WHERE role = 'Finance' OR role = 'FINANCE'").run();
+} catch {}
 
-for (const u of users) {
+const insertCleanUser = db.prepare(`
+  INSERT INTO users (id, name, email, username, password_hash, role, client_id, client_name, token_version, status, role_description, created_at, updated_at)
+  VALUES (@id, @name, @email, @username, @password_hash, @role, @client_id, @client_name, 1, 'Active', @role_description, @now, @now)
+`);
+
+const updateUser = db.prepare(`
+  UPDATE users 
+  SET name = @name, email = @email, username = @username, password_hash = @password_hash, role = @role,
+      client_id = @client_id, client_name = @client_name, status = 'Active', role_description = @role_description, updated_at = @now
+  WHERE id = @id
+`);
+
+for (const u of seedUsers) {
   const hash = bcrypt.hashSync(u.password, 10);
   const existing = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR id = ?").get(u.email, u.id);
-  const cBy = u.createdBy || createdByMap[u.id] || null;
-  const cId = u.clientId || null;
 
   if (existing) {
-    db.prepare(`
-      UPDATE users 
-      SET name = ?, email = ?, username = ?, password_hash = ?, role = ?, client_id = ?, client_name = ?, created_by = ?, token_version = 1, status = 'Active', role_description = ?, updated_at = ? 
-      WHERE id = ?
-    `).run(u.name, u.email, u.username, hash, u.role, cId, u.clientName || null, cBy, u.roleDescription, now, existing.id);
-    console.log(`✓ Updated account: ${u.email} (${u.role})`);
+    updateUser.run({
+      id: existing.id,
+      name: u.name,
+      email: u.email,
+      username: u.username,
+      password_hash: hash,
+      role: u.role,
+      client_id: u.clientId || null,
+      client_name: u.clientName || null,
+      role_description: u.roleDescription,
+      now
+    });
+    console.log(`✓ Updated user: ${u.email} [${u.role}] (id: ${existing.id})`);
   } else {
-    db.prepare(`
-      INSERT INTO users (id, name, email, username, password_hash, role, client_id, client_name, created_by, token_version, status, role_description, created_at, updated_at) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Active', ?, ?, ?)
-    `).run(u.id, u.name, u.email, u.username, hash, u.role, cId, u.clientName || null, cBy, u.roleDescription, now, now);
-    console.log(`✓ Created account: ${u.email} (${u.role})`);
+    insertCleanUser.run({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      username: u.username,
+      password_hash: hash,
+      role: u.role,
+      client_id: u.clientId || null,
+      client_name: u.clientName || null,
+      role_description: u.roleDescription,
+      now
+    });
+    console.log(`✓ Created user: ${u.email} [${u.role}] (id: ${u.id})`);
+  }
+
+  if (u.altEmail && u.altEmail !== u.email) {
+    const existingAlt = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?)").get(u.altEmail);
+    if (existingAlt) {
+      updateUser.run({
+        id: existingAlt.id,
+        name: u.name,
+        email: u.altEmail,
+        username: u.username + ".alt",
+        password_hash: hash,
+        role: u.role,
+        client_id: u.clientId || null,
+        client_name: u.clientName || null,
+        role_description: u.roleDescription,
+        now
+      });
+    } else {
+      insertCleanUser.run({
+        id: u.id + "-alt",
+        name: u.name,
+        email: u.altEmail,
+        username: u.username + ".alt",
+        password_hash: hash,
+        role: u.role,
+        client_id: u.clientId || null,
+        client_name: u.clientName || null,
+        role_description: u.roleDescription,
+        now
+      });
+    }
   }
 }
 
-// Ensure claims and rac cases are assigned to Rohit Mengane for processor testing
-db.prepare("UPDATE claims SET assigned_to = ? WHERE assigned_to = 'Sarah Jenkins'").run("Rohit Mengane");
-db.prepare("UPDATE rac_cases SET assigned_to = ? WHERE assigned_to = 'Sarah Jenkins'").run("Rohit Mengane");
+// Assign test claims to processor1
+try {
+  db.prepare("UPDATE claims SET assigned_to = ? WHERE assigned_to IS NULL OR assigned_to = ''").run("Senior Demurrage Analyst");
+} catch {}
 
 console.log("\n=======================================================");
-console.log("             DEMO USER CREDENTIALS SEEDED");
+console.log("       CLEAN SEED COMPLETE (PASSWORDS FROM ENV)");
 console.log("=======================================================");
-console.log("  Role            | Email                         | Password");
-console.log("  ----------------+-------------------------------+------------");
-users.forEach((u) => {
-  console.log(`  ${u.role.padEnd(16)}| ${u.email.padEnd(30)}| ${u.password}`);
-});
-console.log("=======================================================");
-console.log("  SECURITY NOTICE: These demo credentials are for evaluation");
-console.log("  purposes only. In production, rotate all passwords and configure");
-console.log("  proper environment secrets (DEMO_*_PASSWORD or .env.local).");
+console.log("Total seeded users: 1 Admin, 1 Supervisor, 2 Processors, 1 Reviewer" + (clientPassword ? " (+ 1 Client)" : ""));
+console.log("All passwords loaded securely from environment variables.");
 console.log("=======================================================\n");
 
-console.log("Database user accounts successfully migrated and verified for all 6 roles.");
 db.close();

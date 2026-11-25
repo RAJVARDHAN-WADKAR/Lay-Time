@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyEdgeToken } from "@/lib/auth/edge-jwt";
-import { UserRole } from "@/lib/types";
+import { normalizeRole, can, getRoleDashboardPath } from "@/lib/auth/rolePermissions";
 
 const AUTH_COOKIE_NAME = "laytime_auth_token";
 
@@ -12,31 +12,35 @@ const ROUTE_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
   { prefix: "/dashboard/admin", allowedRoles: ["ADMIN"] },
   { prefix: "/dashboard/supervisor", allowedRoles: ["SUPERVISOR"] },
   { prefix: "/dashboard/claim-processor", allowedRoles: ["CLAIM_PROCESSOR"] },
-  { prefix: "/dashboard/reviewer-client", allowedRoles: ["REVIEWER_CLIENT"] },
-  { prefix: "/dashboard", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
+  { prefix: "/dashboard/reviewer", allowedRoles: ["REVIEWER", "ADMIN"] },
+  { prefix: "/dashboard/reviewer-client", allowedRoles: ["REVIEWER", "CLIENT"] },
+  { prefix: "/dashboard", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER", "CLIENT"] },
 
   // 2. Application Feature Screens
   { prefix: "/settings", allowedRoles: ["ADMIN"] },
   { prefix: "/users", allowedRoles: ["ADMIN", "SUPERVISOR"] },
-  { prefix: "/claims/create", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
-  { prefix: "/calculator", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
-  { prefix: "/calculations", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
-  { prefix: "/ocr", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/claims/create", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/claims", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER", "CLIENT"] },
+  { prefix: "/calculator", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/calculations", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/ocr", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
   { prefix: "/ai-assistant", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
-  { prefix: "/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
-  { prefix: "/timebar", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] },
-  // Access Removed for CLAIM_PROCESSOR on macro Analytics & Reports (Analyst workbench only)
-  { prefix: "/analytics", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT"] },
-  { prefix: "/reports", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER_CLIENT"] },
-  { prefix: "/documents", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] }
+  { prefix: "/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER"] },
+  { prefix: "/timebar", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER", "CLIENT"] },
+  { prefix: "/analytics", allowedRoles: ["ADMIN", "SUPERVISOR"] },
+  { prefix: "/reports", allowedRoles: ["ADMIN", "SUPERVISOR", "REVIEWER"] },
+  { prefix: "/documents", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER", "CLIENT"] },
+  { prefix: "/sof", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER", "CLIENT"] },
+  { prefix: "/notifications", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER", "CLIENT"] }
 ];
 
 // API route-to-roles map for edge middleware
-const API_ROLES_MAP: { prefix: string; allowedRoles: string[] }[] = [
+const API_ROLES_MAP: { prefix: string; method?: string; exact?: boolean; allowedRoles: string[] }[] = [
   { prefix: "/api/settings", allowedRoles: ["ADMIN"] },
-  { prefix: "/api/ocr", allowedRoles: ["SUPERVISOR", "CLAIM_PROCESSOR"] },
+  { prefix: "/api/ocr", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
   { prefix: "/api/ai-assistant", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] },
-  { prefix: "/api/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER_CLIENT"] }
+  { prefix: "/api/rac", allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR", "REVIEWER"] },
+  { prefix: "/api/claims", method: "POST", exact: true, allowedRoles: ["ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"] }
 ];
 
 // Protected application page prefixes
@@ -58,29 +62,16 @@ const PROTECTED_PAGE_ROUTES = [
   "/ai-assistant"
 ];
 
-function normalizeRole(role?: string): string {
-  if (!role) return "REVIEWER_CLIENT";
-  const upper = role.trim().toUpperCase().replace(/[\s-]+/g, "_");
-  if (upper === "ADMIN") return "ADMIN";
-  if (upper === "SUPERVISOR") return "SUPERVISOR";
-  if (upper === "CLAIM_PROCESSOR" || upper === "PROCESSOR") return "CLAIM_PROCESSOR";
-  if (upper === "REVIEWER" || upper === "CLIENT" || upper === "REVIEWER_CLIENT") return "REVIEWER_CLIENT";
-  if (upper === "FINANCE") return "SUPERVISOR";
-  return "REVIEWER_CLIENT";
-}
-
-function roleMatches(userRole: any, allowedRoles: string[]): boolean {
-  const normUser = normalizeRole(userRole);
-  return allowedRoles.some((r) => normalizeRole(r) === normUser);
+function roleMatches(userRole: any, allowedRoles: string[], isClient?: boolean): boolean {
+  const normUser = normalizeRole(userRole, isClient);
+  return allowedRoles.some((r) => {
+    const normAllowed = normalizeRole(r);
+    return normAllowed === normUser;
+  });
 }
 
 function getRoleDashboardUrl(role?: string, isClient?: boolean): string {
-  if (isClient) return "/dashboard/reviewer-client";
-  const norm = normalizeRole(role);
-  if (norm === "ADMIN") return "/dashboard/admin";
-  if (norm === "SUPERVISOR") return "/dashboard/supervisor";
-  if (norm === "CLAIM_PROCESSOR") return "/dashboard/claim-processor";
-  return "/dashboard/reviewer-client";
+  return getRoleDashboardPath(role, isClient);
 }
 
 export async function middleware(request: NextRequest) {
@@ -151,14 +142,21 @@ export async function middleware(request: NextRequest) {
 
     // Edge API role map enforcement
     for (const rule of API_ROLES_MAP) {
-      if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
+      const isMatch = rule.exact
+        ? pathname === rule.prefix
+        : (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`));
+
+      if (isMatch) {
+        if (rule.method && request.method !== rule.method) {
+          continue;
+        }
         if (session.assignedClientId && rule.prefix === "/api/rac") {
           return NextResponse.json(
             { error: "Forbidden: Client role may not access this resource" },
             { status: 403 }
           );
         }
-        if (!roleMatches(session.role, rule.allowedRoles)) {
+        if (!roleMatches(session.role, rule.allowedRoles, Boolean(session.assignedClientId))) {
           return NextResponse.json(
             { error: "Forbidden: Insufficient permissions for this resource" },
             { status: 403 }
@@ -195,14 +193,12 @@ export async function middleware(request: NextRequest) {
         "/calculator",
         "/calculations",
         "/ocr",
-        "/timebar",
-        "/analytics",
-        "/reports",
         "/users",
         "/settings",
         "/dashboard/admin",
         "/dashboard/supervisor",
-        "/dashboard/claim-processor"
+        "/dashboard/claim-processor",
+        "/dashboard/finance"
       ];
 
       const isBlocked = clientBlockedPrefixes.some(
@@ -217,7 +213,7 @@ export async function middleware(request: NextRequest) {
     // Edge route-to-roles map enforcement
     for (const rule of ROUTE_ROLES_MAP) {
       if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
-        if (!roleMatches(session?.role, rule.allowedRoles)) {
+        if (!roleMatches(session?.role, rule.allowedRoles, isClient)) {
           // If accessing an unauthorized role dashboard or screen, redirect to their own separate dashboard
           const fallback = getRoleDashboardUrl(session?.role, isClient);
           return NextResponse.redirect(new URL(fallback, request.url));

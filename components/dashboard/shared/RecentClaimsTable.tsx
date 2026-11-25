@@ -25,7 +25,15 @@ export function RecentClaimsTable({
   viewAllHref = "/claims",
   maxRows = 5,
 }: RecentClaimsTableProps) {
-  const displayClaims = claims.slice(0, maxRows);
+  const sortedClaims = React.useMemo(() => {
+    return [...claims].sort((a, b) => {
+      const timeA = new Date(a.createdAt || (a as any).created_at || a.instructionReceivedDate || 0).getTime();
+      const timeB = new Date(b.createdAt || (b as any).created_at || b.instructionReceivedDate || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [claims]);
+
+  const displayClaims = sortedClaims.slice(0, maxRows);
 
   return (
     <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl h-full flex flex-col justify-between">

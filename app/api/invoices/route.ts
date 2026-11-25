@@ -16,14 +16,16 @@ export const GET = withApi({
 });
 
 export const POST = withApi({
-  roles: ["Finance"],
+  permission: "invoices:manage",
+  roles: ["Admin", "Supervisor"],
   handler: async () => {
     return NextResponse.json({ success: true, message: "Invoice created" }, { status: 201 });
   }
 });
 
 export const PUT = withApi({
-  roles: ["Finance"],
+  permission: "invoices:manage",
+  roles: ["Admin", "Supervisor"],
   handler: async () => {
     return NextResponse.json({ success: true, message: "Invoice updated" });
   }
