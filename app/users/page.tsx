@@ -7,6 +7,7 @@ import { CREATE_MATRIX } from "@/lib/auth/userHierarchyConstants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Input, Select } from "@/components/ui/inputs";
 import { Modal } from "@/components/ui/modal";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -34,6 +35,7 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Derive roles actor is allowed to create per CREATE_MATRIX
   const allowedRoles = useMemo(() => {
@@ -64,17 +66,23 @@ export default function UsersPage() {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (isManualRefresh = false) => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await getUsers();
       setUsers(data);
+      if (isManualRefresh) {
+        success("Users Refreshed", "Synced directory from database.");
+      }
     } catch (err: any) {
-      error("Fetch Error", err.message || "Failed to load users from database");
+      const msg = err.message || "Failed to load users from database";
+      setLoadError(msg);
+      error("Fetch Error", msg);
     } finally {
       setIsLoading(false);
     }
-  }, [error]);
+  }, [error, success]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -209,10 +217,11 @@ export default function UsersPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchUsers}
+            onClick={() => fetchUsers(true)}
+            disabled={isLoading}
             className="text-xs font-semibold h-9 px-3.5 rounded-xl border-slate-200"
           >
-            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
 
@@ -228,6 +237,15 @@ export default function UsersPage() {
           )}
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load user directory"
+          message={loadError}
+          onRetry={() => fetchUsers(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">

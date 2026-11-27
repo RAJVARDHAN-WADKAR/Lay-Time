@@ -3,18 +3,21 @@ import { User, UserRole } from "@/lib/types";
 export async function getUsers(): Promise<User[]> {
   const res = await fetch("/api/users", {
     method: "GET",
+    cache: "no-store",
     headers: { "Cache-Control": "no-cache" }
   });
   if (!res.ok) {
-    throw new Error("Failed to load users");
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to load users (HTTP ${res.status})`);
   }
   const data = await res.json();
   return data.users || [];
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const res = await fetch(`/api/users/${id}`, {
+  const res = await fetch(`/api/users/${encodeURIComponent(id)}`, {
     method: "GET",
+    cache: "no-store",
     headers: { "Cache-Control": "no-cache" }
   });
   if (!res.ok) {

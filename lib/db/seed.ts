@@ -1,10 +1,16 @@
 import Database from "better-sqlite3";
 import { hashPasswordSync } from "@/lib/auth/password";
 import { MOCK_CLAIMS, MOCK_DOCUMENTS } from "@/lib/mock/data";
+import { seedDefaultHolidays } from "@/lib/calculations/holidays";
 
 export function seedDatabase(db: Database.Database) {
-  // Always ensure benchmark dataset & demo users exist
+  // Always ensure benchmark dataset, holidays & demo users exist
   seedBenchmarkDataset(db);
+  try {
+    seedDefaultHolidays(db);
+  } catch (e) {
+    console.warn("Holiday seeding warning:", e);
+  }
 
   // Check if initial users already seeded
   const userCount = (db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number }).count;
@@ -40,7 +46,7 @@ export function seedDatabase(db: Database.Database) {
       email: "admin@laytime.demo",
       username: "admin.laytime",
       password: process.env.ADMIN_PASSWORD || process.env.DEMO_ADMIN_PASSWORD || "AdminSecurePass@2024!",
-      role: "Admin",
+      role: "ADMIN",
       clientId: null,
       clientName: null,
       createdBy: null,
@@ -53,7 +59,7 @@ export function seedDatabase(db: Database.Database) {
       email: "processor1@laytime.demo",
       username: "processor1.laytime",
       password: process.env.PROCESSOR1_PASSWORD || process.env.DEMO_PROCESSOR_PASSWORD || "Proc1SecurePass@2024!",
-      role: "Claim Processor",
+      role: "CLAIM_PROCESSOR",
       clientId: null,
       clientName: null,
       createdBy: "usr-003",
@@ -66,7 +72,7 @@ export function seedDatabase(db: Database.Database) {
       email: "supervisor@laytime.demo",
       username: "supervisor.laytime",
       password: process.env.SUPERVISOR_PASSWORD || process.env.DEMO_SUPERVISOR_PASSWORD || "SuperSecurePass@2024!",
-      role: "Supervisor",
+      role: "SUPERVISOR",
       clientId: null,
       clientName: null,
       createdBy: "usr-001",
@@ -79,7 +85,7 @@ export function seedDatabase(db: Database.Database) {
       email: "reviewer@laytime.demo",
       username: "reviewer.laytime",
       password: process.env.REVIEWER_PASSWORD || process.env.DEMO_REVIEWER_PASSWORD || "ReviewerSecurePass@2024!",
-      role: "Reviewer",
+      role: "REVIEWER",
       clientId: null,
       clientName: null,
       createdBy: "usr-001",
@@ -92,12 +98,12 @@ export function seedDatabase(db: Database.Database) {
       email: "client1@laytime.demo",
       username: "client1.laytime",
       password: process.env.CLIENT_PASSWORD || process.env.DEMO_CLIENT_PASSWORD || "ClientSecurePass@2024!",
-      role: "Client",
+      role: "CLIENT",
       clientId: "client-trafigura",
       clientName: "Trafigura Trading Pte Ltd",
       createdBy: "usr-002",
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      roleDescription: "External Client Counterparty Portal. View own claims, summaries, and approve final offers."
+      roleDescription: "External Client Counterparty Portal. Read-only access to own claims and documents."
     },
     {
       id: "usr-client-sokana",
@@ -643,9 +649,10 @@ export function seedDatabase(db: Database.Database) {
           document_links, demurrage_rate_per_day, counterparty_name, counterparty_type, claim_filed_amount,
           received_claim_amount, agreed_amount, billable_amount, payment_received, payment_concluded,
           layday, cancelling_date, voyage_end_date, instruction_received_date, notice_received_date,
-          claim_received_date, notice_timebar_days, claim_timebar_days, timebarred, claim_agreed_date,
-          charterparty_date, days_awaiting_payment, invoice_number, tax_year, bl_quantity,
-          owners_claim_amount, claim_timebar_date, claim_filed_date, created_at, updated_at
+          claim_received_date, notice_timebar_days, claim_timebar_days, notice_days_source, claim_days_source,
+          timebarred, claim_agreed_date, charterparty_date, days_awaiting_payment, invoice_number, tax_year,
+          bl_quantity, owners_claim_amount, claim_timebar_date, claim_filed_date, base_date_estimated,
+          created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?,
@@ -653,12 +660,15 @@ export function seedDatabase(db: Database.Database) {
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?
+          ?, ?
         )
       `);
 
       const dataRows = rows.slice(1);
+      let importedDiff45Count = 0;
+      let importedDefault90Count = 0;
       const tx = db.transaction((items: string[][]) => {
         for (const r of items) {
           const claimId = r[0]?.trim();
@@ -692,7 +702,14 @@ export function seedDatabase(db: Database.Database) {
           const blQuantity = r[22]?.trim() || "";
           const voyageEnds = parseDt(r[23]);
           const claimReceived = parseDt(r[24]);
-          const timebarDays = cleanNum(r[25]) || 45;
+          const rawCsvClaimDays = cleanNum(r[25]);
+          const claimDaysSource = rawCsvClaimDays > 0 ? "imported" : "default";
+          const timebarDays = rawCsvClaimDays > 0 ? rawCsvClaimDays : 90;
+          if (claimDaysSource === "imported") {
+            if (timebarDays !== 90) importedDiff45Count++;
+            else importedDefault90Count++;
+          }
+          const baseEstimated = !voyageEnds && Boolean(instructionReceived || cpDate) ? 1 : 0;
           const timebarDate = parseDt(r[26]);
           const timebarred = r[27]?.trim().toLowerCase() === "true" ? 1 : 0;
           const ownersClaim = cleanNum(r[28]);
@@ -711,14 +728,14 @@ export function seedDatabase(db: Database.Database) {
             JSON.stringify([]), 0, counterparty, "Charterer", filedAmount,
             ownersClaim, agreedAmount, billableAmount, paymentReceived, paymentConcluded,
             layday || "", cancelling || "", voyageEnds || "", instructionReceived || "", "",
-            claimReceived || "", 30, timebarDays, timebarred, agreedDate || "",
+            claimReceived || "", 30, timebarDays, "default", claimDaysSource, timebarred, agreedDate || "",
             cpDate || "", 0, invoiceNo, taxYear, blQuantity,
-            ownersClaim, timebarDate || "", claimFiledDate || "", createdAt, now
+            ownersClaim, timebarDate || "", claimFiledDate || "", baseEstimated, createdAt, now
           );
         }
       });
       tx(dataRows);
-      console.log(`Auto-seeded ${dataRows.length} claims from LaytimeServicesTracker.csv`);
+      console.log(`Auto-seeded ${dataRows.length} claims from LaytimeServicesTracker.csv (claim_days differing from 90d default: ${importedDiff45Count}, matching 90d default: ${importedDefault90Count})`);
     }
   } catch (trackerErr) {
     console.warn("Tracker CSV auto-ingestion error:", trackerErr);

@@ -12,15 +12,14 @@ import {
 import { hashPassword } from "@/lib/auth/password";
 import { getDatabase } from "@/lib/db";
 import { getUserById } from "@/lib/db/queries";
-import { normalizeRole } from "@/app/access/roles";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 
-// GET /api/users: Lists users strictly scoped to the actor's subtree
+// GET /api/users: Admin user directory
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor"],
+  permission: "users:view",
   handler: async ({ user }) => {
     const subtreeUsers = getSubtreeUsers(user);
 
-    // If Admin, also include Admin themselves in the directory
     let result = subtreeUsers;
     if (normalizeRole(user.role) === "ADMIN") {
       const adminSelf = getUserById(user.id);
@@ -36,7 +35,6 @@ export const GET = withApi({
 // POST /api/users: User Creation (Admin only)
 export const POST = withApi({
   permission: "users:manage",
-  roles: ["Admin", "ADMIN"],
   schema: CreateUserSchema,
   handler: async ({ user, body, req }) => {
     const db = getDatabase();

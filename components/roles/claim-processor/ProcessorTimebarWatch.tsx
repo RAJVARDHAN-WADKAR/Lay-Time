@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Claim } from "@/lib/types";
+import { calculateTimebarCompliance } from "@/lib/calculations/timebar";
 import { Clock, AlertTriangle, ArrowRight } from "lucide-react";
 
 interface ProcessorTimebarWatchProps {
@@ -12,9 +13,10 @@ interface ProcessorTimebarWatchProps {
 }
 
 export function ProcessorTimebarWatch({ claims }: ProcessorTimebarWatchProps) {
-  const urgentClaims = claims.filter(
-    (c) => c.claimStatus === "Timebarred" || Boolean(c.timebarred) || Boolean(c.claimTimebarDays && c.claimTimebarDays <= 14)
-  );
+  const urgentClaims = claims.filter((c) => {
+    const tb = calculateTimebarCompliance(c);
+    return tb.computedUiStatus === "Timebarred" || tb.computedUiStatus === "Urgent";
+  });
 
   return (
     <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl">

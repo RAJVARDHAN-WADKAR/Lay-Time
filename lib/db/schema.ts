@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   username TEXT UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('ADMIN', 'SUPERVISOR', 'CLAIM_PROCESSOR', 'REVIEWER_CLIENT', 'Admin', 'Supervisor', 'Claim Processor', 'Processor', 'Reviewer', 'Client', 'Finance')),
+  role TEXT NOT NULL CHECK(role IN ('ADMIN', 'SUPERVISOR', 'CLAIM_PROCESSOR', 'REVIEWER', 'CLIENT', 'REVIEWER_CLIENT', 'Admin', 'Supervisor', 'Claim Processor', 'Processor', 'Reviewer', 'Client', 'Finance')),
   client_id TEXT REFERENCES clients(client_id),
   client_name TEXT,
   created_by TEXT REFERENCES users(id),
@@ -76,9 +76,25 @@ CREATE TABLE IF NOT EXISTS claims (
   owners_claim_amount REAL DEFAULT 0,
   claim_timebar_date TEXT,
   claim_filed_date TEXT,
+  payment_received_date TEXT,
+  payment_received_amount REAL DEFAULT 0,
+  is_incomplete INTEGER NOT NULL DEFAULT 0,
+  missing_fields TEXT,
+  base_date_estimated INTEGER NOT NULL DEFAULT 0,
+  notes_structured TEXT,
   is_overridden INTEGER NOT NULL DEFAULT 0,
   overridden_demurrage REAL,
   override_reason TEXT,
+  day_rule TEXT DEFAULT 'SHEX',
+  once_on_demurrage INTEGER NOT NULL DEFAULT 1,
+  notice_grace_hours REAL DEFAULT 6,
+  apply_24ch INTEGER NOT NULL DEFAULT 1,
+  country_code TEXT,
+  port_timezone TEXT DEFAULT 'UTC',
+  overlap_policy TEXT DEFAULT 'block',
+  overlap_override_reason TEXT,
+  notice_days_source TEXT DEFAULT 'default',
+  claim_days_source TEXT DEFAULT 'default',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -90,6 +106,8 @@ CREATE TABLE IF NOT EXISTS ports (
   name TEXT NOT NULL,
   port_type TEXT NOT NULL,
   load_rate REAL NOT NULL DEFAULT 0,
+  country_code TEXT,
+  timezone TEXT DEFAULT 'UTC',
   created_at TEXT NOT NULL,
   FOREIGN KEY (claim_id) REFERENCES claims(id) ON DELETE CASCADE
 );
@@ -203,7 +221,8 @@ CREATE TABLE IF NOT EXISTS documents (
   ocr_confidence REAL DEFAULT 0,
   extracted_items_count INTEGER DEFAULT 0,
   error_reason TEXT,
-  file_path TEXT
+  file_path TEXT,
+  file_hash TEXT
 );
 
 -- 10. DOCUMENT REVISIONS TABLE
@@ -217,6 +236,26 @@ CREATE TABLE IF NOT EXISTS document_revisions (
   uploaded_at TEXT NOT NULL,
   change_summary TEXT,
   file_path TEXT,
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
+-- 10b. OCR DRAFTS TABLE (Review-before-save draft storage)
+CREATE TABLE IF NOT EXISTS ocr_drafts (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL UNIQUE,
+  claim_id TEXT NOT NULL,
+  port_id TEXT,
+  berth_id TEXT,
+  raw_text TEXT NOT NULL,
+  pages_json TEXT NOT NULL,
+  parsed_events_json TEXT NOT NULL,
+  overall_confidence REAL NOT NULL DEFAULT 0,
+  is_scanned INTEGER NOT NULL DEFAULT 0,
+  is_demo INTEGER NOT NULL DEFAULT 0,
+  confirmed_at TEXT,
+  confirmed_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
   FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
 );
 
@@ -432,6 +471,20 @@ CREATE TABLE IF NOT EXISTS negotiation_messages (
   FOREIGN KEY (sender_id) REFERENCES users(id)
 );
 
+-- 24. MARITIME HOLIDAYS CALENDAR TABLE
+CREATE TABLE IF NOT EXISTS holidays (
+  id TEXT PRIMARY KEY,
+  country_code TEXT NOT NULL,
+  port_id TEXT,
+  date TEXT NOT NULL,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_holidays_country_date ON holidays(country_code, date);
+CREATE INDEX IF NOT EXISTS idx_holidays_port_date ON holidays(port_id, date);
+
 -- 23. AUDIT LOGS TABLE
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
@@ -464,6 +517,7 @@ CREATE INDEX IF NOT EXISTS idx_berths_port ON berths(port_id);
 CREATE INDEX IF NOT EXISTS idx_sof_claim ON statement_of_facts(claim_id);
 CREATE INDEX IF NOT EXISTS idx_deductions_claim ON deductions(claim_id);
 CREATE INDEX IF NOT EXISTS idx_documents_claim ON documents(claim_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_drafts_claim ON ocr_drafts(claim_id);
 CREATE INDEX IF NOT EXISTS idx_discrepancies_claim ON discrepancies(claim_id);
 
 CREATE INDEX IF NOT EXISTS idx_rac_reference ON rac_cases(rac_reference);

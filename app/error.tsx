@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect } from "react";
-import Link from "next/link";
-import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, RefreshCw, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function ErrorBoundary({
@@ -12,6 +12,8 @@ export default function ErrorBoundary({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const router = useRouter();
+
   useEffect(() => {
     console.error("Application runtime error:", error);
   }, [error]);
@@ -28,7 +30,7 @@ export default function ErrorBoundary({
             Something went wrong
           </h1>
           <p className="text-sm text-slate-500 leading-relaxed">
-            An unexpected error occurred while processing this request. Our operations monitoring team has been notified.
+            An unexpected error occurred while processing this request.
           </p>
           {error?.message && (
             <div className="mt-3 p-3 rounded-xl bg-slate-100 text-slate-600 font-mono text-xs break-all text-left border border-slate-200">
@@ -45,15 +47,15 @@ export default function ErrorBoundary({
             <RefreshCw className="h-4 w-4" />
             <span>Try Again</span>
           </Button>
-          <Link href="/dashboard" className="w-full sm:w-auto">
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto font-bold text-xs h-10 px-5 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center justify-center space-x-2"
-            >
-              <Home className="h-4 w-4" />
-              <span>Go to Dashboard</span>
-            </Button>
-          </Link>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            className="w-full sm:w-auto font-bold text-xs h-10 px-5 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center justify-center space-x-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Previous Page</span>
+          </Button>
         </div>
       </div>
     </div>

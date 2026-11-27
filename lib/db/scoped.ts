@@ -1,6 +1,8 @@
 import { getDatabase } from "./index";
+import { getClaimById } from "./queries";
 import { ScopedUser } from "@/lib/auth/session";
-import { Claim, UserRole } from "@/lib/types";
+import { Claim } from "@/lib/types";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 
 export interface ScopedSqlResult {
   sql: string;
@@ -32,12 +34,9 @@ export interface RestrictedClientClaim {
  */
 export function claimScope(user: ScopedUser, tableAlias: string = "claims"): ScopedSqlResult {
   const prefix = tableAlias ? `${tableAlias}.` : "";
-  const role = user.role;
-  const isClientUser =
-    role === "Client" ||
-    (role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const normRole = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id));
 
-  if (isClientUser) {
+  if (normRole === "CLIENT") {
     const clientId = user.assignedClientId || user.clientId || user.client_id;
     if (!clientId) {
       return { sql: "1=0", params: [] }; // No client assigned -> access nothing
@@ -48,24 +47,15 @@ export function claimScope(user: ScopedUser, tableAlias: string = "claims"): Sco
     };
   }
 
-  if (role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR") {
-    // Match assigned_to strictly by exact user ID, user Name, or user Email, or matching first/last name
+  if (normRole === "CLAIM_PROCESSOR") {
+    // Match assigned_to strictly by user ID, user Name, or user Email
     return {
-      sql: `(${prefix}assigned_to = ? OR LOWER(${prefix}assigned_to) = LOWER(?) OR LOWER(${prefix}assigned_to) = LOWER(?) OR (${prefix}assigned_to LIKE '%Rohan%' AND ? LIKE '%Rohan%') OR (${prefix}assigned_to LIKE '%Sneha%' AND ? LIKE '%Sneha%'))`,
-      params: [user.id, user.name, user.email, user.name || "", user.name || ""]
+      sql: `(${prefix}assigned_to = ? OR LOWER(${prefix}assigned_to) = LOWER(?) OR LOWER(${prefix}assigned_to) = LOWER(?))`,
+      params: [user.id, user.name || "", user.email || ""]
     };
   }
 
-  // Admin, Supervisor, Reviewer (Internal Reviewer without clientId), Finance
-  if (
-    role === "Admin" ||
-    role === "ADMIN" ||
-    role === "Supervisor" ||
-    role === "SUPERVISOR" ||
-    role === "Reviewer" ||
-    role === "REVIEWER_CLIENT" ||
-    role === "Finance"
-  ) {
+  if (normRole === "ADMIN" || normRole === "SUPERVISOR" || normRole === "REVIEWER") {
     return { sql: "1=1", params: [] };
   }
 
@@ -82,6 +72,63 @@ const ALLOWED_SORT_COLUMNS: Record<string, string> = {
   agreed_amount: "claims.agreed_amount",
   days_open: "claims.days_open"
 };
+
+function mapDbRowToInternalClaim(r: any): Claim {
+  return {
+    id: r.id,
+    clientId: r.client_id || undefined,
+    claimName: r.claim_name,
+    accountName: r.account_name,
+    brokerName: r.broker_name,
+    claimStatus: r.claim_status,
+    claimType: r.claim_type,
+    shipName: r.ship_name,
+    cpType: r.cp_type,
+    voyageNumber: r.voyage_number || undefined,
+    assignedTo: r.assigned_to,
+    daysOpen: r.days_open,
+    claimClosed: Boolean(r.claim_closed),
+    contentions: r.contentions || undefined,
+    claimNotes: r.claim_notes || undefined,
+    documentLinks: r.document_links ? JSON.parse(r.document_links) : [],
+    demurrageRatePerDay: r.demurrage_rate_per_day,
+    counterpartyName: r.counterparty_name || undefined,
+    counterpartyType: r.counterparty_type || undefined,
+    claimFiledAmount: r.claim_filed_amount,
+    receivedClaimAmount: r.received_claim_amount || 0,
+    agreedAmount: r.agreed_amount || 0,
+    billableAmount: r.billable_amount || 0,
+    paymentReceived: r.payment_received || 0,
+    paymentConcluded: Boolean(r.payment_concluded),
+    layday: r.layday || undefined,
+    cancellingDate: r.cancelling_date || undefined,
+    voyageEndDate: r.voyage_end_date || undefined,
+    instructionReceivedDate: r.instruction_received_date || undefined,
+    noticeReceivedDate: r.notice_received_date || undefined,
+    claimReceivedDate: r.claim_received_date || undefined,
+    noticeTimebarDays: r.notice_timebar_days || 30,
+    claimTimebarDays: r.claim_timebar_days || 90,
+    noticeDaysSource: r.notice_days_source || "default",
+    claimDaysSource: r.claim_days_source || "default",
+    baseDateEstimated: Boolean(r.base_date_estimated),
+    claimTimebarDate: r.claim_timebar_date || undefined,
+    claimFiledDate: r.claim_filed_date || undefined,
+    dayRule: (r.day_rule || "SHEX") as any,
+    onceOnDemurrage: r.once_on_demurrage !== undefined && r.once_on_demurrage !== null ? Boolean(r.once_on_demurrage) : true,
+    noticeGracePeriodHours: r.notice_grace_hours !== undefined && r.notice_grace_hours !== null ? Number(r.notice_grace_hours) : 6,
+    applyWeatherWorkingDay24CH: r.apply_24ch !== undefined && r.apply_24ch !== null ? Boolean(r.apply_24ch) : true,
+    countryCode: r.country_code || undefined,
+    portTimezone: r.port_timezone || "UTC",
+    overlapPolicy: (r.overlap_policy || "block") as any,
+    overlapOverrideReason: r.overlap_override_reason || undefined,
+    timebarred: Boolean(r.timebarred),
+    claimAgreedDate: r.claim_agreed_date || undefined,
+    charterpartyDate: r.charterparty_date || undefined,
+    daysAwaitingPayment: r.days_awaiting_payment || 0,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
 
 /**
  * Loads claims scoped to the user with parameterized SQL and strict column allow-listing.
@@ -146,9 +193,7 @@ export function getScopedClaims(
   const rows = db.prepare(selectSql).all(...queryParams, limit, offset) as any[];
 
   // If External Client, transform rows into restricted DTO
-  const isClient =
-    user.role === "Client" ||
-    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const isClient = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id)) === "CLIENT";
 
   if (isClient) {
     const clientClaims: RestrictedClientClaim[] = rows.map((r) => {
@@ -184,47 +229,7 @@ export function getScopedClaims(
   }
 
   // Full claim representation for internal roles
-  const fullClaims: Claim[] = rows.map((r) => ({
-    id: r.id,
-    clientId: r.client_id || undefined,
-    claimName: r.claim_name,
-    accountName: r.account_name,
-    brokerName: r.broker_name,
-    claimStatus: r.claim_status,
-    claimType: r.claim_type,
-    shipName: r.ship_name,
-    cpType: r.cp_type,
-    voyageNumber: r.voyage_number || undefined,
-    assignedTo: r.assigned_to,
-    daysOpen: r.days_open,
-    claimClosed: Boolean(r.claim_closed),
-    contentions: r.contentions || undefined,
-    claimNotes: r.claim_notes || undefined,
-    documentLinks: r.document_links ? JSON.parse(r.document_links) : [],
-    demurrageRatePerDay: r.demurrage_rate_per_day,
-    counterpartyName: r.counterparty_name || undefined,
-    counterpartyType: r.counterparty_type || undefined,
-    claimFiledAmount: r.claim_filed_amount,
-    receivedClaimAmount: r.received_claim_amount || 0,
-    agreedAmount: r.agreed_amount || 0,
-    billableAmount: r.billable_amount || 0,
-    paymentReceived: r.payment_received || 0,
-    paymentConcluded: Boolean(r.payment_concluded),
-    layday: r.layday || undefined,
-    cancellingDate: r.cancelling_date || undefined,
-    voyageEndDate: r.voyage_end_date || undefined,
-    instructionReceivedDate: r.instruction_received_date || undefined,
-    noticeReceivedDate: r.notice_received_date || undefined,
-    claimReceivedDate: r.claim_received_date || undefined,
-    noticeTimebarDays: r.notice_timebar_days || 30,
-    claimTimebarDays: r.claim_timebar_days || 90,
-    timebarred: Boolean(r.timebarred),
-    claimAgreedDate: r.claim_agreed_date || undefined,
-    charterpartyDate: r.charterparty_date || undefined,
-    daysAwaitingPayment: r.days_awaiting_payment || 0,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at
-  }));
+  const fullClaims: Claim[] = rows.map(mapDbRowToInternalClaim);
 
   return { claims: fullClaims, total };
 }
@@ -247,9 +252,7 @@ export function getScopedClaimById(
   const row = db.prepare(sql).get(claimId, ...scope.params) as any;
   if (!row) return null;
 
-  const isClient =
-    user.role === "Client" ||
-    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const isClient = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id)) === "CLIENT";
 
   if (isClient) {
     const primaryPort = db
@@ -278,56 +281,14 @@ export function getScopedClaimById(
     };
   }
 
-  return {
-    id: row.id,
-    clientId: row.client_id || undefined,
-    claimName: row.claim_name,
-    accountName: row.account_name,
-    brokerName: row.broker_name,
-    claimStatus: row.claim_status,
-    claimType: row.claim_type,
-    shipName: row.ship_name,
-    cpType: row.cp_type,
-    voyageNumber: row.voyage_number || undefined,
-    assignedTo: row.assigned_to,
-    daysOpen: row.days_open,
-    claimClosed: Boolean(row.claim_closed),
-    contentions: row.contentions || undefined,
-    claimNotes: row.claim_notes || undefined,
-    documentLinks: row.document_links ? JSON.parse(row.document_links) : [],
-    demurrageRatePerDay: row.demurrage_rate_per_day,
-    counterpartyName: row.counterparty_name || undefined,
-    counterpartyType: row.counterparty_type || undefined,
-    claimFiledAmount: row.claim_filed_amount,
-    receivedClaimAmount: row.received_claim_amount || 0,
-    agreedAmount: row.agreed_amount || 0,
-    billableAmount: row.billable_amount || 0,
-    paymentReceived: row.payment_received || 0,
-    paymentConcluded: Boolean(row.payment_concluded),
-    layday: row.layday || undefined,
-    cancellingDate: row.cancelling_date || undefined,
-    voyageEndDate: row.voyage_end_date || undefined,
-    instructionReceivedDate: row.instruction_received_date || undefined,
-    noticeReceivedDate: row.notice_received_date || undefined,
-    claimReceivedDate: row.claim_received_date || undefined,
-    noticeTimebarDays: row.notice_timebar_days || 30,
-    claimTimebarDays: row.claim_timebar_days || 90,
-    timebarred: Boolean(row.timebarred),
-    claimAgreedDate: row.claim_agreed_date || undefined,
-    charterpartyDate: row.charterparty_date || undefined,
-    daysAwaitingPayment: row.days_awaiting_payment || 0,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
+  return getClaimById(row.id) || mapDbRowToInternalClaim(row);
 }
 
 /**
  * Scoped access to SoF events. Throws 403 for Client.
  */
 export function getScopedSoF(user: ScopedUser, claimId: string): any[] {
-  const isClient =
-    user.role === "Client" ||
-    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const isClient = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id)) === "CLIENT";
   if (isClient) {
     const err = new Error("Forbidden: Client users may not access Statement of Facts");
     (err as any).statusCode = 403;
@@ -351,9 +312,7 @@ export function getScopedSoF(user: ScopedUser, claimId: string): any[] {
  * Scoped access to Laytime Calculations. Throws 403 for Client.
  */
 export function getScopedCalculations(user: ScopedUser, claimId: string): any {
-  const isClient =
-    user.role === "Client" ||
-    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const isClient = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id)) === "CLIENT";
   if (isClient) {
     const err = new Error("Forbidden: Client users may not access internal laytime calculations");
     (err as any).statusCode = 403;
@@ -376,9 +335,7 @@ export function getScopedCalculations(user: ScopedUser, claimId: string): any {
  * Scoped access to Discrepancies. Throws 403 for Client.
  */
 export function getScopedDiscrepancies(user: ScopedUser, claimId: string): any[] {
-  const isClient =
-    user.role === "Client" ||
-    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const isClient = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id)) === "CLIENT";
   if (isClient) {
     const err = new Error("Forbidden: Client users may not access discrepancy reports");
     (err as any).statusCode = 403;
@@ -401,9 +358,7 @@ export function getScopedDiscrepancies(user: ScopedUser, claimId: string): any[]
  * Scoped access to RAC Cases. Throws 403 for Client.
  */
 export function getScopedRacCases(user: ScopedUser, caseId?: string): any {
-  const isClient =
-    user.role === "Client" ||
-    (user.role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const isClient = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id)) === "CLIENT";
   if (isClient) {
     const err = new Error("Forbidden: Client users may not access RAC module");
     (err as any).statusCode = 403;

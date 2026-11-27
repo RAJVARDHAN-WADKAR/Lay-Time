@@ -1,25 +1,17 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest } from "@/lib/auth/session";
+import { NextResponse } from "next/server";
+import { withApi, isClaimAssignedToUser } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getClaimById, saveActivitiesForClaim, getActivitiesForClaim } from "@/lib/db/queries";
 import { getDatabase } from "@/lib/db";
 import { SoFActivity } from "@/lib/types";
 import { calculateGrossMinutes, formatMinutes } from "@/lib/calculations/deductions";
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    if (session.role === "Reviewer") {
-      return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { claimId, fileName, action, parsedRows } = body;
+export const POST = withApi({
+  permission: "sof:edit",
+  handler: async ({ user, body }) => {
+    const { claimId, fileName, action, parsedRows } = body || {};
 
     if (!claimId) {
       return NextResponse.json({ error: "claimId is required" }, { status: 400 });
@@ -30,8 +22,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Claim not found" }, { status: 404 });
     }
 
+    if (normalizeRole(user.role) === "CLAIM_PROCESSOR" && !isClaimAssignedToUser(claim, user)) {
+      return NextResponse.json(
+        { error: "Forbidden: Claim Processors may only import timesheets on assigned claims." },
+        { status: 403 }
+      );
+    }
+
     if (action === "preview") {
-      // Return simulated/parsed timesheet rows for preview & manual review
       const defaultRows = [
         {
           activityName: "Commenced Discharging Cargo",
@@ -52,26 +50,6 @@ export async function POST(request: NextRequest) {
           category: "Rain",
           percentageCounted: 50,
           remarks: "Port Weather Observation Report attached"
-        },
-        {
-          activityName: "Resumed Discharging Cargo",
-          startTime: "2024-07-12T18:00:00Z",
-          stopTime: "2024-07-13T16:00:00Z",
-          durationMinutes: 1320,
-          durationFormatted: "22h 00m",
-          category: "Other",
-          percentageCounted: 100,
-          remarks: "Terminal shift hand-over"
-        },
-        {
-          activityName: "Discharging Completed",
-          startTime: "2024-07-13T16:00:00Z",
-          stopTime: "2024-07-13T17:30:00Z",
-          durationMinutes: 90,
-          durationFormatted: "01h 30m",
-          category: "Other",
-          percentageCounted: 100,
-          remarks: "Hose disconnection completed"
         }
       ];
 
@@ -83,7 +61,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "approve") {
-      // User approved imported rows -> convert to SoF activities and merge
       const rowsToImport = parsedRows || [];
       const currentActivities = getActivitiesForClaim(claimId);
       const portId = claim.ports?.[0]?.id || "port-1";
@@ -116,7 +93,6 @@ export async function POST(request: NextRequest) {
       const merged = [...currentActivities, ...newActivities];
       saveActivitiesForClaim(claimId, merged);
 
-      // Record import in timesheet_imports table
       const db = getDatabase();
       db.prepare(`
         INSERT INTO timesheet_imports (id, claim_id, file_name, uploaded_by, uploaded_at, parsed_rows_json, is_approved, approved_by, approved_at)
@@ -125,10 +101,10 @@ export async function POST(request: NextRequest) {
         `ts-imp-${Date.now()}`,
         claimId,
         fileName || "Timesheet.csv",
-        session.name || session.email || "System",
+        user.name || user.email || "System",
         new Date().toISOString(),
         JSON.stringify(rowsToImport),
-        session.name || session.email || "System",
+        user.name || user.email || "System",
         new Date().toISOString()
       );
 
@@ -140,8 +116,5 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: "Invalid action. Use 'preview' or 'approve'." }, { status: 400 });
-  } catch (error: any) {
-    console.error("Timesheet Import Error:", error);
-    return NextResponse.json({ error: "Failed to process timesheet import" }, { status: 500 });
   }
-}
+});

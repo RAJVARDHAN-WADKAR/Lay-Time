@@ -25,8 +25,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/formatters";
+import { useToast } from "@/lib/hooks/useToast";
 
 const WORKFLOW_STEPS: RacStatus[] = [
   "Draft",
@@ -41,25 +43,35 @@ export default function RacCaseDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { currentUser, role, canEditRac, canAuthorizeRac } = useAuth();
+  const { success, error: showError } = useToast();
   const caseId = params.id as string;
 
   const [racCase, setRacCase] = useState<RacCase | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "calculation" | "documents" | "history">("overview");
   const [statusRemarks, setStatusRemarks] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const loadCase = useCallback(async () => {
+  const loadCase = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getRacCaseById(caseId);
       setRacCase(data);
-    } catch (e) {
-      console.error(e);
+      if (isManualRefresh) {
+        success("RAC Case Refreshed", "Loaded latest case workflow state.");
+      }
+    } catch (e: any) {
+      const msg = e?.message || "Failed to load RAC case.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setLoading(false);
     }
-  }, [caseId]);
+  }, [caseId, success, showError]);
 
   useEffect(() => {
     loadCase();
@@ -82,10 +94,26 @@ export default function RacCaseDetailPage() {
     }
   };
 
-  if (loading) {
+  if (loading && !racCase) {
     return (
       <div className="p-12 text-center text-slate-400 text-xs">
         Loading RAC Case details from database...
+      </div>
+    );
+  }
+
+  if (loadError && !racCase) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto space-y-4">
+        <DataErrorBanner
+          title="Unable to load RAC case"
+          message={loadError}
+          onRetry={() => loadCase(true)}
+          isRetrying={loading}
+        />
+        <Link href="/rac/cases">
+          <Button variant="outline" size="sm">Back to RAC Ledger</Button>
+        </Link>
       </div>
     );
   }

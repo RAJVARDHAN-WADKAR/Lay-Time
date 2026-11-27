@@ -5,6 +5,7 @@ import { getClaims, getClaimById, updateActivity, addActivity, deleteActivity } 
 import { Claim, SoFActivity } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Input, Select } from "@/components/ui/inputs";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
@@ -22,6 +23,7 @@ import {
   Download
 } from "lucide-react";
 import { useToast } from "@/lib/hooks/useToast";
+import { getNowDatetimeLocalIso, validateSofEvent } from "@/lib/utils/dateRules";
 
 const PRESET_ACTIVITIES = [
   "Vessel Arrived",
@@ -40,31 +42,49 @@ export default function SoFInterfacePage() {
   const [selectedClaimId, setSelectedClaimId] = useState<string>("");
   const [claim, setClaim] = useState<Claim | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "timeline">("table");
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<SoFActivity | null>(null);
   const [formActivityName, setFormActivityName] = useState("Loading Started");
-  const [formStartTime, setFormStartTime] = useState(new Date().toISOString().substring(0, 16));
-  const [formStopTime, setFormStopTime] = useState(new Date(Date.now() + 4 * 3600 * 1000).toISOString().substring(0, 16));
+  const [formStartTime, setFormStartTime] = useState(new Date(Date.now() - 4 * 3600 * 1000).toISOString().substring(0, 16));
+  const [formStopTime, setFormStopTime] = useState(new Date().toISOString().substring(0, 16));
   const [formPercent, setFormPercent] = useState<number>(100);
   const [formCategory, setFormCategory] = useState<string>("Other");
   const [formRemarks, setFormRemarks] = useState<string>("");
 
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
 
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
+  const load = async (isManualRefresh = false) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
       const data = await getClaims();
       setClaims(data);
-      if (data.length > 0) {
+      if (data.length > 0 && !selectedClaimId) {
         setSelectedClaimId(data[0].id);
         setClaim(data[0]);
+      } else if (selectedClaimId) {
+        const current = data.find((c) => c.id === selectedClaimId);
+        if (current) setClaim(current);
       }
+      if (isManualRefresh) {
+        success("SoF Refreshed", "Claims and operational events synced.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load claims for Statement of Facts.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     load();
   }, []);
 
@@ -88,8 +108,8 @@ export default function SoFInterfacePage() {
   const handleOpenAddModal = (presetName?: string) => {
     setEditingActivity(null);
     setFormActivityName(presetName || "Loading Started");
-    setFormStartTime(new Date().toISOString().substring(0, 16));
-    setFormStopTime(new Date(Date.now() + 4 * 3600 * 1000).toISOString().substring(0, 16));
+    setFormStartTime(new Date(Date.now() - 4 * 3600 * 1000).toISOString().substring(0, 16));
+    setFormStopTime(new Date().toISOString().substring(0, 16));
     setFormPercent(100);
     setFormCategory("Other");
     setFormRemarks("");
@@ -110,6 +130,17 @@ export default function SoFInterfacePage() {
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!claim) return;
+
+    const check = validateSofEvent({
+      id: editingActivity?.id,
+      activityName: formActivityName,
+      startTime: formStartTime,
+      stopTime: formStopTime
+    });
+    if (!check.isValid) {
+      showError("Invalid Date/Time", check.error || "Invalid SoF timestamps.");
+      return;
+    }
 
     const { diffMins, formatted } = calculateDuration(formStartTime, formStopTime);
 
@@ -210,6 +241,15 @@ export default function SoFInterfacePage() {
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load Statement of Facts"
+          message={loadError}
+          onRetry={() => load(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Quick Add Presets Strip */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
@@ -403,6 +443,7 @@ export default function SoFInterfacePage() {
               <label className="block font-bold text-slate-700 mb-1">Start Time (UTC) *</label>
               <Input
                 type="datetime-local"
+                max={getNowDatetimeLocalIso()}
                 value={formStartTime}
                 onChange={(e) => setFormStartTime(e.target.value)}
                 required
@@ -412,6 +453,7 @@ export default function SoFInterfacePage() {
               <label className="block font-bold text-slate-700 mb-1">Stop Time (UTC) *</label>
               <Input
                 type="datetime-local"
+                max={getNowDatetimeLocalIso()}
                 value={formStopTime}
                 onChange={(e) => setFormStopTime(e.target.value)}
                 required

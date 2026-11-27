@@ -3,30 +3,27 @@ import { ScopedUser } from "@/lib/auth/session";
 import { getClaimById, updateClaim } from "./queries";
 import { NegotiationThread, NegotiationMessage, UserRole } from "@/lib/types";
 import { logAudit } from "@/lib/auth/userHierarchy";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { v4 as uuidv4 } from "uuid";
 
 /**
  * Validates whether the actor has access to a claim's negotiation room.
  * - Client: only if claim.client_id === actor.assignedClientId
  * - Claim Processor: only if assigned to the claim
- * - Supervisor & Admin: read-only oversight
+ * - Supervisor, Admin & Reviewer: oversight
  */
 export function canAccessNegotiations(
   user: ScopedUser,
   claimId: string
 ): { allowed: boolean; roleType: "client" | "processor" | "oversight" | "none"; claim?: any } {
-  const db = getDatabase();
   const claim = getClaimById(claimId);
   if (!claim) {
     return { allowed: false, roleType: "none" };
   }
 
-  const role = user.role;
-  const isExternalClient =
-    role === "Client" ||
-    (role === "REVIEWER_CLIENT" && Boolean(user.assignedClientId || user.clientId || user.client_id));
+  const normRole = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId || user.client_id));
 
-  if (isExternalClient) {
+  if (normRole === "CLIENT") {
     const clientId = user.assignedClientId || user.clientId || user.client_id;
     const claimClientId = (claim as any).clientId || (claim as any).client_id;
     if (clientId && claimClientId && clientId === claimClientId) {
@@ -35,13 +32,13 @@ export function canAccessNegotiations(
     return { allowed: false, roleType: "none", claim };
   }
 
-  if (role === "Claim Processor" || role === "Processor" || role === "CLAIM_PROCESSOR") {
+  if (normRole === "CLAIM_PROCESSOR") {
+    const assignedLower = String(claim.assignedTo || "").trim().toLowerCase();
     const isAssigned =
-      claim.assignedTo === user.id ||
-      claim.assignedTo === user.name ||
-      claim.assignedTo.toLowerCase() === user.name.toLowerCase() ||
-      claim.assignedTo.toLowerCase() === user.email.toLowerCase() ||
-      claim.assignedTo.toLowerCase().includes(user.name.split(" ")[0].toLowerCase());
+      assignedLower !== "" &&
+      (assignedLower === user.id.toLowerCase() ||
+        assignedLower === (user.name || "").trim().toLowerCase() ||
+        assignedLower === (user.email || "").trim().toLowerCase());
 
     if (isAssigned) {
       return { allowed: true, roleType: "processor", claim };
@@ -49,14 +46,7 @@ export function canAccessNegotiations(
     return { allowed: false, roleType: "none", claim };
   }
 
-  if (
-    role === "Admin" ||
-    role === "ADMIN" ||
-    role === "Supervisor" ||
-    role === "SUPERVISOR" ||
-    role === "Reviewer" ||
-    role === "REVIEWER_CLIENT"
-  ) {
+  if (normRole === "ADMIN" || normRole === "SUPERVISOR" || normRole === "REVIEWER") {
     return { allowed: true, roleType: "oversight", claim };
   }
 

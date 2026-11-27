@@ -1,11 +1,19 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Home, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/context/AuthContext";
+import { getRoleDashboardPath } from "@/lib/auth/accessMatrix";
 
 export default function NotFound() {
+  const router = useRouter();
+  const { role, currentUser } = useAuth();
+  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id);
+  const dashboardHref = getRoleDashboardPath(role, isClient);
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center px-4 py-12">
       <div className="max-w-md w-full text-center space-y-6">
@@ -23,19 +31,19 @@ export default function NotFound() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-          <Link href="/dashboard" className="w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            className="w-full sm:w-auto font-bold text-xs h-10 px-5 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center justify-center space-x-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Previous Page</span>
+          </Button>
+          <Link href={dashboardHref} className="w-full sm:w-auto">
             <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-10 px-5 rounded-xl flex items-center justify-center space-x-2">
               <Home className="h-4 w-4" />
-              <span>Go to Dashboard</span>
-            </Button>
-          </Link>
-          <Link href="/claims" className="w-full sm:w-auto">
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto font-bold text-xs h-10 px-5 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center justify-center space-x-2"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span>View Claims</span>
+              <span>My Dashboard</span>
             </Button>
           </Link>
         </div>

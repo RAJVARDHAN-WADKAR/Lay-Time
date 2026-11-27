@@ -4,7 +4,13 @@ import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
-import { normalizeRole, canAccessRoute, getRoleDashboardPath } from "@/lib/auth/rolePermissions";
+import {
+  getLongestMatchingSidebarHref,
+  getRoleDashboardPath,
+  getSidebarItemsForRole,
+  normalizeRole,
+  SidebarNavDefinition
+} from "@/lib/auth/accessMatrix";
 import { getNotifications } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -21,7 +27,9 @@ import {
   Settings,
   Users,
   LogOut,
-  Anchor
+  Anchor,
+  UserCheck,
+  Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -30,163 +38,73 @@ interface SidebarProps {
   isCollapsed?: boolean;
 }
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: number;
-}
+const ICON_MAP: Record<SidebarNavDefinition["iconKey"], React.ComponentType<{ className?: string }>> = {
+  dashboard: LayoutDashboard,
+  claims: FileSpreadsheet,
+  assigned: UserCheck,
+  create: PlusCircle,
+  calculator: Calculator,
+  calculations: Layers,
+  documents: FileText,
+  ocr: ScanText,
+  rac: Briefcase,
+  timebar: Clock,
+  analytics: BarChart3,
+  reports: FileBarChart,
+  notifications: Bell,
+  users: Users,
+  settings: Settings
+};
 
 export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
   const pathname = usePathname();
-  const { currentUser, role, logout } = useAuth();
+  const { currentUser, role, isAuthenticated, isLoading, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const fetchUnread = async () => {
-    try {
-      const notifs = await getNotifications();
-      setUnreadCount(notifs.filter((n) => !n.isRead).length);
-    } catch {
-      setUnreadCount(0);
-    }
-  };
-
-  useEffect(() => {
-    fetchUnread();
-    const handleStorage = () => fetchUnread();
-    window.addEventListener("demurrage_storage_change", handleStorage);
-    const interval = setInterval(fetchUnread, 10000);
-    return () => {
-      window.removeEventListener("demurrage_storage_change", handleStorage);
-      clearInterval(interval);
-    };
-  }, []);
-
-  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id || role === "Client");
+  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id);
   const normRole = normalizeRole(role, isClient);
   const roleDashboardHref = getRoleDashboardPath(role, isClient);
 
-  const roleDashboardLabel = isClient
-    ? "Client Portal"
-    : normRole === "ADMIN"
-    ? "Admin Console"
-    : normRole === "SUPERVISOR"
-    ? "Supervisor Dashboard"
-    : normRole === "CLAIM_PROCESSOR"
-    ? "Analyst Workbench"
-    : "Reviewer Dashboard";
-
-  const allPossibleItems = useMemo(
-    () => [
-      {
-        href: roleDashboardHref,
-        label: roleDashboardLabel,
-        icon: LayoutDashboard
-      },
-      {
-        href: normRole === "CLAIM_PROCESSOR" ? "/claims?filter=assigned" : "/claims",
-        label: isClient
-          ? "My Claims"
-          : normRole === "CLAIM_PROCESSOR"
-          ? "Assigned Claims"
-          : "Claims Ledger",
-        icon: FileSpreadsheet
-      },
-      {
-        href: "/claims/create",
-        label: "Create Claim",
-        icon: PlusCircle
-      },
-      {
-        href: "/calculator",
-        label: "Laytime Calculator",
-        icon: Calculator
-      },
-      {
-        href: "/documents",
-        label: "Documents",
-        icon: FileText
-      },
-      {
-        href: "/ocr",
-        label: "OCR & SoF",
-        icon: ScanText
-      },
-      {
-        href: "/rac",
-        label: normRole === "SUPERVISOR" ? "RAC Portfolio" : "RAC Review",
-        icon: Briefcase
-      },
-      {
-        href: "/timebar",
-        label: "Time-Bar Monitor",
-        icon: Clock
-      },
-      {
-        href: "/analytics",
-        label: "Analytics",
-        icon: BarChart3
-      },
-      {
-        href: "/reports",
-        label: normRole === "ADMIN" ? "Audit Reports" : "Reports",
-        icon: FileBarChart
-      },
-      {
-        href: "/notifications",
-        label: "Notifications",
-        icon: Bell,
-        badge: unreadCount
-      },
-      {
-        href: "/users",
-        label: normRole === "SUPERVISOR" ? "Team & Users" : "User Management",
-        icon: Users
-      },
-      {
-        href: "/settings",
-        label: "Company Settings",
-        icon: Settings
-      }
-    ],
-    [roleDashboardHref, roleDashboardLabel, isClient, normRole, unreadCount]
-  );
-
-  // An item appears in the sidebar if and only if the route is allowed for that role
-  const navItems: NavItem[] = useMemo(() => {
-    return allPossibleItems.filter((item) => {
-      if (item.href === "/notifications") return true;
-      const baseRoute = item.href.split("?")[0];
-      return canAccessRoute(role, baseRoute, isClient);
-    });
-  }, [allPossibleItems, role, isClient]);
-
-  // Section 3.1 Longest-Match: compute the single nav item whose href is the longest prefix of pathname
-  const activeItemHref = useMemo(() => {
-    let bestMatchHref = "";
-    let longestPrefixLen = -1;
-    const pathBase = pathname.split("?")[0];
-
-    for (const item of navItems) {
-      const itemBase = item.href.split("?")[0];
-
-      if (itemBase.startsWith("/dashboard")) {
-        if (pathBase === itemBase || pathBase.startsWith(itemBase + "/")) {
-          if (itemBase.length > longestPrefixLen) {
-            longestPrefixLen = itemBase.length;
-            bestMatchHref = item.href;
-          }
-        }
-      } else if (pathBase === itemBase || pathBase.startsWith(itemBase + "/")) {
-        if (itemBase.length > longestPrefixLen) {
-          longestPrefixLen = itemBase.length;
-          bestMatchHref = item.href;
-        }
-      }
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setUnreadCount(0);
+      return;
     }
 
-    return bestMatchHref;
-  }, [navItems, pathname]);
+    let active = true;
+    const fetchUnread = async () => {
+      try {
+        const notifs = await getNotifications();
+        if (active) {
+          setUnreadCount(notifs.filter((n) => !n.isRead).length);
+        }
+      } catch {
+        if (active) setUnreadCount(0);
+      }
+    };
+
+    fetchUnread();
+    const handleStorage = () => fetchUnread();
+    window.addEventListener("demurrage_storage_change", handleStorage);
+    const interval = setInterval(fetchUnread, 15000);
+    return () => {
+      active = false;
+      window.removeEventListener("demurrage_storage_change", handleStorage);
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, normRole]);
+
+  // Derived strictly from ACCESS_MATRIX only once session is resolved (prevents hydration flicker)
+  const navItems = useMemo(() => {
+    if (isLoading || !isAuthenticated) return [];
+    return getSidebarItemsForRole(normRole, isClient);
+  }, [isLoading, isAuthenticated, normRole, isClient]);
+
+  // Longest-prefix match: strictly one active nav item
+  const activeItemHref = useMemo(
+    () => getLongestMatchingSidebarHref(navItems, pathname),
+    [navItems, pathname]
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -204,6 +122,7 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
       <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between">
         <Link
           href={roleDashboardHref}
+          prefetch={false}
           className="flex items-center space-x-3 group"
           onClick={onCloseMobile}
         >
@@ -233,43 +152,55 @@ export function Sidebar({ onCloseMobile, isCollapsed = false }: SidebarProps) {
             Navigation
           </p>
         )}
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = item.href === activeItemHref;
+        <nav className="space-y-1" aria-label="Primary Navigation">
+          {isLoading ? (
+            <div className="space-y-2 px-2 py-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="h-8 rounded-xl bg-slate-800/50 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            navItems.map((item) => {
+              const Icon = ICON_MAP[item.iconKey] || FileText;
+              const isActive = item.href === activeItemHref;
+              const badge = item.href === "/notifications" ? unreadCount : 0;
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onCloseMobile}
-                className={cn(
-                  "flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors group relative",
-                  isActive
-                    ? "bg-cyan-600 text-white font-semibold shadow-md shadow-cyan-900/30"
-                    : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
-                )}
-                title={isCollapsed ? item.label : undefined}
-              >
-                <Icon
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  prefetch={true}
+                  onClick={onCloseMobile}
+                  data-nav-href={item.href}
+                  data-active={isActive ? "true" : "false"}
                   className={cn(
-                    "h-4 w-4 shrink-0 transition-transform group-hover:scale-110",
-                    isActive ? "text-white" : "text-slate-400 group-hover:text-slate-200",
-                    isCollapsed ? "mx-auto" : "mr-3"
+                    "flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors group relative",
+                    isActive
+                      ? "bg-cyan-600 text-white font-semibold shadow-md shadow-cyan-900/30"
+                      : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                   )}
-                />
-                {!isCollapsed && <span className="truncate flex-1">{item.label}</span>}
-                {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                  <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {item.badge}
-                  </span>
-                )}
-                {isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                  <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-rose-500 rounded-full" />
-                )}
-              </Link>
-            );
-          })}
+                  title={isCollapsed ? item.label : undefined}
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-transform group-hover:scale-110",
+                      isActive ? "text-white" : "text-slate-400 group-hover:text-slate-200",
+                      isCollapsed ? "mx-auto" : "mr-3"
+                    )}
+                  />
+                  {!isCollapsed && <span className="truncate flex-1">{item.label}</span>}
+                  {!isCollapsed && badge > 0 && (
+                    <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {badge}
+                    </span>
+                  )}
+                  {isCollapsed && badge > 0 && (
+                    <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-rose-500 rounded-full" />
+                  )}
+                </Link>
+              );
+            })
+          )}
         </nav>
       </div>
 

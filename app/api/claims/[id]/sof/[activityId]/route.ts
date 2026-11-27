@@ -1,13 +1,15 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getScopedClaimById } from "@/lib/db/scoped";
 import { updateActivityInClaim, deleteActivityFromClaim, getClaimById } from "@/lib/db/queries";
 import { logAudit } from "@/lib/db/audit";
 
 export const PUT = withApi({
-  roles: ["Supervisor", "Claim Processor", "Processor"],
+  permission: "sof:edit",
+  checkClaimOwnership: true,
   handler: async ({ user, params, body }) => {
     const claim = getScopedClaimById(user, params.id);
     if (!claim) {
@@ -28,7 +30,7 @@ export const PUT = withApi({
       logAudit({
         actorId: user.id,
         actorEmail: user.email,
-        actorRole: user.role,
+        actorRole: normalizeRole(user.role),
         action: "sof_update",
         targetType: "statement_of_facts",
         targetId: activityId,
@@ -44,7 +46,8 @@ export const PUT = withApi({
 });
 
 export const DELETE = withApi({
-  roles: ["Supervisor", "Claim Processor", "Processor"],
+  permission: "sof:edit",
+  checkClaimOwnership: true,
   handler: async ({ user, params }) => {
     const claim = getScopedClaimById(user, params.id);
     if (!claim) {
@@ -64,7 +67,7 @@ export const DELETE = withApi({
     logAudit({
       actorId: user.id,
       actorEmail: user.email,
-      actorRole: user.role,
+      actorRole: normalizeRole(user.role),
       action: "sof_delete",
       targetType: "statement_of_facts",
       targetId: activityId,

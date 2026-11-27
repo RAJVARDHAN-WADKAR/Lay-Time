@@ -1,287 +1,280 @@
-import { SoFActivity, Discrepancy } from "@/lib/types";
+import fs from "fs";
+import path from "path";
+import { Discrepancy, DocumentRecord, OcrDraft, OcrDraftEvent, Port } from "@/lib/types";
+import { getDocumentById, getClaimById } from "@/lib/db/queries";
+import { detectDiscrepancies } from "@/lib/calculations/discrepancies";
+import { MAX_FILE_BYTES, MIN_FILE_BYTES, getFileExtension, formatHumanFileSize } from "@/lib/uploads/constants";
+import { UPLOAD_STORAGE_DIR, detectMagicSignature } from "@/lib/uploads/serverValidation";
+import {
+  DEFAULT_OCR_TIMEOUT_MS,
+  OcrFailureError,
+  extractPagesFromBuffer
+} from "./extractText";
+import { OcrExtractedPage, parseSoFPages } from "./parser";
+import {
+  markDocumentOcrFailed,
+  persistOcrDraftAndDiscrepancies,
+  tryAcquireDocumentOcrLock
+} from "./draftStore";
 
 export interface OcrProcessingResult {
+  documentId: string;
   fileName: string;
   isScanned: boolean;
-  overallConfidence: number;
-  extractedActivities: SoFActivity[];
+  isDemo: boolean;
+  overallConfidence: number; // 0-1 normalized
+  overallConfidencePct: number; // 0-100
+  extractedActivities: OcrDraftEvent[];
   lowConfidenceCount: number;
   flaggedDiscrepancies: Discrepancy[];
   rawTextPreview: string;
+  pages: Array<{ pageNumber: number; text: string; averageConfidence: number }>;
+  draft?: OcrDraft;
 }
 
-export function processDocumentOcr(
-  fileName: string,
-  claimId: string,
-  portId?: string,
-  berthId?: string,
-  bufferOrText?: string
-): OcrProcessingResult {
-  const isBadScan = fileName.toLowerCase().includes("bad") || fileName.toLowerCase().includes("antwerp") || fileName.toLowerCase().includes("messy");
-  const isRotterdam = fileName.toLowerCase().includes("rotterdam") || fileName.toLowerCase().includes("ocean");
-  const isSingapore = fileName.toLowerCase().includes("nordic") || fileName.toLowerCase().includes("sgp");
+export interface LoadedOcrDocument {
+  document: DocumentRecord;
+  buffer: Buffer;
+  ext: string;
+}
 
-  let isScanned = true;
-  let overallConfidence = 0.94;
-  const extractedActivities: SoFActivity[] = [];
-  const flaggedDiscrepancies: Discrepancy[] = [];
+/**
+ * 1.2(a): Reads stored file bytes from disk using the documents DB table ONLY.
+ * Never accepts raw file bytes or text strings from clients.
+ */
+export function loadDocument(documentId: string): LoadedOcrDocument {
+  const doc = getDocumentById(documentId);
+  if (!doc) {
+    throw new OcrFailureError("CORRUPT", "Document record not found.");
+  }
 
-  if (isBadScan) {
-    // Scanned low-DPI messy document demo case
-    isScanned = true;
-    overallConfidence = 0.68;
+  if (!doc.filePath) {
+    throw new OcrFailureError("CORRUPT", "Stored file path is missing for this document.");
+  }
 
-    extractedActivities.push(
-      {
-        id: `ocr-${Date.now()}-1`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Vessel arrived & EOSP",
-        startTime: "2024-07-26T04:00:00Z",
-        stopTime: "2024-07-26T04:30:00Z",
-        durationMinutes: 30,
-        durationFormatted: "00h 30m",
-        percentageCounted: 100,
-        prorata: 100,
-        deductionCategory: "Other",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.95
-      },
-      {
-        id: `ocr-${Date.now()}-2`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "NOR tendered",
-        startTime: "2024-07-26T04:30:00Z",
-        stopTime: "2024-07-26T10:30:00Z",
-        durationMinutes: 360,
-        durationFormatted: "06h 00m",
-        percentageCounted: 0,
-        prorata: 100,
-        deductionCategory: "Waiting for berth",
-        remarks: "6 hours Notice time allowance under Clause 6",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.88
-      },
-      {
-        id: `ocr-${Date.now()}-3`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: "", // flagged missing berth
-        activityName: "Equipment breakdown (Shore Crane)",
-        startTime: "2024-07-27T08:00:00Z",
-        stopTime: "2024-07-27T18:00:00Z",
-        durationMinutes: 600,
-        durationFormatted: "10h 00m",
-        percentageCounted: 0,
-        prorata: 100,
-        deductionCategory: "Equipment breakdown",
-        remarks: "Low confidence extraction on crane mechanical stoppage",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.65,
-        originalOcrValues: {
-          activityName: "Equipmnt brkdwn (Shre Crne)",
-          deductionCategory: "Equipment breakdown"
-        }
-      },
-      {
-        id: `ocr-${Date.now()}-4`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Rain (Heavy Downpour)",
-        startTime: "2024-07-26T20:00:00Z",
-        stopTime: "2024-07-26T14:00:00Z", // flagged start after stop
-        durationMinutes: -360,
-        durationFormatted: "-06h 00m",
-        percentageCounted: 0,
-        prorata: 100,
-        deductionCategory: "Rain",
-        remarks: "OCR inverted PM/AM timestamps",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.62,
-        originalOcrValues: {
-          startTime: "2024-07-26T20:00:00Z",
-          stopTime: "2024-07-26T14:00:00Z"
-        }
-      },
-      {
-        id: `ocr-${Date.now()}-5`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Rain (Heavy Downpour)", // duplicate entry
-        startTime: "2024-07-26T20:00:00Z",
-        stopTime: "2024-07-26T20:30:00Z",
-        durationMinutes: 30,
-        durationFormatted: "00h 30m",
-        percentageCounted: 0,
-        prorata: 100,
-        deductionCategory: "Rain",
-        remarks: "Duplicate logged event in raw scan",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.71
-      }
-    );
+  const candidate = path.isAbsolute(doc.filePath)
+    ? doc.filePath
+    : path.join(UPLOAD_STORAGE_DIR, path.basename(doc.filePath));
 
-    flaggedDiscrepancies.push(
-      {
-        id: `disc-ocr-1`,
-        claimId,
-        type: "start_after_stop",
-        severity: "error",
-        title: "Start Time Follows Stop Time in OCR",
-        description: "Rain event extracted with start timestamp 20:00 and stop timestamp 14:00 (inverted chronological order).",
-        field: "stopTime",
-        currentValue: "2024-07-26T14:00:00Z",
-        suggestedValue: "2024-07-27T02:00:00Z",
-        isResolved: false
-      },
-      {
-        id: `disc-ocr-2`,
-        claimId,
-        type: "missing_berth",
-        severity: "error",
-        title: "Missing Berth Association",
-        description: "Equipment breakdown event is not assigned to an active berth identifier.",
-        field: "berthId",
-        currentValue: "None",
-        suggestedValue: berthId || "Katoen Natie Pier 1",
-        isResolved: false
-      },
-      {
-        id: `disc-ocr-3`,
-        claimId,
-        type: "low_confidence",
-        severity: "warning",
-        title: "Low OCR Extraction Confidence (62%)",
-        description: "OCR engine extracted Rain event with only 62% confidence score. Manual verification required before laytime calculation.",
-        field: "ocrConfidence",
-        currentValue: "62%",
-        suggestedValue: "Verify against original PDF scan",
-        isResolved: false
-      }
-    );
-  } else {
-    // High-confidence digital vector / clear scan
-    isScanned = false;
-    overallConfidence = isRotterdam ? 0.96 : (isSingapore ? 0.95 : 0.93);
+  const normalizedRoot = path.resolve(UPLOAD_STORAGE_DIR);
+  const normalizedTarget = path.resolve(candidate);
+  if (!normalizedTarget.startsWith(normalizedRoot)) {
+    throw new OcrFailureError("CORRUPT", "Document storage path is invalid.");
+  }
 
-    extractedActivities.push(
-      {
-        id: `ocr-${Date.now()}-1`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Vessel arrived & tendered NOR",
-        startTime: "2024-07-10T04:00:00Z",
-        stopTime: "2024-07-10T04:30:00Z",
-        durationMinutes: 30,
-        durationFormatted: "00h 30m",
-        percentageCounted: 100,
-        prorata: 100,
-        deductionCategory: "Other",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.98
-      },
-      {
-        id: `ocr-${Date.now()}-2`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Notice of Readiness Grace Period",
-        startTime: "2024-07-10T04:30:00Z",
-        stopTime: "2024-07-10T10:30:00Z",
-        durationMinutes: 360,
-        durationFormatted: "06h 00m",
-        percentageCounted: 0,
-        prorata: 100,
-        deductionCategory: "Waiting for berth",
-        remarks: "6 hours NOR grace period applied",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.97
-      },
-      {
-        id: `ocr-${Date.now()}-3`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Waiting for berth & Pilot on board",
-        startTime: "2024-07-10T10:30:00Z",
-        stopTime: "2024-07-11T12:00:00Z",
-        durationMinutes: 1530,
-        durationFormatted: "1d 01h 30m",
-        percentageCounted: 100,
-        prorata: 100,
-        deductionCategory: "Waiting for berth",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.94
-      },
-      {
-        id: `ocr-${Date.now()}-4`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Rain stoppage (Discharging suspended)",
-        startTime: "2024-07-12T16:00:00Z",
-        stopTime: "2024-07-13T01:00:00Z",
-        durationMinutes: 540,
-        durationFormatted: "09h 00m",
-        percentageCounted: 50,
-        prorata: 100,
-        deductionCategory: "Rain",
-        remarks: "50% counted under BPVOY4 Clause 17",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.92
-      },
-      {
-        id: `ocr-${Date.now()}-5`,
-        claimId,
-        portId: portId || "port-1",
-        berthId: berthId || "berth-1-1",
-        activityName: "Discharging completed & Hoses disconnected",
-        startTime: "2024-07-14T02:00:00Z",
-        stopTime: "2024-07-14T03:30:00Z",
-        durationMinutes: 90,
-        durationFormatted: "01h 30m",
-        percentageCounted: 100,
-        prorata: 100,
-        deductionCategory: "Other",
-        isOcrExtracted: true,
-        isCorrected: false,
-        ocrConfidence: 0.99
-      }
+  if (!fs.existsSync(normalizedTarget) || !fs.statSync(normalizedTarget).isFile()) {
+    throw new OcrFailureError("CORRUPT", "Uploaded document binary is missing on disk.");
+  }
+
+  const buffer = fs.readFileSync(normalizedTarget);
+  if (buffer.byteLength === 0) {
+    throw new OcrFailureError("EMPTY", "Stored document is 0 bytes (empty).");
+  }
+  if (buffer.byteLength < MIN_FILE_BYTES || buffer.byteLength > MAX_FILE_BYTES) {
+    throw new OcrFailureError(
+      "UNSUPPORTED",
+      `Stored document size (${formatHumanFileSize(buffer.byteLength)}) is outside allowed 15 KB to 1 MB OCR limit.`
     );
   }
 
-  const lowConfidenceCount = extractedActivities.filter((a) => (a.ocrConfidence || 1.0) < 0.8).length;
+  const extFromPath = getFileExtension(normalizedTarget);
+  const extFromName = getFileExtension(doc.fileName);
+  const ext = extFromPath || extFromName;
+  const sig = detectMagicSignature(buffer);
+
+  if (ext === "pdf" && sig !== "pdf") {
+    throw new OcrFailureError("CORRUPT", "File magic bytes do not match PDF format.");
+  }
+  if (ext === "png" && sig !== "png") {
+    throw new OcrFailureError("CORRUPT", "File magic bytes do not match PNG format.");
+  }
+  if ((ext === "jpg" || ext === "jpeg") && sig !== "jpg") {
+    throw new OcrFailureError("CORRUPT", "File magic bytes do not match JPEG format.");
+  }
+  if (ext !== "pdf" && ext !== "png" && ext !== "jpg" && ext !== "jpeg") {
+    throw new OcrFailureError("UNSUPPORTED", `Unsupported OCR format .${ext}. Only PDF, PNG, and JPG are supported.`);
+  }
+
+  return { document: doc, buffer, ext };
+}
+
+/**
+ * Pure byte-based OCR execution helper (reused by both API and fixture tests).
+ * Notice: fileName parameter is purely for display metadata and NEVER affects extraction.
+ */
+export async function processBufferOcr(params: {
+  buffer: Buffer;
+  ext: string;
+  claimId?: string;
+  portId?: string;
+  berthId?: string;
+  ports?: Port[];
+  fileName?: string;
+  timeoutMs?: number;
+}): Promise<Omit<OcrProcessingResult, "documentId" | "draft">> {
+  const { pages, isScanned } = await extractPagesFromBuffer(params.buffer, params.ext, {
+    timeoutMs: params.timeoutMs ?? DEFAULT_OCR_TIMEOUT_MS
+  });
+
+  const parsed = parseSoFPages(pages, {
+    claimId: params.claimId || "",
+    portId: params.portId,
+    berthId: params.berthId
+  });
+
+  if (parsed.events.length === 0) {
+    throw new OcrFailureError(
+      "NO_TEXT",
+      "Document text was read, but no valid Statement of Facts date/time events were found."
+    );
+  }
+
+  const portsToCheck = params.ports !== undefined
+    ? params.ports
+    : params.claimId
+    ? getClaimById(params.claimId)?.ports || []
+    : [];
+  const detected = detectDiscrepancies(parsed.events, portsToCheck, 0.8);
+
+  const lowConfEvents = parsed.events.filter((e) => e.overallConfidencePct < 80);
+  const overallPct = parsed.overallConfidence;
+  const overallNorm = Number((overallPct / 100).toFixed(2));
+
+  // Ensure overall confidence discrepancy exists if document confidence < 80% and none attached yet
+  if (overallPct < 80 && !detected.some((d) => d.type === "low_confidence")) {
+    detected.push({
+      id: `disc-conf-overall`,
+      claimId: params.claimId || "",
+      type: "low_confidence",
+      severity: "warning",
+      title: `Low OCR Extraction Confidence (${overallPct}%)`,
+      description: `Overall OCR confidence is ${overallPct}% (threshold 80%). Review highlighted fields against original document.`,
+      field: "ocrConfidence",
+      currentValue: `${overallPct}%`,
+      suggestedValue: "Review highlighted events in OCR studio",
+      isResolved: false
+    });
+  }
+
+  const safePages = pages.map((p: OcrExtractedPage) => ({
+    pageNumber: p.pageNumber,
+    text: p.text,
+    averageConfidence: p.averageConfidence
+  }));
 
   return {
-    fileName,
+    fileName: params.fileName || "document",
     isScanned,
-    overallConfidence,
-    extractedActivities,
-    lowConfidenceCount,
-    flaggedDiscrepancies,
-    rawTextPreview: `[OCR ENGINE TEXT STREAM: ${fileName}]\n` +
-      `--------------------------------------------------------\n` +
-      `VESSEL STATEMENT OF FACTS / TIME LOG\n` +
-      `DOCUMENT TYPE: ${isScanned ? "SCANNED BITMAP IMAGE (OCR APPLIED)" : "NATIVE DIGITAL PDF VECTOR"}\n` +
-      `CONFIDENCE INDEX: ${(overallConfidence * 100).toFixed(1)}%\n` +
-      `EXTRACTED EVENTS COUNT: ${extractedActivities.length}\n` +
-      `FLAGGED DISCREPANCIES: ${flaggedDiscrepancies.length}\n` +
-      `--------------------------------------------------------\n` +
-      extractedActivities.map((a, i) => `${i + 1}. [${a.startTime.slice(0, 16)}] - [${a.stopTime.slice(0, 16)}] : ${a.activityName} (${a.deductionCategory}, ${a.percentageCounted}% counted, ${(a.ocrConfidence! * 100).toFixed(0)}% conf)`).join("\n")
+    isDemo: false,
+    overallConfidence: overallNorm,
+    overallConfidencePct: overallPct,
+    extractedActivities: parsed.events,
+    lowConfidenceCount: lowConfEvents.length,
+    flaggedDiscrepancies: detected,
+    rawTextPreview: parsed.rawText,
+    pages: safePages
   };
+}
+
+/**
+ * 1.5 Opt-in Demo Mode: strictly disabled in production and off by default unless OCR_MODE=demo.
+ */
+export function isDemoOcrModeEnabled(): boolean {
+  return process.env.OCR_MODE === "demo" && process.env.NODE_ENV !== "production";
+}
+
+function buildDemoOcrResult(
+  doc: DocumentRecord,
+  claimId: string,
+  portId?: string,
+  berthId?: string
+): Omit<OcrProcessingResult, "documentId" | "draft"> {
+  const pages: OcrExtractedPage[] = [
+    {
+      pageNumber: 1,
+      averageConfidence: 96,
+      text: [
+        "10/07/2024 0400 Vessel arrived at port limits",
+        "10/07/2024 0430-1030 NOR tendered",
+        "10/07/2024 1030 Waiting for berth",
+        "11/07/2024 1400 All fast",
+        "11/07/2024 1600 Commenced discharging",
+        "12/07/2024 1400-1800 Rain",
+        "14/07/2024 2000 Completed discharging"
+      ].join("\n")
+    }
+  ];
+  const parsed = parseSoFPages(pages, { claimId, portId, berthId });
+  return {
+    fileName: doc.fileName,
+    isScanned: false,
+    isDemo: true,
+    overallConfidence: Number((parsed.overallConfidence / 100).toFixed(2)),
+    overallConfidencePct: parsed.overallConfidence,
+    extractedActivities: parsed.events,
+    lowConfidenceCount: 0,
+    flaggedDiscrepancies: [],
+    rawTextPreview: parsed.rawText,
+    pages
+  };
+}
+
+/**
+ * Full server-side OCR pipeline for an uploaded documentId:
+ * loadDocument -> status OCR Processing -> extractText -> parseSoF -> save Draft -> status OCR Completed / OCR Failed.
+ */
+export async function runRealOcrForDocument(params: {
+  documentId: string;
+  portId?: string;
+  berthId?: string;
+  actor: string;
+}): Promise<OcrProcessingResult> {
+  const { document, buffer, ext } = loadDocument(params.documentId);
+  const claimId = document.claimId;
+  if (!claimId) {
+    throw new OcrFailureError("UNSUPPORTED", "Document must be linked to a claim before running OCR.");
+  }
+
+  const acquired = tryAcquireDocumentOcrLock(params.documentId);
+  if (!acquired) {
+    throw new OcrFailureError("PROCESSING_ERROR", "OCR is already running on this document.");
+  }
+
+  try {
+    const core = isDemoOcrModeEnabled()
+      ? buildDemoOcrResult(document, claimId, params.portId, params.berthId)
+      : await processBufferOcr({
+          buffer,
+          ext,
+          claimId,
+          portId: params.portId,
+          berthId: params.berthId,
+          fileName: document.fileName
+        });
+
+    const draft = persistOcrDraftAndDiscrepancies({
+      documentId: params.documentId,
+      claimId,
+      portId: params.portId,
+      berthId: params.berthId,
+      rawText: core.rawTextPreview,
+      pages: core.pages,
+      parsedEvents: core.extractedActivities,
+      overallConfidencePct: core.overallConfidencePct,
+      isScanned: core.isScanned,
+      isDemo: core.isDemo,
+      discrepancies: core.flaggedDiscrepancies,
+      actor: params.actor
+    });
+
+    return {
+      documentId: params.documentId,
+      ...core,
+      draft
+    };
+  } catch (err: any) {
+    const reason = err?.message || "OCR extraction failed.";
+    markDocumentOcrFailed(params.documentId, reason, params.actor);
+    throw err;
+  }
 }

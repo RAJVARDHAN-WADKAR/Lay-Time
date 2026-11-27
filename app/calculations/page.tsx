@@ -6,9 +6,11 @@ import { getClaims, getClaimById, getSettings, updateClaim } from "@/lib/api";
 import { Claim, CalculationAssumptions, DeductionItem, SoFActivity } from "@/lib/types";
 import { DEFAULT_ASSUMPTIONS } from "@/lib/calculations";
 import { formatCurrency, formatMinutesToDuration } from "@/lib/utils/formatters";
+import { getNowDatetimeLocalIso } from "@/lib/utils/dateRules";
 import { exportClaimPdf } from "@/lib/utils/exportPdf";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Input, Select } from "@/components/ui/inputs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -33,13 +35,14 @@ import { RacCalculator } from "@/components/calculations/RacCalculator";
 import { Briefcase } from "lucide-react";
 
 export default function CalculationsPage() {
-  const { success, info } = useToast();
+  const { success, info, error: showError } = useToast();
   const [calculatorTab, setCalculatorTab] = useState<"standard" | "oilchem" | "rac">("standard");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string>("");
   const [claim, setClaim] = useState<Claim | null>(null);
   const [assumptions, setAssumptions] = useState<CalculationAssumptions>(DEFAULT_ASSUMPTIONS);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Scratchpad / Interactive Parameters (when no claim selected or custom testing)
   const [scratchpadMode, setScratchpadMode] = useState<boolean>(false);
@@ -62,21 +65,34 @@ export default function CalculationsPage() {
     remarks: "",
   });
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isManualRefresh = false) => {
     setIsLoading(true);
-    const [allClaims, stg] = await Promise.all([getClaims(), getSettings()]);
-    setClaims(allClaims);
-    setAssumptions(stg);
-    if (allClaims.length > 0 && !selectedClaimId && !scratchpadMode) {
-      setSelectedClaimId(allClaims[0].id);
-      setClaim(allClaims[0]);
-      setDeductions(allClaims[0].deductions || []);
-    } else if (allClaims.length === 0) {
-      setClaim(null);
-      setSelectedClaimId("");
+    setLoadError(null);
+    try {
+      const [allClaims, stg] = await Promise.all([getClaims(), getSettings()]);
+      setClaims(allClaims);
+      setAssumptions(stg);
+      if (allClaims.length > 0 && !selectedClaimId && !scratchpadMode) {
+        setSelectedClaimId(allClaims[0].id);
+        setClaim(allClaims[0]);
+        setDeductions(allClaims[0].deductions || []);
+      } else if (allClaims.length === 0) {
+        setClaim(null);
+        setSelectedClaimId("");
+      }
+      if (isManualRefresh) {
+        success("Calculations Refreshed", "Claims and contractual settings synced.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load claims and settings.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [selectedClaimId, scratchpadMode]);
+  }, [selectedClaimId, scratchpadMode, success, showError]);
 
   useEffect(() => {
     loadData();
@@ -368,6 +384,16 @@ export default function CalculationsPage() {
           )}
 
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadData(true)}
+            disabled={isLoading}
+            className="text-xs h-9 px-3 bg-white rounded-xl flex items-center space-x-1.5"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+          <Button
             size="sm"
             onClick={handleExportPDF}
             disabled={!claim}
@@ -378,6 +404,15 @@ export default function CalculationsPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load calculations workspace"
+          message={loadError}
+          onRetry={() => loadData(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Scratchpad Interactive Inputs */}
       {scratchpadMode && (
@@ -396,6 +431,7 @@ export default function CalculationsPage() {
                 <label className="font-bold text-slate-700 block">Operations Start</label>
                 <Input
                   type="datetime-local"
+                  max={getNowDatetimeLocalIso()}
                   value={opsStart}
                   onChange={(e) => setOpsStart(e.target.value)}
                   className="h-9 text-xs"
@@ -406,6 +442,7 @@ export default function CalculationsPage() {
                 <label className="font-bold text-slate-700 block">Operations End</label>
                 <Input
                   type="datetime-local"
+                  max={getNowDatetimeLocalIso()}
                   value={opsEnd}
                   onChange={(e) => setOpsEnd(e.target.value)}
                   className="h-9 text-xs"
@@ -599,6 +636,7 @@ export default function CalculationsPage() {
               <label className="font-bold text-slate-700 block">Start Time</label>
               <Input
                 type="datetime-local"
+                max={getNowDatetimeLocalIso()}
                 value={newDeduction.startTime}
                 onChange={(e) =>
                   setNewDeduction((prev) => ({ ...prev, startTime: e.target.value }))
@@ -612,6 +650,7 @@ export default function CalculationsPage() {
               <label className="font-bold text-slate-700 block">Stop Time</label>
               <Input
                 type="datetime-local"
+                max={getNowDatetimeLocalIso()}
                 value={newDeduction.stopTime}
                 onChange={(e) =>
                   setNewDeduction((prev) => ({ ...prev, stopTime: e.target.value }))

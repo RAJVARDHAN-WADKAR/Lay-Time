@@ -11,9 +11,12 @@ import {
   Layers,
   CheckCircle2,
   Filter,
-  Printer
+  Printer,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
+import { useToast } from "@/lib/hooks/useToast";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/formatters";
 import jsPDF from "jspdf";
@@ -21,12 +24,35 @@ import autoTable from "jspdf-autotable";
 
 export default function RacReportsPage() {
   const { currentUser } = useAuth();
+  const { success, error: showError } = useToast();
   const [cases, setCases] = useState<RacCase[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reportType, setReportType] = useState<"summary" | "cases" | "calculations" | "status">("summary");
   const [clientFilter, setClientFilter] = useState("All");
 
+  const loadCases = async (isManualRefresh = false) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getRacCases();
+      setCases(data);
+      if (isManualRefresh) {
+        success("RAC Reports Refreshed", "Loaded latest RAC portfolio records.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load RAC cases for reporting.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    getRacCases().then(setCases);
+    loadCases();
   }, []);
 
   const filteredCases = cases.filter((c) => clientFilter === "All" || c.clientName === clientFilter);
@@ -108,14 +134,35 @@ export default function RacReportsPage() {
           </div>
         </div>
 
-        <Button
-          onClick={generatePdfReport}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold h-9 px-4 rounded-lg flex items-center space-x-1.5 cursor-pointer shadow-xs"
-        >
-          <Download className="h-4 w-4" />
-          <span>Export Official PDF Report</span>
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadCases(true)}
+            disabled={isLoading}
+            className="text-xs font-semibold h-9 px-3 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+          <Button
+            onClick={generatePdfReport}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold h-9 px-4 rounded-lg flex items-center space-x-1.5 cursor-pointer shadow-xs"
+          >
+            <Download className="h-4 w-4" />
+            <span>Export Official PDF Report</span>
+          </Button>
+        </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load RAC reports"
+          message={loadError}
+          onRetry={() => loadCases(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Report Type Selector Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

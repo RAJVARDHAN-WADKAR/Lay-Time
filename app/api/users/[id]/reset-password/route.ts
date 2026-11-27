@@ -13,7 +13,6 @@ const ResetPasswordSchema = z.object({
 
 export const POST = withApi({
   permission: "users:manage",
-  roles: ["Admin", "ADMIN"],
   schema: ResetPasswordSchema,
   handler: async ({ user, params, body, req }) => {
     const targetId = params.id;

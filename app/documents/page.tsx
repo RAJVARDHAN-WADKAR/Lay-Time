@@ -6,11 +6,18 @@ import { getDocuments, uploadDocument, deleteDocument, getClaims } from "@/lib/a
 import { DocumentRecord, Claim, DocumentType } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Select, Input } from "@/components/ui/inputs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/lib/utils/formatters";
 import { useToast } from "@/lib/hooks/useToast";
 import { useAuth } from "@/lib/context/AuthContext";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
+import {
+  UPLOAD_LIMIT_LABEL,
+  formatHumanFileSize,
+  validateUploadFileClient
+} from "@/lib/uploads/constants";
 import { Modal } from "@/components/ui/modal";
 import Link from "next/link";
 import {
@@ -33,14 +40,12 @@ import {
   FileUp,
 } from "lucide-react";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "csv", "tsv"];
-
 function DocumentsContent() {
   const searchParams = useSearchParams();
   const urlClaimId = searchParams.get("claimId") || "";
 
-  const { canUploadDocuments, canDeleteDocuments } = useAuth();
+  const { role, currentUser, canUploadDocuments, canDeleteDocuments } = useAuth();
+  const normRole = normalizeRole(role, Boolean(currentUser?.clientId || (currentUser as any)?.client_id));
   const { success, error, info } = useToast();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -50,8 +55,11 @@ function DocumentsContent() {
   const [customTitle, setCustomTitle] = useState("");
   const [tags, setTags] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadValidationError, setUploadValidationError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -66,8 +74,9 @@ function DocumentsContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (isManualRefresh = false) => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [docs, cls] = await Promise.all([getDocuments(), getClaims()]);
       setDocuments(docs);
@@ -77,33 +86,24 @@ function DocumentsContent() {
       } else if (cls.length > 0 && !selectedClaimId) {
         setSelectedClaimId(cls[0].id);
       }
+      if (isManualRefresh) {
+        success("Documents Refreshed", `Loaded ${docs.length} documents from repository.`);
+      }
     } catch (e: any) {
-      error("Fetch Error", e.message || "Could not load documents");
+      const msg = e.message || "Could not load documents";
+      setLoadError(msg);
+      error("Fetch Error", msg);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedClaimId, urlClaimId, error]);
+  }, [selectedClaimId, urlClaimId, error, success]);
 
   useEffect(() => {
     fetchAll();
-
-    const handleStorage = () => fetchAll();
-    window.addEventListener("demurrage_storage_change", handleStorage);
-    return () => window.removeEventListener("demurrage_storage_change", handleStorage);
   }, [fetchAll]);
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
-    if (file.size > MAX_FILE_SIZE) {
-      return { valid: false, error: "File exceeds 20MB limit." };
-    }
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-      return {
-        valid: false,
-        error: `Invalid file type (.${ext}). Allowed: PDF, PNG, JPG, CSV, TSV.`,
-      };
-    }
-    return { valid: true };
+    return validateUploadFileClient(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,10 +111,14 @@ function DocumentsContent() {
     if (file) {
       const check = validateFile(file);
       if (!check.valid) {
-        error("Invalid File", check.error || "File not allowed");
+        const msg = check.error || "File not allowed";
+        setUploadValidationError(msg);
+        setSelectedFile(null);
+        error("Invalid File", msg);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
+      setUploadValidationError(null);
       setSelectedFile(file);
       if (!customTitle) {
         setCustomTitle(file.name);
@@ -142,9 +146,13 @@ function DocumentsContent() {
     if (file) {
       const check = validateFile(file);
       if (!check.valid) {
-        error("Invalid File", check.error || "File not allowed");
+        const msg = check.error || "File not allowed";
+        setUploadValidationError(msg);
+        setSelectedFile(null);
+        error("Invalid File", msg);
         return;
       }
+      setUploadValidationError(null);
       setSelectedFile(file);
       if (!customTitle) {
         setCustomTitle(file.name);
@@ -159,23 +167,29 @@ function DocumentsContent() {
       return;
     }
 
+    const clientCheck = validateFile(selectedFile);
+    if (!clientCheck.valid) {
+      const msg = clientCheck.error || "Invalid file.";
+      setUploadValidationError(msg);
+      error("Invalid File", msg);
+      return;
+    }
+
     setIsUploading(true);
+    setUploadProgress(5);
+    setUploadValidationError(null);
     try {
       const targetClaim = claims.find((c) => c.id === selectedClaimId);
       const fileNameToUse = (customTitle.trim() || selectedFile.name).trim();
 
-      const newDoc = await uploadDocument(
-        {
-          fileName: fileNameToUse,
-          fileSize: selectedFile.size,
-          fileType: selectedFile.type || "application/pdf",
-          category: docType,
-          type: docType,
-        },
-        selectedClaimId && selectedClaimId !== "General" ? selectedClaimId : undefined,
-        targetClaim ? targetClaim.claimName : "General Maritime File",
-        docType
-      );
+      const newDoc = await uploadDocument({
+        file: selectedFile,
+        claimId: selectedClaimId && selectedClaimId !== "General" ? selectedClaimId : undefined,
+        claimName: targetClaim ? targetClaim.claimName : undefined,
+        category: docType,
+        title: fileNameToUse,
+        onProgress: (pct) => setUploadProgress(pct)
+      });
 
       setDocuments((prev) => {
         const idx = prev.findIndex((d) => d.id === newDoc.id);
@@ -191,11 +205,14 @@ function DocumentsContent() {
       setCustomTitle("");
       setTags("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setIsUploading(false);
       success("Document Uploaded", `"${newDoc.fileName}" (${newDoc.version || "v1.0"}) saved.`);
     } catch (err: any) {
+      const msg = err.message || "Could not upload document.";
+      setUploadValidationError(msg);
+      error("Upload Failed", msg);
+    } finally {
       setIsUploading(false);
-      error("Upload Failed", err.message || "Could not upload document.");
+      setUploadProgress(0);
     }
   };
 
@@ -209,18 +226,13 @@ function DocumentsContent() {
     setIsReplacing(true);
     try {
       const targetClaim = claims.find((c) => c.id === replaceTarget.claimId);
-      const updatedDoc = await uploadDocument(
-        {
-          fileName: replaceTarget.fileName,
-          fileSize: replaceFile.size,
-          fileType: replaceFile.type || "application/pdf",
-          category: replaceTarget.category || replaceTarget.type || "SOF",
-          type: replaceTarget.type || "SOF",
-        },
-        replaceTarget.claimId,
-        targetClaim ? targetClaim.claimName : replaceTarget.claimName,
-        replaceTarget.type
-      );
+      const updatedDoc = await uploadDocument({
+        file: replaceFile,
+        claimId: replaceTarget.claimId,
+        claimName: targetClaim ? targetClaim.claimName : replaceTarget.claimName,
+        category: replaceTarget.category || replaceTarget.type || "SOF",
+        title: replaceTarget.fileName
+      });
 
       setDocuments((prev) => {
         const idx = prev.findIndex((d) => d.id === updatedDoc.id);
@@ -235,11 +247,11 @@ function DocumentsContent() {
       setReplaceTarget(null);
       setReplaceFile(null);
       if (replaceInputRef.current) replaceInputRef.current.value = "";
-      setIsReplacing(false);
       success("Version Updated", `Uploaded new version (${updatedDoc.version}) of "${updatedDoc.fileName}".`);
     } catch (err: any) {
-      setIsReplacing(false);
       error("Replace Failed", err.message || "Failed to replace document.");
+    } finally {
+      setIsReplacing(false);
     }
   };
 
@@ -254,35 +266,17 @@ function DocumentsContent() {
   };
 
   const handleDownload = (doc: DocumentRecord) => {
-    const content = `Laytime Calculation System - Maritime Document
---------------------------------------------------
-File Name:    ${doc.fileName}
-Version:      ${doc.version || "v1.0"}
-Category:     ${doc.category || doc.type || "SOF"}
-Claim ID:     ${doc.claimId || "General"}
-Vessel:       ${doc.claimName || "N/A"}
-Status:       ${doc.status}
-Uploaded On:  ${formatDateTime(doc.uploadedAt)}
-File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
---------------------------------------------------
-[End of document stream archive]`;
-
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = `/api/documents/${doc.id}/download`;
     a.download = doc.fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     success("Download Started", `Downloading ${doc.fileName}`);
   };
 
   const formatFileSize = (bytes?: number) => {
-    if (!bytes) return "0 KB";
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${Math.round(bytes / 1024)} KB`;
+    return formatHumanFileSize(bytes || 0);
   };
 
   return (
@@ -335,7 +329,7 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
           <Button
             variant="ghost"
             size="sm"
-            onClick={fetchAll}
+            onClick={() => fetchAll(true)}
             className="h-9 px-3 text-xs text-slate-600 hover:text-slate-900"
             title="Refresh repository"
           >
@@ -343,6 +337,15 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load documents"
+          message={loadError}
+          onRetry={() => fetchAll(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* UPLOAD DOCUMENT ZONE (Only if user can upload documents) */}
       {canUploadDocuments() && (
@@ -353,7 +356,7 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
               <span>Upload Document</span>
             </CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              Upload supporting maritime documents (PDF, PNG, JPG, CSV, TSV — max 20MB)
+              {UPLOAD_LIMIT_LABEL}
             </CardDescription>
           </CardHeader>
 
@@ -381,7 +384,7 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
                   className="hidden"
                 />
 
-                <div className="flex flex-col items-center justify-center space-y-2">
+                <div className="flex flex-col items-center justify-center space-y-2.5">
                   <div className="p-3 bg-white rounded-full border border-slate-200 shadow-2xs">
                     {selectedFile ? (
                       <CheckCircle2 className="h-6 w-6 text-emerald-600" />
@@ -394,22 +397,59 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
                       <div>
                         <p className="text-xs font-bold text-slate-900">{selectedFile.name}</p>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          {formatFileSize(selectedFile.size)} • Click or drop another file to change
+                          {formatFileSize(selectedFile.size)} • Ready to upload
                         </p>
                       </div>
                     ) : (
                       <div>
                         <p className="text-xs font-bold text-slate-800">
-                          Click to browse or drag and drop your file here
+                          Drag and drop your file here
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Supports PDF, PNG, JPG, CSV, TSV up to 20MB
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {UPLOAD_LIMIT_LABEL}
                         </p>
                       </div>
                     )}
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="h-8 px-4 text-xs font-semibold bg-white border-slate-300 hover:bg-slate-100 rounded-xl"
+                  >
+                    Browse files
+                  </Button>
                 </div>
               </div>
+
+              {uploadValidationError && (
+                <div
+                  role="alert"
+                  className="flex items-center space-x-2 text-xs text-rose-800 bg-rose-50 border border-rose-200 px-3.5 py-2.5 rounded-xl"
+                >
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                  <span className="font-semibold">{uploadValidationError}</span>
+                </div>
+              )}
+
+              {isUploading && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-600">
+                    <span>Uploading file...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 transition-all duration-150"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Metadata Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-left">
@@ -447,13 +487,17 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
 
                 {/* Link to Claim */}
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 block">Link to Claim (Optional)</label>
+                  <label className="font-bold text-slate-700 block">
+                    {normRole === "CLAIM_PROCESSOR" ? "Assigned Claim (Required)" : "Link to Claim (Optional)"}
+                  </label>
                   <Select
                     value={selectedClaimId}
                     onChange={(e) => setSelectedClaimId(e.target.value)}
                     className="h-9 text-xs bg-white"
                   >
-                    <option value="">General (No specific claim)</option>
+                    {normRole !== "CLAIM_PROCESSOR" && (
+                      <option value="">General (No specific claim)</option>
+                    )}
                     {claims.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.id} — {c.shipName}
@@ -843,7 +887,7 @@ File Size:    ${Math.round((doc.fileSize || 1024) / 1024)} KB
               ) : (
                 <div>
                   <p className="font-bold text-slate-700">Click to select new file version</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">PDF, PNG, JPG, CSV, TSV (max 20MB)</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{UPLOAD_LIMIT_LABEL}</p>
                 </div>
               )}
             </div>

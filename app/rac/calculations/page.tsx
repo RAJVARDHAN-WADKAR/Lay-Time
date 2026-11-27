@@ -16,14 +16,18 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/formatters";
+import { useToast } from "@/lib/hooks/useToast";
 
 export default function RacCalculationsPage() {
   const { currentUser, role } = useAuth();
+  const { success, error: showError } = useToast();
   const [cases, setCases] = useState<RacCase[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
 
   // Parameter Sets
@@ -49,19 +53,27 @@ export default function RacCalculationsPage() {
 
   const [activeCalculation, setActiveCalculation] = useState<RacCalculation | null>(null);
 
-  const loadCases = async () => {
+  const loadCases = async (isManualRefresh = false) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getRacCases();
       setCases(data);
-      if (data.length > 0) {
+      if (data.length > 0 && !selectedCaseId) {
         setSelectedCaseId(data[0].id);
         if (data[0].calculation) {
           setActiveCalculation(data[0].calculation);
         }
       }
-    } catch (e) {
-      console.error(e);
+      if (isManualRefresh) {
+        success("RAC Calculations Refreshed", "Loaded latest RAC cases from server.");
+      }
+    } catch (e: any) {
+      const msg = e?.message || "Failed to load RAC cases.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -131,6 +143,16 @@ export default function RacCalculationsPage() {
 
         {/* Case selector dropdown */}
         <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadCases(true)}
+            disabled={loading}
+            className="text-xs h-9 px-3 rounded-lg flex items-center space-x-1.5"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
           <span className="text-xs font-semibold text-slate-600">Select Case:</span>
           <select
             value={selectedCaseId}
@@ -145,6 +167,15 @@ export default function RacCalculationsPage() {
           </select>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load RAC calculation cases"
+          message={loadError}
+          onRetry={() => loadCases(true)}
+          isRetrying={loading}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Parameter & Input Setup */}

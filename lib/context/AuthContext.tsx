@@ -4,8 +4,12 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { User, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
-  normalizeRole,
-  isProcessor,
+  AppRole,
+  can,
+  getRoleDashboardPath,
+  normalizeRole
+} from "@/lib/auth/accessMatrix";
+import {
   canViewClaims as canViewClaimsFn,
   canViewAllClaims as canViewAllClaimsFn,
   canCreateClaim as canCreateClaimFn,
@@ -238,6 +242,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setIsAuthenticated(false);
       if (typeof window !== "undefined") {
+        try {
+          window.localStorage.removeItem("laytime_client_store_v2");
+        } catch {}
         window.dispatchEvent(new Event("demurrage_storage_change"));
       }
       router.push("/login");
@@ -245,7 +252,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const userRole = user ? normalizeRole(user.role) : "Reviewer";
+  const isClientUser = Boolean(user?.clientId || (user as any)?.client_id);
+  const userRole: AppRole = user ? normalizeRole(user.role, isClientUser) : "REVIEWER";
 
   const canEditClaim = useCallback(
     (claimAssignedTo?: string, claimClient?: string): boolean => {
@@ -350,8 +358,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canAccessUsers = isAuthenticated && canAccessUsersFn(user?.role);
   const canManageSettings = isAuthenticated && canManageSettingsFn(user?.role);
   const canAccessSettings = isAuthenticated && canAccessSettingsFn(user?.role);
-  const canViewAuditLog = isAuthenticated && canViewAuditLogFn(user?.role);
-  const isReadOnly = !isAuthenticated || userRole === "REVIEWER" || userRole === "CLIENT" || user?.role === "Reviewer" || user?.role === "Client";
+  const canViewAuditLog = isAuthenticated && canViewAuditLogFn(user?.role, user?.clientId);
+  const isReadOnly = !isAuthenticated || userRole === "REVIEWER" || userRole === "CLIENT";
 
   return (
     <AuthContext.Provider

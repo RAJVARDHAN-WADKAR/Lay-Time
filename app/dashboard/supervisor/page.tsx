@@ -4,7 +4,7 @@ import { SupervisorDashboard } from "@/components/dashboard/supervisor/Superviso
 
 export default function SupervisorDashboardPage() {
   return (
-    <RequireRole allowedRoles={["Supervisor", "SUPERVISOR"]}>
+    <RequireRole allowedRoles={["SUPERVISOR"]}>
       <SupervisorDashboard />
     </RequireRole>
   );

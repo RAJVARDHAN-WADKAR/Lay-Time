@@ -1,30 +1,21 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { calculateOilChemPumping } from "@/lib/calculations/oilChem";
-import { requireUser } from "@/lib/auth/session";
-import { normalizeRole } from "@/app/access/roles";
+import { withApi, isClaimAssignedToUser, isClaimOwnedByClient } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getDatabase } from "@/lib/db";
-import { claimScope } from "@/lib/db/scoped";
 import { getClaimById } from "@/lib/db/queries";
 
-export async function GET(request: NextRequest) {
-  try {
-    const authResult = await requireUser(request);
-    if (authResult.error) {
-      return authResult.error;
-    }
-
-    const { user } = authResult;
+export const GET = withApi({
+  permission: "calculator:view",
+  handler: async ({ user, req }) => {
     const db = getDatabase();
-    const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(req.url);
     const claimIdParam = searchParams.get("claimId");
 
-    const isClient =
-      user.role === "Client" ||
-      (user.role === "REVIEWER_CLIENT" &&
-        Boolean(user.assignedClientId || user.clientId || user.client_id));
-    const normRole = normalizeRole(user.role);
+    const isClient = Boolean(user.assignedClientId || user.clientId || user.client_id);
+    const normRole = normalizeRole(user.role, isClient);
 
     if (claimIdParam) {
       const claim = getClaimById(claimIdParam);
@@ -32,49 +23,31 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Claim not found" }, { status: 404 });
       }
 
-      if (isClient) {
-        const clientId = user.assignedClientId || user.clientId || user.client_id;
-        if (!clientId || claim.clientId !== clientId) {
-          return NextResponse.json(
-            { error: "Forbidden: External clients may only access calculations for their own claims" },
-            { status: 403 }
-          );
-        }
+      if (normRole === "CLIENT" && !isClaimOwnedByClient(claim, user)) {
+        return NextResponse.json(
+          { error: "Forbidden: External clients may only access calculations for their own claims" },
+          { status: 403 }
+        );
       }
 
-      if (normRole === "CLAIM_PROCESSOR") {
-        const assigned = (claim.assignedTo || "").trim().toLowerCase();
-        const userId = (user.id || "").trim().toLowerCase();
-        const userName = (user.name || "").trim().toLowerCase();
-        const userEmail = (user.email || "").trim().toLowerCase();
-
-        const isAssigned =
-          assigned !== "" &&
-          (assigned === userId || assigned === userName || assigned === userEmail);
-
-        if (!isAssigned) {
-          return NextResponse.json(
-            { error: "Forbidden: Claim Processors may only access calculations for assigned claims" },
-            { status: 403 }
-          );
-        }
+      if (normRole === "CLAIM_PROCESSOR" && !isClaimAssignedToUser(claim, user)) {
+        return NextResponse.json(
+          { error: "Forbidden: Claim Processors may only access calculations for assigned claims" },
+          { status: 403 }
+        );
       }
 
       const rows = db
         .prepare("SELECT * FROM oil_chem_calculations WHERE claim_id = ? ORDER BY created_at DESC")
         .all(claimIdParam) as any[];
 
-      const calculations = rows.map(mapOilChemRow);
-      return NextResponse.json({ calculations });
+      return NextResponse.json({ calculations: rows.map(mapOilChemRow) });
     }
 
-    // List all scoped oil_chem_calculations
     let rows: any[] = [];
-    if (isClient) {
+    if (normRole === "CLIENT") {
       const clientId = user.assignedClientId || user.clientId || user.client_id;
-      if (!clientId) {
-        return NextResponse.json({ calculations: [] });
-      }
+      if (!clientId) return NextResponse.json({ calculations: [] });
       rows = db
         .prepare(`
           SELECT occ.* 
@@ -95,64 +68,28 @@ export async function GET(request: NextRequest) {
         `)
         .all(user.id, user.name, user.email) as any[];
     } else {
-      // ADMIN, SUPERVISOR, Internal Reviewer
-      rows = db
-        .prepare("SELECT * FROM oil_chem_calculations ORDER BY created_at DESC")
-        .all() as any[];
+      rows = db.prepare("SELECT * FROM oil_chem_calculations ORDER BY created_at DESC").all() as any[];
     }
 
-    const calculations = rows.map(mapOilChemRow);
-    return NextResponse.json({ calculations });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: "Failed to fetch oil/chem calculations" },
-      { status: 500 }
-    );
+    return NextResponse.json({ calculations: rows.map(mapOilChemRow) });
   }
-}
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    const authResult = await requireUser(request);
-    if (authResult.error) {
-      return authResult.error;
-    }
-
-    const { user } = authResult;
+export const POST = withApi({
+  permission: "calculator:use",
+  handler: async ({ user, body }) => {
     const normRole = normalizeRole(user.role);
 
-    // Reviewer and external client are strictly read-only
-    if (normRole === "REVIEWER_CLIENT") {
-      return NextResponse.json(
-        { error: "Forbidden: Reviewers and clients have read-only access and cannot perform calculations." },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-
-    if (body.claimId) {
+    if (body?.claimId) {
       const claim = getClaimById(body.claimId);
       if (!claim) {
         return NextResponse.json({ error: "Claim not found" }, { status: 404 });
       }
-
-      if (normRole === "CLAIM_PROCESSOR") {
-        const assigned = (claim.assignedTo || "").trim().toLowerCase();
-        const userId = (user.id || "").trim().toLowerCase();
-        const userName = (user.name || "").trim().toLowerCase();
-        const userEmail = (user.email || "").trim().toLowerCase();
-
-        const isAssigned =
-          assigned !== "" &&
-          (assigned === userId || assigned === userName || assigned === userEmail);
-
-        if (!isAssigned) {
-          return NextResponse.json(
-            { error: "Forbidden: Claim Processors may only calculate on assigned claims" },
-            { status: 403 }
-          );
-        }
+      if (normRole === "CLAIM_PROCESSOR" && !isClaimAssignedToUser(claim, user)) {
+        return NextResponse.json(
+          { error: "Forbidden: Claim Processors may only calculate on assigned claims" },
+          { status: 403 }
+        );
       }
     }
 
@@ -168,7 +105,7 @@ export async function POST(request: NextRequest) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       result.id,
-      body.claimId || null,
+      body?.claimId || null,
       result.cargoName,
       result.cargoType,
       result.quantityMetricTons,
@@ -190,13 +127,8 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({ success: true, calculation: result }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: "Failed to calculate oil/chem pumping" },
-      { status: 500 }
-    );
   }
-}
+});
 
 function mapOilChemRow(r: any) {
   return {

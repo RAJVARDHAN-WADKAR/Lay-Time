@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/context/AuthContext";
+import { can } from "@/lib/auth/accessMatrix";
 import { getRacCases } from "@/lib/api/rac";
 import { RacCase, RacStatus, RacType } from "@/lib/types";
 import {
@@ -15,10 +16,13 @@ import {
   Filter,
   PlusCircle,
   ArrowUpRight,
-  FileText
+  FileText,
+  RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
+import { useToast } from "@/lib/hooks/useToast";
 import { Card } from "@/components/ui/card";
 import { KPICard } from "@/components/ui/kpi-card";
 import { formatCurrency } from "@/lib/utils/formatters";
@@ -45,17 +49,21 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function RacDashboardPage() {
-  const { currentUser, role } = useAuth();
+  const { role } = useAuth();
+  const { success, error: showError } = useToast();
+  const canCreateRac = can(role, "rac:edit") || can(role, "rac:submit");
   const [cases, setCases] = useState<RacCase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Filters
   const [clientFilter, setClientFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
 
-  const loadCases = useCallback(async () => {
+  const loadCases = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getRacCases({
         status: statusFilter,
@@ -63,12 +71,19 @@ export default function RacDashboardPage() {
         client: clientFilter
       });
       setCases(data);
-    } catch (e) {
-      console.error(e);
+      if (isManualRefresh) {
+        success("RAC Portfolio Refreshed", "Loaded latest RAC cases.");
+      }
+    } catch (e: any) {
+      const msg = e?.message || "Failed to load RAC cases.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setLoading(false);
     }
-  }, [clientFilter, statusFilter, typeFilter]);
+  }, [clientFilter, statusFilter, typeFilter, success, showError]);
 
   useEffect(() => {
     loadCases();
@@ -127,7 +142,17 @@ export default function RacDashboardPage() {
         </div>
 
         <div className="flex items-center space-x-3">
-          {role !== "Reviewer" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadCases(true)}
+            disabled={loading}
+            className="text-xs h-9 px-3 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+          {canCreateRac && (
             <Link href="/rac/create">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 px-3.5 shadow-xs flex items-center space-x-1.5 rounded-lg cursor-pointer">
                 <PlusCircle className="h-4 w-4" />
@@ -142,6 +167,15 @@ export default function RacDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load RAC dashboard"
+          message={loadError}
+          onRetry={() => loadCases(true)}
+          isRetrying={loading}
+        />
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center gap-3">

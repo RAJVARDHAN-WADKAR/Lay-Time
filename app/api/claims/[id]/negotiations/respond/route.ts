@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { canAccessNegotiations, respondToCounterOffer } from "@/lib/db/negotiations";
 import { z } from "zod";
@@ -10,9 +10,9 @@ const RespondSchema = z.object({
   decision: z.enum(["Accepted", "Rejected"])
 });
 
-// POST /api/claims/[id]/negotiations/respond: Processor accepts or rejects counter-offer
 export const POST = withApi({
-  roles: ["Claim Processor", "Processor", "Supervisor"],
+  permission: "negotiations:offer",
+  checkClaimOwnership: true,
   schema: RespondSchema,
   handler: async ({ user, params, body, req }) => {
     const access = canAccessNegotiations(user, params.id);
@@ -22,7 +22,7 @@ export const POST = withApi({
 
     if (access.roleType === "client") {
       return NextResponse.json(
-        { error: "Forbidden: Only Claim Processors or Supervisors can respond to counter-offers." },
+        { error: "Forbidden: Client role cannot accept or reject counter-offers." },
         { status: 403 }
       );
     }

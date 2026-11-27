@@ -81,13 +81,14 @@ const insertClient = db.prepare(`
   VALUES (?, ?, ?)
 `);
 const now = new Date().toISOString();
+insertClient.run("client-sokana", "Sokana Commercial", now);
 insertClient.run("client-trafigura", "Trafigura Trading Pte Ltd", now);
 insertClient.run("client-sokana3", "Sokana3", now);
 insertClient.run("client-eastport", "Eastport USA LLC", now);
 insertClient.run("client-peregrine", "Peregrine Tankers", now);
 insertClient.run("client-norstar", "Norstar", now);
 
-// Define clean seed users: 1 Admin, 1 Supervisor, 2 Claim Processors, 1 Reviewer (+ 1 Client Portal)
+// Define clean seed users for all 5 roles: ADMIN, SUPERVISOR, CLAIM_PROCESSOR, REVIEWER, CLIENT
 const seedUsers = [
   {
     id: "usr-admin-01",
@@ -96,7 +97,7 @@ const seedUsers = [
     altEmail: "admin@laytime.demo",
     username: "admin.laytime",
     password: adminPassword,
-    role: "Admin",
+    role: "ADMIN",
     roleDescription: "Principal Administrator & Master Mariner. System governance, users, and audit logs."
   },
   {
@@ -106,7 +107,7 @@ const seedUsers = [
     altEmail: "supervisor@laytime.demo",
     username: "supervisor.laytime",
     password: supervisorPassword,
-    role: "Supervisor",
+    role: "SUPERVISOR",
     roleDescription: "Operations Supervisor. Claim reviews, overrides, assignments, and RAC authorisation."
   },
   {
@@ -116,7 +117,7 @@ const seedUsers = [
     altEmail: "processor1@laytime.demo",
     username: "processor1.laytime",
     password: processor1Password,
-    role: "Claim Processor",
+    role: "CLAIM_PROCESSOR",
     roleDescription: "Senior Demurrage Analyst. Assigned claims, SoF timeline logging, and calculation engine."
   },
   {
@@ -126,7 +127,7 @@ const seedUsers = [
     altEmail: "processor2@laytime.demo",
     username: "processor2.laytime",
     password: processor2Password,
-    role: "Claim Processor",
+    role: "CLAIM_PROCESSOR",
     roleDescription: "Voyage Claim Analyst. Operational claims processing and timesheet reconciliations."
   },
   {
@@ -136,7 +137,7 @@ const seedUsers = [
     altEmail: "reviewer@laytime.demo",
     username: "reviewer.laytime",
     password: reviewerPassword,
-    role: "Reviewer",
+    role: "REVIEWER",
     roleDescription: "Compliance Reviewer & External Auditor. Read-only audit inspection across claims."
   }
 ];
@@ -144,15 +145,15 @@ const seedUsers = [
 if (clientPassword) {
   seedUsers.push({
     id: "usr-client-01",
-    name: "Sokana Commercial",
+    name: "Trafigura Commercial",
     email: "client@laytime.io",
     altEmail: "client1@laytime.demo",
     username: "client1.laytime",
     password: clientPassword,
-    role: "Client",
-    clientId: "client-sokana",
-    clientName: "Sokana Commercial",
-    roleDescription: "External Client Portal. Read-only access to Sokana claims and counter-offers."
+    role: "CLIENT",
+    clientId: "client-trafigura",
+    clientName: "Trafigura Trading Pte Ltd",
+    roleDescription: "External Client Portal. Read-only access to own client's claims and documents."
   });
 }
 
@@ -176,14 +177,22 @@ const updateUser = db.prepare(`
 
 for (const u of seedUsers) {
   const hash = bcrypt.hashSync(u.password, 10);
-  const existing = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR id = ?").get(u.email, u.id);
+  const existing = db
+    .prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(username) = LOWER(?) OR id = ? LIMIT 1")
+    .get(u.email, u.username, u.id);
+
+  const safePrimaryUsername = db
+    .prepare("SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ? LIMIT 1")
+    .get(u.username, existing ? existing.id : u.id)
+    ? `${u.username}.primary`
+    : u.username;
 
   if (existing) {
     updateUser.run({
       id: existing.id,
       name: u.name,
       email: u.email,
-      username: u.username,
+      username: safePrimaryUsername,
       password_hash: hash,
       role: u.role,
       client_id: u.clientId || null,
@@ -197,7 +206,7 @@ for (const u of seedUsers) {
       id: u.id,
       name: u.name,
       email: u.email,
-      username: u.username,
+      username: safePrimaryUsername,
       password_hash: hash,
       role: u.role,
       client_id: u.clientId || null,
@@ -209,13 +218,20 @@ for (const u of seedUsers) {
   }
 
   if (u.altEmail && u.altEmail !== u.email) {
-    const existingAlt = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?)").get(u.altEmail);
+    const existingAlt = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1").get(u.altEmail);
+    const altUsernameBase = `${u.username}.demo`;
+    const altUsername = db
+      .prepare("SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ? LIMIT 1")
+      .get(altUsernameBase, existingAlt ? existingAlt.id : `${u.id}-alt`)
+      ? `${altUsernameBase}.${Date.now() % 1000}`
+      : altUsernameBase;
+
     if (existingAlt) {
       updateUser.run({
         id: existingAlt.id,
         name: u.name,
         email: u.altEmail,
-        username: u.username + ".alt",
+        username: altUsername,
         password_hash: hash,
         role: u.role,
         client_id: u.clientId || null,
@@ -228,7 +244,7 @@ for (const u of seedUsers) {
         id: u.id + "-alt",
         name: u.name,
         email: u.altEmail,
-        username: u.username + ".alt",
+        username: altUsername,
         password_hash: hash,
         role: u.role,
         client_id: u.clientId || null,
@@ -240,9 +256,11 @@ for (const u of seedUsers) {
   }
 }
 
-// Assign test claims to processor1
+// Assign test benchmark claims deterministically: CLM-0001 -> processor1, CLM-0005 -> processor2
 try {
   db.prepare("UPDATE claims SET assigned_to = ? WHERE assigned_to IS NULL OR assigned_to = ''").run("Senior Demurrage Analyst");
+  db.prepare("UPDATE claims SET assigned_to = ? WHERE id = 'CLM-0001'").run("processor1@laytime.demo");
+  db.prepare("UPDATE claims SET assigned_to = ? WHERE id = 'CLM-0005'").run("processor2@laytime.demo");
 } catch {}
 
 console.log("\n=======================================================");

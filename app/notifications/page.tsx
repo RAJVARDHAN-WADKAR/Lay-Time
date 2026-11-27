@@ -12,6 +12,7 @@ import {
 import { NotificationRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/lib/utils/formatters";
 import { useToast } from "@/lib/hooks/useToast";
@@ -29,16 +30,30 @@ import {
 } from "lucide-react";
 
 export default function NotificationsPage() {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const fetchNotifs = async () => {
+  const fetchNotifs = async (isManualRefresh = false) => {
     setIsLoading(true);
-    const data = await getNotifications();
-    setNotifications(data);
-    setIsLoading(false);
+    setLoadError(null);
+    try {
+      const data = await getNotifications();
+      setNotifications(data);
+      if (isManualRefresh) {
+        success("Notifications Refreshed", "Loaded latest alerts from the server.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load notifications.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -121,6 +136,17 @@ export default function NotificationsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchNotifs(true)}
+            disabled={isLoading}
+            className="text-xs h-9 bg-white rounded-xl flex items-center space-x-1.5"
+          >
+            <RotateCcw className={`h-4 w-4 text-slate-600 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+
           {unreadCount > 0 && (
             <Button
               variant="outline"
@@ -148,6 +174,15 @@ export default function NotificationsPage() {
       </div>
 
       {/* Filter Tabs */}
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load notifications"
+          message={loadError}
+          onRetry={() => fetchNotifs(true)}
+          isRetrying={isLoading}
+        />
+      )}
+
       <div className="flex items-center space-x-2">
         <button
           onClick={() => setFilter("all")}

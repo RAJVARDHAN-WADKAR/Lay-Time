@@ -35,6 +35,14 @@ Access permissions, visible screens, tabs, buttons, and data scopes are strictly
 | **User Management (`/users`)** | Full CRUD | Subtree Team | ❌ Restricted | ❌ Restricted | ❌ Restricted | ❌ Restricted |
 | **System Settings (`/settings`)** | Full CRUD | ❌ Restricted | ❌ Restricted | ❌ Restricted | ❌ Restricted | ❌ Restricted |
 
+### Document Upload Policy & Limits
+
+All document upload endpoints and UI components share centralized configuration constants in [`lib/uploads/constants.ts`](lib/uploads/constants.ts):
+- **Allowed Formats**: `PDF`, `PNG`, `JPG` (`JPEG`), `CSV`, `TSV` (verified server-side by magic bytes and UTF-8 tabular inspection).
+- **Size Limits**: `MIN_FILE_BYTES = 15 KB` (`15,360` bytes) to `MAX_FILE_BYTES = 1 MB` (`1,048,576` bytes), measured from actual received bytes on the server and enforced early (`413`) at the request stream limit.
+- **Note**: A `15 KB` minimum will reject tiny files such as small CSV timesheets and low-resolution scans. Keep both `MIN_FILE_BYTES` and `MAX_FILE_BYTES` in `lib/uploads/constants.ts` so they can be adjusted cleanly later if needed.
+- **Deduplication & Storage**: Uploaded files are stored outside `public/` in `data/uploads/` using generated UUID names and deduplicated per claim by SHA-256 hash.
+
 ### Role Responsibilities:
 1. **ADMIN**: System administration, user lifecycle management, company-wide audit trails, and configuration settings.
 2. **SUPERVISOR**: Operations lead, claim approvals, calculation overrides, processor assignments, settlements, and company-wide financial reporting.

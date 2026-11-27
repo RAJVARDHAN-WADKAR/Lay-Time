@@ -7,6 +7,7 @@ import { calculateDashboardMetrics, filterClaims } from "@/lib/mock/aggregate";
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/formatters";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Badge } from "@/components/ui/badge";
 import {
   BarChart3,
@@ -17,7 +18,8 @@ import {
   ShieldAlert,
   Calendar,
   Filter,
-  Download
+  Download,
+  RefreshCw
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -39,18 +41,33 @@ import { useToast } from "@/lib/hooks/useToast";
 export default function AnalyticsPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState("ALL");
   const [selectedType, setSelectedType] = useState("ALL");
   const [timeRange, setTimeRange] = useState("year");
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
 
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
+  const load = async (isManualRefresh = false) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
       const data = await getClaims();
       setClaims(data);
+      if (isManualRefresh) {
+        success("Analytics Refreshed", "Commercial intelligence dataset updated.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load claims for analytics.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     load();
   }, []);
 
@@ -191,6 +208,16 @@ export default function AnalyticsPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => load(true)}
+            disabled={isLoading}
+            className="text-xs font-semibold h-9 px-3 bg-white rounded-xl flex items-center space-x-1.5"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 text-slate-600 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => success("Export Complete", "Analytics dataset exported to CSV")}
             className="text-xs font-semibold h-9 px-3.5 bg-white rounded-xl flex items-center space-x-1.5"
           >
@@ -199,6 +226,15 @@ export default function AnalyticsPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load analytics dataset"
+          message={loadError}
+          onRetry={() => load(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center gap-3">

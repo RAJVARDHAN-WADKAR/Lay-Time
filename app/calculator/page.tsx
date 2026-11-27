@@ -7,6 +7,7 @@ import { calculateClaimLaytime } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Input, Select } from "@/components/ui/inputs";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
@@ -30,7 +31,9 @@ import { useToast } from "@/lib/hooks/useToast";
 export default function CalculatorPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string>("");
-  const { success, info } = useToast();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { success, info, error: showError } = useToast();
 
   // Contractual Terms State
   const [allowedLaytimeDays, setAllowedLaytimeDays] = useState<number>(3.5);
@@ -58,15 +61,31 @@ export default function CalculatorPage() {
     { id: "a-4", activity: "Rain Delay", berthId: "b-1", start: "2024-07-12T16:00", stop: "2024-07-13T01:00", percentCounted: 50, remarks: "50% counted under C/P Cl. 17" }
   ]);
 
-  // Load claims on mount
-  useEffect(() => {
-    async function load() {
+  const load = async (isManualRefresh = false) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
       const all = await getClaims();
       setClaims(all);
-      if (all.length > 0) {
+      if (all.length > 0 && !selectedClaimId) {
         loadClaimIntoCalculator(all[0]);
       }
+      if (isManualRefresh) {
+        success("Calculator Refreshed", "Claims synced from database.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load claims for calculator.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  // Load claims on mount
+  useEffect(() => {
     load();
   }, []);
 
@@ -257,6 +276,16 @@ export default function CalculatorPage() {
           </select>
 
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => load(true)}
+            disabled={isLoading}
+            className="text-xs font-semibold h-9 px-3 rounded-xl flex items-center space-x-1.5"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+          <Button
             size="sm"
             onClick={() => success("Calculation Exported", "Laytime statement generated and downloaded")}
             className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-9 px-3.5 rounded-xl shadow-xs flex items-center space-x-1.5"
@@ -266,6 +295,15 @@ export default function CalculatorPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load calculator claims"
+          message={loadError}
+          onRetry={() => load(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* 1. CONTRACTUAL TERMS SECTION */}
       <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">

@@ -15,8 +15,6 @@ import {
   Calculator,
   AlertTriangle,
   Clock,
-  Bot,
-  Copy,
   Check,
   ChevronRight,
   ChevronLeft,
@@ -141,32 +139,19 @@ const DEMO_STEPS: DemoStep[] = [
   },
   {
     id: 6,
-    title: "RAC Module, PDF Dossier & Grounded Maritime AI",
-    badge: "RAC & Grounded AI",
+    title: "RAC Module & PDF Dossier Export",
+    badge: "RAC & Dossiers",
     summary:
-      "Showcase the 6-state RAC module, download live PDF report, and verify grounded Maritime RAG AI assistant responses.",
+      "Showcase the 6-state RAC module and download live certified PDF settlement dossiers.",
     talkingPoints: [
       "6-State RAC Lifecycle: Draft → Submitted → Under Review → Correction Required → Reviewed → Closed with audit history.",
-      "Dossier PDF Export: Generate comprehensive, mathematically certified demurrage and RAC settlement dossiers.",
-      "Grounded RAG Assistant: Ask 'What is the demurrage payable for CLM-0001?' — cited directly from stored DB calculations ($10,000 payable).",
-      "Hallucination Prevention: Test out-of-scope prompt — assistant strictly returns 'Insufficient information available in the provided claim documents.'"
+      "Dossier PDF Export: Generate comprehensive, mathematically certified demurrage and RAC settlement dossiers."
     ],
     links: [
       { label: "Open RAC Case Portfolio (/rac)", href: "/rac" },
-      { label: "Export PDF Reports (/reports)", href: "/reports" },
-      { label: "Launch AI Maritime Assistant (/ai-assistant)", href: "/ai-assistant" }
+      { label: "Export PDF Reports (/reports)", href: "/reports" }
     ],
-    suggestedRole: "Supervisor",
-    copyPrompts: [
-      {
-        label: "Copy Benchmark Query",
-        text: "What is the demurrage payable for CLM-0001?"
-      },
-      {
-        label: "Copy Out-of-Scope Query",
-        text: "What is the fuel consumption of an Airbus A380?"
-      }
-    ]
+    suggestedRole: "Supervisor"
   }
 ];
 
@@ -204,7 +189,6 @@ export function DemoGuideDrawer({ isOpen, onClose }: DemoGuideDrawerProps) {
 
   const [activeStepId, setActiveStepId] = useState<number>(1);
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({});
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
 
   if (!isOpen) return null;
@@ -218,13 +202,6 @@ export function DemoGuideDrawer({ isOpen, onClose }: DemoGuideDrawerProps) {
       ...prev,
       [stepId]: !prev[stepId]
     }));
-  };
-
-  const handleCopyPrompt = (text: string, index: number) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    info("Prompt Copied", "Pasted query copied to clipboard. Ready to test in AI Assistant.");
-    setTimeout(() => setCopiedIndex(null), 2500);
   };
 
   const handleSwitchRole = async (targetRole: string, email: string, pass: string) => {
@@ -421,45 +398,6 @@ export function DemoGuideDrawer({ isOpen, onClose }: DemoGuideDrawerProps) {
               ))}
             </ul>
           </div>
-
-          {/* Prompt Copy Section for Step 6 */}
-          {currentStep.copyPrompts && currentStep.copyPrompts.length > 0 && (
-            <div className="p-4 rounded-xl bg-indigo-950/30 border border-indigo-800/40 space-y-2.5">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-                <Bot className="h-3.5 w-3.5" />
-                <span>Test Queries for Maritime AI Assistant:</span>
-              </div>
-              <div className="space-y-2">
-                {currentStep.copyPrompts.map((cp, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-lg bg-slate-900 border border-indigo-900/60 flex items-center justify-between text-xs"
-                  >
-                    <div className="truncate pr-2">
-                      <div className="text-[10px] text-indigo-300 font-bold">{cp.label}</div>
-                      <div className="font-mono text-white text-[11px] truncate mt-0.5">{cp.text}</div>
-                    </div>
-                    <button
-                      onClick={() => handleCopyPrompt(cp.text, idx)}
-                      className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shrink-0 flex items-center space-x-1 cursor-pointer transition"
-                    >
-                      {copiedIndex === idx ? (
-                        <>
-                          <Check className="h-3 w-3 text-emerald-300" />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3 w-3" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Direct Navigation Action Links */}
           <div className="space-y-2 pt-1">

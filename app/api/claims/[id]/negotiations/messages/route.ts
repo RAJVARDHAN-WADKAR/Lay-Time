@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import {
   canAccessNegotiations,
@@ -30,9 +30,9 @@ const MessageSchema = z
     }
   );
 
-// POST /api/claims/[id]/negotiations/messages: Append-only message posting
 export const POST = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Client"],
+  permission: "negotiations:offer",
+  checkClaimOwnership: true,
   schema: MessageSchema,
   handler: async ({ user, params, body, req }) => {
     const access = canAccessNegotiations(user, params.id);
@@ -40,7 +40,6 @@ export const POST = withApi({
       return NextResponse.json({ error: "Claim negotiation room not found" }, { status: 404 });
     }
 
-    // Supervisor and Admin get read-only oversight
     if (access.roleType === "oversight") {
       return NextResponse.json(
         { error: "Forbidden: Supervisors and Administrators have read-only oversight in negotiations." },
@@ -48,7 +47,6 @@ export const POST = withApi({
       );
     }
 
-    // Rate-limit posting
     if (!checkRateLimit(user.id)) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Please wait a moment before sending another message." },
@@ -72,7 +70,6 @@ export const POST = withApi({
   }
 });
 
-// Explicitly reject PUT and DELETE to ensure messages are append-only
 export async function PUT() {
   return NextResponse.json(
     { error: "Method Not Allowed: Negotiation messages are append-only and cannot be edited." },

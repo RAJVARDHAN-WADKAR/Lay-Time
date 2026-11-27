@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
-import { getDatabase } from "@/lib/db";
 
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance", "Reviewer", "Client"],
+  permission: "invoices:view",
   handler: async () => {
     return NextResponse.json({
       invoices: [
@@ -17,7 +16,6 @@ export const GET = withApi({
 
 export const POST = withApi({
   permission: "invoices:manage",
-  roles: ["Admin", "Supervisor"],
   handler: async () => {
     return NextResponse.json({ success: true, message: "Invoice created" }, { status: 201 });
   }
@@ -25,7 +23,6 @@ export const POST = withApi({
 
 export const PUT = withApi({
   permission: "invoices:manage",
-  roles: ["Admin", "Supervisor"],
   handler: async () => {
     return NextResponse.json({ success: true, message: "Invoice updated" });
   }

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Claim, ClaimStatus } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils/formatters";
 import { exportToCSV } from "@/lib/utils/exportCsv";
@@ -97,18 +98,59 @@ export function LedgerTable({
   onUpdateClaim,
   onDeleteClaim,
 }: LedgerTableProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedClient, setSelectedClient] = useState("ALL");
-  const [selectedStatus, setSelectedStatus] = useState("ALL");
-  const [selectedType, setSelectedType] = useState("ALL");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [searchTerm, setSearchTerm] = useState(() => searchParams?.get("search") || "");
+  const [selectedClient, setSelectedClient] = useState(() => searchParams?.get("client") || "ALL");
+  const [selectedStatus, setSelectedStatus] = useState(() => searchParams?.get("status") || "ALL");
+  const [selectedType, setSelectedType] = useState(() => searchParams?.get("type") || "ALL");
   const [selectedBroker, setSelectedBroker] = useState("ALL");
   const [selectedCharterer, setSelectedCharterer] = useState("ALL");
   const [selectedTaxYear, setSelectedTaxYear] = useState("ALL");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = parseInt(searchParams?.get("page") || "1", 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const pageSize = 10;
+
+  useEffect(() => {
+    const s = searchParams?.get("search") || "";
+    const c = searchParams?.get("client") || "ALL";
+    const st = searchParams?.get("status") || "ALL";
+    const t = searchParams?.get("type") || "ALL";
+    const p = parseInt(searchParams?.get("page") || "1", 10);
+    setSearchTerm(s);
+    setSelectedClient(c);
+    setSelectedStatus(st);
+    setSelectedType(t);
+    setCurrentPage(Number.isFinite(p) && p > 0 ? p : 1);
+  }, [searchParams]);
+
+  const updateUrlParams = (next: {
+    search?: string;
+    client?: string;
+    status?: string;
+    type?: string;
+    page?: number;
+  }) => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    const setOrDel = (k: string, v: string | undefined, def: string) => {
+      if (!v || v === def) params.delete(k);
+      else params.set(k, v);
+    };
+    if ("search" in next) setOrDel("search", next.search?.trim(), "");
+    if ("client" in next) setOrDel("client", next.client, "ALL");
+    if ("status" in next) setOrDel("status", next.status, "ALL");
+    if ("type" in next) setOrDel("type", next.type, "ALL");
+    if ("page" in next) setOrDel("page", next.page ? String(next.page) : "1", "1");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -151,7 +193,7 @@ export function LedgerTable({
   };
 
   const { success } = useToast();
-  const { canDeleteClaim, canCreateClaim } = useAuth();
+  const { canDeleteClaim, canCreateClaim, canViewRac } = useAuth();
 
   // Unique lists for dropdowns
   const uniqueClients = useMemo(() => {
@@ -260,6 +302,7 @@ export function LedgerTable({
     setSelectedCharterer("ALL");
     setSelectedTaxYear("ALL");
     setCurrentPage(1);
+    updateUrlParams({ search: "", client: "ALL", status: "ALL", type: "ALL", page: 1 });
   };
 
   const hasActiveFilters =
@@ -285,8 +328,10 @@ export function LedgerTable({
               placeholder="Search by ship / client / claim..."
               value={searchTerm}
               onChange={(e) => {
-                setSearchTerm(e.target.value);
+                const val = e.target.value;
+                setSearchTerm(val);
                 setCurrentPage(1);
+                updateUrlParams({ search: val, page: 1 });
               }}
               className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-300 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
             />
@@ -296,8 +341,10 @@ export function LedgerTable({
           <select
             value={selectedClient}
             onChange={(e) => {
-              setSelectedClient(e.target.value);
+              const val = e.target.value;
+              setSelectedClient(val);
               setCurrentPage(1);
+              updateUrlParams({ client: val, page: 1 });
             }}
             className="text-xs font-medium rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
           >
@@ -360,12 +407,14 @@ export function LedgerTable({
             <span>Export</span>
           </Button>
 
-          <Link href="/claims/create">
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-9 px-4 rounded-xl shadow-xs flex items-center space-x-1.5">
-              <PlusCircle className="h-4 w-4" />
-              <span>New Claim</span>
-            </Button>
-          </Link>
+          {canCreateClaim && (
+            <Link href="/claims/create">
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-9 px-4 rounded-xl shadow-xs flex items-center space-x-1.5 cursor-pointer">
+                <PlusCircle className="h-4 w-4" />
+                <span>New Claim</span>
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -411,7 +460,7 @@ export function LedgerTable({
                   {visibleColumns.noticeTimebarDays && <th className="py-3.5 px-4 text-right">Notice TB</th>}
                   {visibleColumns.claimTimebarDays && <th className="py-3.5 px-4 text-right">Claim TB</th>}
                   {visibleColumns.timebarred && <th className="py-3.5 px-4 text-center">Timebar</th>}
-                  {visibleColumns.racDispute && <th className="py-3.5 px-4 text-center">RAC Hub</th>}
+                  {visibleColumns.racDispute && canViewRac && <th className="py-3.5 px-4 text-center">RAC Hub</th>}
                   <th className="py-3.5 px-4 text-center">Actions</th>
                 </tr>
               </thead>
@@ -577,10 +626,10 @@ export function LedgerTable({
                         </span>
                       </td>
                     )}
-                    {visibleColumns.racDispute && (
+                    {visibleColumns.racDispute && canViewRac && (
                       <td className="py-3.5 px-4 text-center">
                         <Link
-                          href={`/claims/${c.id}`}
+                          href={`/claims/${c.id}?tab=rac`}
                           className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 transition"
                           title="View or attach RAC Recoverable Costs"
                         >
@@ -646,7 +695,11 @@ export function LedgerTable({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                onClick={() => {
+                  const next = Math.max(currentPage - 1, 1);
+                  setCurrentPage(next);
+                  updateUrlParams({ page: next });
+                }}
                 disabled={currentPage === 1}
                 className="h-8 px-2.5 text-xs bg-white"
               >
@@ -659,7 +712,11 @@ export function LedgerTable({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                onClick={() => {
+                  const next = Math.min(currentPage + 1, totalPages);
+                  setCurrentPage(next);
+                  updateUrlParams({ page: next });
+                }}
                 disabled={currentPage === totalPages}
                 className="h-8 px-2.5 text-xs bg-white"
               >

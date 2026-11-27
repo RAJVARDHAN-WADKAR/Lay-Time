@@ -2,8 +2,12 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/session";
+import { verifySameOriginRequest } from "@/lib/api/withApi";
 
 export async function POST(request: NextRequest) {
+  const originBlock = verifySameOriginRequest(request);
+  if (originBlock) return originBlock;
+
   const response = NextResponse.json({ success: true, message: "Logged out successfully" });
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
   response.cookies.set({

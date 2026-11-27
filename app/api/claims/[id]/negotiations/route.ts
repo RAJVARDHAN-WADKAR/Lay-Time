@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import {
   canAccessNegotiations,
@@ -8,9 +8,8 @@ import {
   getThreadMessages
 } from "@/lib/db/negotiations";
 
-// GET /api/claims/[id]/negotiations: Get thread and message history
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Reviewer", "Client"],
+  permission: "negotiations:view",
   handler: async ({ user, params }) => {
     const access = canAccessNegotiations(user, params.id);
     if (!access.allowed) {

@@ -4,7 +4,7 @@ import { AdminDashboard } from "@/components/dashboard/admin/AdminDashboard";
 
 export default function AdminDashboardPage() {
   return (
-    <RequireRole allowedRoles={["Admin", "ADMIN"]}>
+    <RequireRole allowedRoles={["ADMIN"]}>
       <AdminDashboard />
     </RequireRole>
   );

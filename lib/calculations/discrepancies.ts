@@ -1,5 +1,113 @@
 import { Discrepancy, Port, SoFActivity } from "@/lib/types";
 
+export interface ActivityOverlapPair {
+  actA: SoFActivity;
+  actB: SoFActivity;
+  overlapStartMs: number;
+  overlapEndMs: number;
+  overlapMinutes: number;
+  sameBerth: boolean;
+}
+
+export function sortActivitiesChronologically(activities: SoFActivity[]): SoFActivity[] {
+  return [...activities].sort((a, b) => {
+    const startDiff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+    if (startDiff !== 0) return startDiff;
+    const stopDiff = new Date(a.stopTime).getTime() - new Date(b.stopTime).getTime();
+    if (stopDiff !== 0) return stopDiff;
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
+}
+
+/**
+ * Find all overlapping pairs after chronological sorting.
+ * Touching events (stopA === startB) are NOT considered overlapping.
+ */
+export function findActivityOverlaps(activities: SoFActivity[]): {
+  sorted: SoFActivity[];
+  sameBerthOverlaps: ActivityOverlapPair[];
+  crossBerthOverlaps: ActivityOverlapPair[];
+  affectedMinutesUnion: number;
+} {
+  const sorted = sortActivitiesChronologically(
+    (activities || []).filter((a) => {
+      const s = new Date(a.startTime).getTime();
+      const e = new Date(a.stopTime).getTime();
+      return !isNaN(s) && !isNaN(e) && e > s;
+    })
+  );
+
+  const sameBerthOverlaps: ActivityOverlapPair[] = [];
+  const crossBerthOverlaps: ActivityOverlapPair[] = [];
+  const overlapIntervals: Array<[number, number]> = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const actA = sorted[i];
+    const startA = new Date(actA.startTime).getTime();
+    const stopA = new Date(actA.stopTime).getTime();
+
+    for (let j = i + 1; j < sorted.length; j++) {
+      const actB = sorted[j];
+      const startB = new Date(actB.startTime).getTime();
+      const stopB = new Date(actB.stopTime).getTime();
+
+      // Since sorted by startTime ascending, once startB >= stopA no later activity can overlap actA
+      if (startB >= stopA) break;
+
+      const overlapStartMs = Math.max(startA, startB);
+      const overlapEndMs = Math.min(stopA, stopB);
+      if (overlapEndMs > overlapStartMs) {
+        const overlapMinutes = Math.round((overlapEndMs - overlapStartMs) / 60000);
+        if (overlapMinutes <= 0) continue;
+
+        const sameBerth =
+          actA.berthId && actB.berthId
+            ? actA.berthId === actB.berthId
+            : !actA.berthId && !actB.berthId;
+
+        const pair: ActivityOverlapPair = {
+          actA,
+          actB,
+          overlapStartMs,
+          overlapEndMs,
+          overlapMinutes,
+          sameBerth
+        };
+
+        if (sameBerth) {
+          sameBerthOverlaps.push(pair);
+          overlapIntervals.push([overlapStartMs, overlapEndMs]);
+        } else {
+          crossBerthOverlaps.push(pair);
+        }
+      }
+    }
+  }
+
+  // Merge same-berth overlap intervals to compute exact affected union minutes
+  overlapIntervals.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  let affectedMinutesUnion = 0;
+  let curStart = -1;
+  let curEnd = -1;
+  for (const [s, e] of overlapIntervals) {
+    if (curStart < 0) {
+      curStart = s;
+      curEnd = e;
+    } else if (s <= curEnd) {
+      curEnd = Math.max(curEnd, e);
+    } else {
+      affectedMinutesUnion += Math.round((curEnd - curStart) / 60000);
+      curStart = s;
+      curEnd = e;
+    }
+  }
+  if (curStart >= 0) {
+    affectedMinutesUnion += Math.round((curEnd - curStart) / 60000);
+  }
+
+  return { sorted, sameBerthOverlaps, crossBerthOverlaps, affectedMinutesUnion };
+}
+
 /**
  * Deterministic client-side discrepancy detection engine.
  * Scans SoF activities and ports for maritime sequence errors, timestamp conflicts, and data inconsistencies.
@@ -10,8 +118,8 @@ export function detectDiscrepancies(
   confidenceThreshold: number = 0.8
 ): Discrepancy[] {
   // Support passing a Claim object directly as first parameter
-  let acts: SoFActivity[] = Array.isArray(activities) ? activities : (activities as any)?.activities || [];
-  let pts: Port[] = Array.isArray(ports) && ports.length > 0 ? ports : (activities as any)?.ports || [];
+  const acts: SoFActivity[] = Array.isArray(activities) ? activities : (activities as any)?.activities || [];
+  const pts: Port[] = Array.isArray(ports) && ports.length > 0 ? ports : (activities as any)?.ports || [];
 
   const discrepancies: Discrepancy[] = [];
   const berthMap = new Map<string, string>();
@@ -27,10 +135,8 @@ export function detectDiscrepancies(
   // Track seen activities for duplicate detection
   const seenKeys = new Map<string, string>();
 
-  // Sort activities chronologically by start time for sequence checking
-  const sortedActivities = [...acts].sort(
-    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-  );
+  // Sort activities chronologically before running sequence and overlap checks
+  const sortedActivities = sortActivitiesChronologically(acts);
 
   let hasArrived = false;
   let hasNorTendered = false;
@@ -229,36 +335,43 @@ export function detectDiscrepancies(
     }
   }
 
-  // 9. Overlapping Activities on Same Berth
-  for (let i = 0; i < sortedActivities.length; i++) {
-    for (let j = i + 1; j < sortedActivities.length; j++) {
-      const actA = sortedActivities[i];
-      const actB = sortedActivities[j];
-      if (actA.berthId && actB.berthId && actA.berthId === actB.berthId) {
-        const startA = new Date(actA.startTime).getTime();
-        const stopA = new Date(actA.stopTime).getTime();
-        const startB = new Date(actB.startTime).getTime();
-        const stopB = new Date(actB.stopTime).getTime();
-        if (!isNaN(startA) && !isNaN(stopA) && !isNaN(startB) && !isNaN(stopB)) {
-          // Check overlap: startB is before stopA and stopB is after startA
-          if (startB < stopA && stopB > startA) {
-            discrepancies.push({
-              id: `disc-overlap-${actA.id}-${actB.id}`,
-              claimId: actB.claimId || actA.claimId,
-              activityId: actB.id,
-              type: "overlapping_timestamps",
-              severity: "warning",
-              title: "Overlapping Activity Timestamps",
-              description: `Activity "${actB.activityName}" overlaps with "${actA.activityName}" on the same berth between ${new Date(startB).toISOString().substring(11, 16)} and ${new Date(stopA).toISOString().substring(11, 16)}.`,
-              field: "startTime",
-              currentValue: actB.startTime,
-              suggestedValue: actA.stopTime,
-              isResolved: false,
-            });
-          }
-        }
-      }
-    }
+  // 9. Chronological Intra-Berth (ERROR: conflicting_timestamps) & Cross-Berth (WARNING) Overlaps
+  const { sameBerthOverlaps, crossBerthOverlaps } = findActivityOverlaps(sortedActivities);
+
+  for (const pair of sameBerthOverlaps) {
+    const startClock = new Date(pair.overlapStartMs).toISOString().substring(11, 16);
+    const stopClock = new Date(pair.overlapEndMs).toISOString().substring(11, 16);
+    discrepancies.push({
+      id: `disc-overlap-${pair.actA.id}-${pair.actB.id}`,
+      claimId: pair.actB.claimId || pair.actA.claimId,
+      activityId: pair.actB.id,
+      type: "conflicting_timestamps",
+      severity: "error",
+      title: `Overlapping Same-Berth Timestamps (${pair.overlapMinutes}m)`,
+      description: `Activity "${pair.actA.activityName}" overlaps with "${pair.actB.activityName}" on the same berth between ${startClock} and ${stopClock} (${pair.overlapMinutes} minutes).`,
+      field: "startTime",
+      currentValue: pair.actB.startTime,
+      suggestedValue: pair.actA.stopTime,
+      isResolved: false
+    });
+  }
+
+  for (const pair of crossBerthOverlaps) {
+    const berthA = berthMap.get(pair.actA.berthId || "") || pair.actA.berthId || "Berth A";
+    const berthB = berthMap.get(pair.actB.berthId || "") || pair.actB.berthId || "Berth B";
+    discrepancies.push({
+      id: `disc-xberth-${pair.actA.id}-${pair.actB.id}`,
+      claimId: pair.actB.claimId || pair.actA.claimId,
+      activityId: pair.actB.id,
+      type: "overlapping_timestamps",
+      severity: "warning",
+      title: `Cross-Berth Concurrent Overlap (${pair.overlapMinutes}m)`,
+      description: `Cross-berth overlap (${pair.overlapMinutes} minutes) between "${pair.actA.activityName}" (${berthA}) and "${pair.actB.activityName}" (${berthB}). Acknowledge if simultaneous berth operations occurred.`,
+      field: "startTime",
+      currentValue: pair.actB.startTime,
+      suggestedValue: "Acknowledge concurrent berths or adjust times",
+      isResolved: false
+    });
   }
 
   // Check for critical missing steps if loading/discharging took place

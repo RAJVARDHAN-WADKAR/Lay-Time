@@ -16,7 +16,9 @@ import { OperationalTasks } from "@/components/dashboard/shared/OperationalTasks
 import { SupervisorApprovalQueue } from "@/components/roles/supervisor/SupervisorApprovalQueue";
 import { SupervisorExposureSummary } from "@/components/roles/supervisor/SupervisorExposureSummary";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { useAuth } from "@/lib/context/AuthContext";
+import { useToast } from "@/lib/hooks/useToast";
 import {
   PlusCircle,
   Briefcase,
@@ -29,6 +31,7 @@ import {
 
 export function SupervisorDashboard() {
   const { currentUser } = useAuth();
+  const { success, error: showError } = useToast();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [racCases, setRacCases] = useState<RacCase[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
@@ -36,21 +39,32 @@ export function SupervisorDashboard() {
   const [selectedStage, setSelectedStage] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh = false) => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const [cls, racs, notifs, docs] = await Promise.all([
-        getClaims().catch(() => []),
-        getRacCases().catch(() => []),
-        getNotifications().catch(() => []),
-        getDocuments().catch(() => [])
+        getClaims(),
+        getRacCases(),
+        getNotifications(),
+        getDocuments()
       ]);
       setClaims(cls);
       setRacCases(racs);
       setNotifications(notifs);
       setDocuments(docs);
+      if (isManualRefresh) {
+        success("Dashboard Refreshed", "Supervisor operations feed updated.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load supervisor dashboard data.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +140,7 @@ export function SupervisorDashboard() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
             title="Refresh tracker data"
           >
@@ -134,6 +148,15 @@ export function SupervisorDashboard() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load operations dashboard"
+          message={loadError}
+          onRetry={() => loadData(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* 2. Four Summary KPI Cards */}
       <KPIGrid metrics={metrics} claims={filteredClaims} />

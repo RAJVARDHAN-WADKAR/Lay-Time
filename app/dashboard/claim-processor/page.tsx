@@ -4,7 +4,7 @@ import { ClaimProcessorDashboard } from "@/components/dashboard/claim-processor/
 
 export default function ClaimProcessorDashboardPage() {
   return (
-    <RequireRole allowedRoles={["Claim Processor", "CLAIM_PROCESSOR", "Processor"]}>
+    <RequireRole allowedRoles={["CLAIM_PROCESSOR"]}>
       <ClaimProcessorDashboard />
     </RequireRole>
   );

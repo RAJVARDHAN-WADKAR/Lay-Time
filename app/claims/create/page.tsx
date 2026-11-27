@@ -3,6 +3,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClaim } from "@/lib/api";
+import { useAuth } from "@/lib/context/AuthContext";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { Claim } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,12 @@ import { Input, Select } from "@/components/ui/inputs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/lib/hooks/useToast";
 import { formatCurrency } from "@/lib/utils/formatters";
-import { getTodayIso, validateDateChain } from "@/lib/utils/dateRules";
+import {
+  getTodayIso,
+  getNowDatetimeLocalIso,
+  validateDateChain,
+  validateSofEvent
+} from "@/lib/utils/dateRules";
 import Link from "next/link";
 import {
   Check,
@@ -72,6 +79,8 @@ interface DeductionState {
 
 export default function CreateClaimWizardPage() {
   const router = useRouter();
+  const { role } = useAuth();
+  const claimsParentHref = normalizeRole(role) === "CLAIM_PROCESSOR" ? "/claims/assigned" : "/claims";
   const { success, error, info } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -129,14 +138,17 @@ export default function CreateClaimWizardPage() {
   useEffect(() => {
     const val = validateDateChain({
       charterpartyDate,
+      voyageEndDate,
       instructionReceivedDate,
-      claimFiledDate: null,
+      noticeReceivedDate,
+      claimReceivedDate,
+      claimFiledDate: noticeReceivedDate || claimReceivedDate || null,
       agreedDate: null,
       paymentReceivedDate: null
     });
     setDateErrors(val.errors);
     setDateWarnings(val.warnings);
-  }, [charterpartyDate, instructionReceivedDate]);
+  }, [charterpartyDate, voyageEndDate, instructionReceivedDate, noticeReceivedDate, claimReceivedDate]);
 
   // Step 3: Ports
   const [ports, setPorts] = useState<PortState[]>([
@@ -277,9 +289,23 @@ export default function CreateClaimWizardPage() {
 
   // Submission handler
   const handleSaveClaim = async (asDraft = false) => {
-    if (dateErrors.instructionReceivedDate) {
-      error(dateErrors.instructionReceivedDate);
+    const dateErrorKeys = Object.keys(dateErrors);
+    if (dateErrorKeys.length > 0) {
+      error(dateErrors[dateErrorKeys[0]]);
       return;
+    }
+    for (const act of activities) {
+      const check = validateSofEvent({
+        id: act.id,
+        activityName: act.activityName,
+        berthId: act.berthId,
+        startTime: act.startTime,
+        stopTime: act.stopTime
+      });
+      if (!check.isValid) {
+        error(`SoF validation error (${act.activityName}): ${check.error}`);
+        return;
+      }
     }
     setIsSubmitting(true);
     try {
@@ -384,11 +410,11 @@ export default function CreateClaimWizardPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <Link
-            href="/claims"
+            href={claimsParentHref}
             className="inline-flex items-center text-sm text-slate-500 hover:text-slate-900 transition-colors mb-1"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            Back to Claims Ledger
+            {claimsParentHref === "/claims/assigned" ? "Back to Assigned Claims" : "Back to Claims Ledger"}
           </Link>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Ship className="w-6 h-6 text-blue-600" />
@@ -747,10 +773,15 @@ export default function CreateClaimWizardPage() {
                 </label>
                 <Input
                   type="date"
+                  max={getTodayIso()}
                   value={charterpartyDate}
                   onChange={e => setCharterpartyDate(e.target.value)}
+                  className={dateErrors.charterpartyDate ? "border-rose-500 focus:ring-rose-500" : ""}
                 />
-                {dateWarnings.charterpartyDate && (
+                {dateErrors.charterpartyDate && (
+                  <p className="text-xs text-rose-600 mt-1">{dateErrors.charterpartyDate}</p>
+                )}
+                {!dateErrors.charterpartyDate && dateWarnings.charterpartyDate && (
                   <p className="text-xs text-amber-600 mt-1">{dateWarnings.charterpartyDate}</p>
                 )}
               </div>
@@ -761,9 +792,14 @@ export default function CreateClaimWizardPage() {
                 </label>
                 <Input
                   type="date"
+                  max={getTodayIso()}
                   value={voyageEndDate}
                   onChange={e => setVoyageEndDate(e.target.value)}
+                  className={dateErrors.voyageEndDate ? "border-rose-500 focus:ring-rose-500" : ""}
                 />
+                {dateErrors.voyageEndDate && (
+                  <p className="text-xs text-rose-600 mt-1">{dateErrors.voyageEndDate}</p>
+                )}
               </div>
 
               <div>
@@ -772,6 +808,7 @@ export default function CreateClaimWizardPage() {
                 </label>
                 <Input
                   type="date"
+                  max={getTodayIso()}
                   value={layday}
                   onChange={e => setLayday(e.target.value)}
                 />
@@ -783,6 +820,7 @@ export default function CreateClaimWizardPage() {
                 </label>
                 <Input
                   type="date"
+                  max={getTodayIso()}
                   value={cancellingDate}
                   onChange={e => setCancellingDate(e.target.value)}
                 />
@@ -797,7 +835,11 @@ export default function CreateClaimWizardPage() {
                   max={getTodayIso()}
                   value={noticeReceivedDate}
                   onChange={e => setNoticeReceivedDate(e.target.value)}
+                  className={dateErrors.noticeReceivedDate ? "border-rose-500 focus:ring-rose-500" : ""}
                 />
+                {dateErrors.noticeReceivedDate && (
+                  <p className="text-xs text-rose-600 mt-1">{dateErrors.noticeReceivedDate}</p>
+                )}
               </div>
 
               <div>
@@ -809,7 +851,13 @@ export default function CreateClaimWizardPage() {
                   max={getTodayIso()}
                   value={claimReceivedDate}
                   onChange={e => setClaimReceivedDate(e.target.value)}
+                  className={dateErrors.claimReceivedDate || dateErrors.claimFiledDate ? "border-rose-500 focus:ring-rose-500" : ""}
                 />
+                {(dateErrors.claimReceivedDate || dateErrors.claimFiledDate) && (
+                  <p className="text-xs text-rose-600 mt-1">
+                    {dateErrors.claimReceivedDate || dateErrors.claimFiledDate}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1157,6 +1205,7 @@ export default function CreateClaimWizardPage() {
                       <td className="p-2">
                         <Input
                           type="datetime-local"
+                          max={getNowDatetimeLocalIso()}
                           value={act.startTime}
                           onChange={e => {
                             const updated = [...activities];
@@ -1169,6 +1218,7 @@ export default function CreateClaimWizardPage() {
                       <td className="p-2">
                         <Input
                           type="datetime-local"
+                          max={getNowDatetimeLocalIso()}
                           value={act.stopTime}
                           onChange={e => {
                             const updated = [...activities];
@@ -1316,6 +1366,7 @@ export default function CreateClaimWizardPage() {
                       <label className="block text-xs font-semibold text-slate-700 mb-1">Start Time</label>
                       <Input
                         type="datetime-local"
+                        max={getNowDatetimeLocalIso()}
                         value={ded.startTime}
                         onChange={e => {
                           const updated = [...deductions];
@@ -1330,6 +1381,7 @@ export default function CreateClaimWizardPage() {
                       <label className="block text-xs font-semibold text-slate-700 mb-1">Stop Time</label>
                       <Input
                         type="datetime-local"
+                        max={getNowDatetimeLocalIso()}
                         value={ded.stopTime}
                         onChange={e => {
                           const updated = [...deductions];

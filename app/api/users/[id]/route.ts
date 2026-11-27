@@ -8,19 +8,20 @@ import {
   isUserInActorSubtree,
   logAudit
 } from "@/lib/auth/userHierarchy";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getUserById, updateUser, setUserStatus } from "@/lib/db/queries";
 import { hashPassword } from "@/lib/auth/password";
 import { getDatabase } from "@/lib/db";
 
-// GET /api/users/[id]: Get user details within subtree or self
+// GET /api/users/[id]: Get user details (Admin only)
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor"],
+  permission: "users:view",
   handler: async ({ user, params }) => {
     const targetId = params.id;
     const isSelf = user.id === targetId;
     const inSubtree = isUserInActorSubtree(user, targetId);
 
-    if (!isSelf && !inSubtree && user.role !== "Admin") {
+    if (!isSelf && !inSubtree && normalizeRole(user.role) !== "ADMIN") {
       return NextResponse.json(
         { error: "Forbidden: Target user is outside your management hierarchy" },
         { status: 403 }
@@ -39,7 +40,6 @@ export const GET = withApi({
 // PUT /api/users/[id]: Update user (Admin only)
 export const PUT = withApi({
   permission: "users:manage",
-  roles: ["Admin", "ADMIN"],
   schema: UpdateUserSchema,
   handler: async ({ user, params, body, req }) => {
     const targetId = params.id;
@@ -105,7 +105,6 @@ export const PUT = withApi({
 // DELETE /api/users/[id]: Deactivate user account with hierarchy & last-Admin guards
 export const DELETE = withApi({
   permission: "users:manage",
-  roles: ["Admin", "ADMIN"],
   handler: async ({ user, params, req }) => {
     const targetId = params.id;
 
@@ -133,10 +132,10 @@ export const DELETE = withApi({
     }
 
     // 3. Guard against removal of the last active Admin
-    if (target.role === "Admin") {
+    if (normalizeRole(target.role) === "ADMIN") {
       const activeAdmins = (
         db
-          .prepare("SELECT COUNT(*) as count FROM users WHERE role = 'Admin' AND status = 'Active'")
+          .prepare("SELECT COUNT(*) as count FROM users WHERE UPPER(role) = 'ADMIN' AND status = 'Active'")
           .get() as any
       )?.count || 0;
 

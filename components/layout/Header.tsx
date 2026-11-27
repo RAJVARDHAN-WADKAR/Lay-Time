@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
-import { getRoleDashboardPath } from "@/lib/auth/rolePermissions";
+import { getRoleDashboardPath, normalizeRole } from "@/lib/auth/accessMatrix";
 import { getNotifications, markAllNotificationsRead } from "@/lib/api";
 import { NotificationRecord } from "@/lib/types";
 import {
@@ -32,8 +32,9 @@ interface HeaderProps {
   onToggleDesktopSidebar?: () => void;
 }
 
-export function Header({ onToggleDesktopSidebar }: HeaderProps) {
+function HeaderInner({ onToggleDesktopSidebar }: HeaderProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { currentUser, role, logout, canCreateClaim, canAccessSettings } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -69,53 +70,56 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      router.push(`/claims?search=${encodeURIComponent(searchQuery.trim())}`);
+      const targetList = normRole === "CLAIM_PROCESSOR" ? "/claims/assigned" : "/claims";
+      router.push(`${targetList}?search=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
 
-  const [currentTab, setCurrentTab] = useState<string | null>(null);
-  const [isAssignedFilter, setIsAssignedFilter] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setCurrentTab(params.get("tab"));
-      setIsAssignedFilter(params.get("filter") === "assigned" || params.get("assigned") === "me");
-    }
-  }, [pathname]);
+  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id);
+  const normRole = normalizeRole(role, isClient);
+  const homeDashboardHref = getRoleDashboardPath(role, isClient);
+  const currentTab = searchParams?.get("tab") || null;
+  const isAssignedFilter =
+    pathname === "/claims/assigned" ||
+    searchParams?.get("filter") === "assigned" ||
+    searchParams?.get("view") === "assigned" ||
+    searchParams?.get("assigned") === "me";
 
   // Compute current page title and breadcrumbs
   const getPageInfo = () => {
-    const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id || role === "Client");
-    const roleDash = getRoleDashboardPath(role, isClient);
-
-    // 1. Dashboards
+    // 1. Dashboards & No-Access
+    if (pathname === "/no-access") return { title: "Access Restricted", crumbs: [{ label: "No Access" }] };
     if (pathname === "/dashboard") return { title: "Operations Dashboard", crumbs: [{ label: "Dashboard" }] };
     if (pathname === "/dashboard/admin") return { title: "Admin Console", crumbs: [{ label: "Admin Console" }] };
     if (pathname === "/dashboard/supervisor") return { title: "Supervisor Dashboard", crumbs: [{ label: "Supervisor Dashboard" }] };
     if (pathname === "/dashboard/claim-processor") return { title: "Processor Dashboard", crumbs: [{ label: "Processor Dashboard" }] };
-    if (pathname === "/dashboard/reviewer-client") return { title: isClient ? "Client Portal" : "Reviewer Portal", crumbs: [{ label: isClient ? "Client Portal" : "Reviewer Portal" }] };
     if (pathname === "/dashboard/reviewer") return { title: "Reviewer Dashboard", crumbs: [{ label: "Reviewer Dashboard" }] };
     if (pathname === "/dashboard/client") return { title: "Client Portal", crumbs: [{ label: "Client Portal" }] };
 
     // 2. Claims
+    const claimsListHref = normRole === "CLAIM_PROCESSOR" ? "/claims/assigned" : "/claims";
+    const claimsListLabel =
+      normRole === "CLAIM_PROCESSOR" ? "Assigned Claims" : normRole === "CLIENT" ? "My Claims" : "All Claims";
+
     if (pathname === "/claims/create") {
       return {
         title: "Create Claim",
         crumbs: [
-          { label: "Claims", href: "/claims" },
-          { label: "New Claim Wizard" }
+          { label: claimsListLabel, href: claimsListHref },
+          { label: "Create Claim" }
         ]
       };
     }
-    if (pathname === "/claims") {
-      const isAssigned = isAssignedFilter;
+    if (pathname === "/claims/assigned") {
       return {
-        title: isAssigned ? "Assigned Claims" : "Claims Ledger",
-        crumbs: [
-          { label: "Claims", href: "/claims" },
-          { label: isAssigned ? "Assigned to Me" : "Ledger" }
-        ]
+        title: "Assigned Claims",
+        crumbs: [{ label: "Assigned Claims" }]
+      };
+    }
+    if (pathname === "/claims") {
+      return {
+        title: isAssignedFilter ? "Assigned Claims" : normRole === "CLIENT" ? "My Claims" : "Claims Ledger",
+        crumbs: [{ label: isAssignedFilter ? "Assigned Claims" : normRole === "CLIENT" ? "My Claims" : "Claims Ledger" }]
       };
     }
     if (pathname.startsWith("/claims/")) {
@@ -134,7 +138,7 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
       return {
         title: `Claim ${claimId} — ${tabLabel}`,
         crumbs: [
-          { label: "Claims", href: "/claims" },
+          { label: claimsListLabel, href: claimsListHref },
           { label: claimId, href: `/claims/${claimId}` },
           ...(currentTab ? [{ label: tabLabel }] : [])
         ]
@@ -142,10 +146,16 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
     }
 
     // 3. Calculator & Engines
-    if (pathname === "/calculator" || pathname === "/calculations") {
+    if (pathname === "/calculator") {
       return {
         title: "Laytime Calculator",
-        crumbs: [{ label: "Engines" }, { label: "Laytime Calculator" }]
+        crumbs: [{ label: "Laytime Calculator" }]
+      };
+    }
+    if (pathname === "/calculations") {
+      return {
+        title: "Calculations",
+        crumbs: [{ label: "Calculations" }]
       };
     }
     if (pathname === "/ocr") {
@@ -268,8 +278,6 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
   };
 
   const { title, crumbs } = getPageInfo();
-  const isClient = Boolean(currentUser?.clientId || (currentUser as any)?.client_id || role === "Client");
-  const homeDashboardHref = getRoleDashboardPath(role, isClient);
 
   return (
     <>
@@ -458,15 +466,7 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
 
                 <div className="py-1">
                   <Link
-                    href={
-                      role === "Admin" || role === "ADMIN"
-                        ? "/dashboard/admin"
-                        : role === "Supervisor" || role === "SUPERVISOR"
-                        ? "/dashboard/supervisor"
-                        : role === "Claim Processor" || role === "CLAIM_PROCESSOR" || role === "Processor"
-                        ? "/dashboard/claim-processor"
-                        : "/dashboard/reviewer-client"
-                    }
+                    href={homeDashboardHref}
                     onClick={() => setIsProfileOpen(false)}
                     className="flex items-center space-x-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 font-medium"
                   >
@@ -525,5 +525,17 @@ export function Header({ onToggleDesktopSidebar }: HeaderProps) {
         </div>
       )}
     </>
+  );
+}
+
+export function Header(props: HeaderProps) {
+  return (
+    <Suspense
+      fallback={
+        <header className="sticky top-0 z-40 flex h-16 w-full items-center border-b border-slate-200 bg-white px-4 md:px-6" />
+      }
+    >
+      <HeaderInner {...props} />
+    </Suspense>
   );
 }

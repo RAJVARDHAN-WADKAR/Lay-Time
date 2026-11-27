@@ -1,10 +1,10 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance", "Reviewer"],
+  permission: "reports:view",
   handler: async () => {
     return NextResponse.json({
       success: true,
@@ -17,7 +17,7 @@ export const GET = withApi({
 });
 
 export const POST = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance"],
+  permission: "reports:export",
   handler: async () => {
     return NextResponse.json({
       success: true,

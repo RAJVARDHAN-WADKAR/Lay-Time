@@ -1,25 +1,15 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest } from "@/lib/auth/session";
+import { NextResponse } from "next/server";
+import { withApi } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { computeRacCalculation } from "@/lib/rac/calculations";
 import { saveRacCalculationRecord, getRacCaseById, updateRacCase } from "@/lib/db/queries";
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { normalizeRole } = await import("@/app/access/roles");
-    const userRoleNorm = normalizeRole(session.role);
-    if (userRoleNorm === "REVIEWER_CLIENT" || session.role === "Reviewer" || session.role === "Client") {
-      return NextResponse.json({ error: "Forbidden: Reviewers have read-only access." }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { racCaseId, ...calcInput } = body;
+export const POST = withApi({
+  permission: "rac:edit",
+  handler: async ({ user, body }) => {
+    const { racCaseId, ...calcInput } = body || {};
 
     if (!racCaseId) {
       return NextResponse.json({ error: "racCaseId is required" }, { status: 400 });
@@ -30,7 +20,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "RAC case not found" }, { status: 404 });
     }
 
-    const reviewerIdentity = session.name || session.email || "System";
+    if (normalizeRole(user.role) === "CLAIM_PROCESSOR") {
+      const assigned = String(racCase.assignedTo || "").trim().toLowerCase();
+      const isAssigned =
+        assigned !== "" &&
+        (assigned === user.id.toLowerCase() ||
+          assigned === (user.name || "").trim().toLowerCase() ||
+          assigned === (user.email || "").trim().toLowerCase());
+      if (!isAssigned) {
+        return NextResponse.json(
+          { error: "Forbidden: Claim Processors may only calculate on assigned RAC cases." },
+          { status: 403 }
+        );
+      }
+    }
+
+    const reviewerIdentity = user.name || user.email || "System";
     const calculation = computeRacCalculation(racCaseId, {
       ...calcInput,
       reviewedBy: reviewerIdentity
@@ -38,7 +43,6 @@ export async function POST(request: NextRequest) {
 
     saveRacCalculationRecord(racCaseId, calculation, reviewerIdentity);
 
-    // Update RAC total amount
     updateRacCase(
       racCaseId,
       {
@@ -52,8 +56,5 @@ export async function POST(request: NextRequest) {
       success: true,
       calculation
     });
-  } catch (error: any) {
-    console.error("POST RAC Calculation Error:", error);
-    return NextResponse.json({ error: "Failed to compute RAC calculation" }, { status: 500 });
   }
-}
+});

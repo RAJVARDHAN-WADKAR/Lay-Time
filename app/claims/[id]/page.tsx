@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getVisibleTabs, normalizeRole } from "@/app/access/roles";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { getClaimById, updateClaim, addSoFActivity, updateSoFActivity, deleteSoFActivity } from "@/lib/api/claims";
 import { Claim, SoFActivity, Discrepancy } from "@/lib/types";
 import { calculateClaimLaytime } from "@/lib/calculations";
@@ -50,21 +51,29 @@ import {
   Upload,
   Check,
   Save,
-  Handshake
+  Handshake,
+  RefreshCw
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/formatters";
+import { getNowDatetimeLocalIso, validateSofEvent } from "@/lib/utils/dateRules";
 import { exportToCSV } from "@/lib/utils/exportCsv";
+import { MaritimeHoliday } from "@/lib/types";
 import { useToast } from "@/lib/hooks/useToast";
 
 export default function ClaimDetailPage() {
   const params = useParams();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { success, error, info } = useToast();
   const claimId = params.id as string;
 
   const [claim, setClaim] = useState<Claim | null>(null);
+  const [holidays, setHolidays] = useState<MaritimeHoliday[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const initialTab = (searchParams?.get("tab") || "overview") as any;
+  const [activeTab, setActiveTabState] = useState<
     | "overview"
     | "claimInfo"
     | "voyage"
@@ -80,7 +89,21 @@ export default function ClaimDetailPage() {
     | "activity"
     | "reports"
     | "discrepancies"
-  >("overview");
+  >(initialTab);
+
+  useEffect(() => {
+    const urlTab = searchParams?.get("tab");
+    if (urlTab) setActiveTabState(urlTab as any);
+  }, [searchParams]);
+
+  const setActiveTab = (tab: typeof activeTab) => {
+    setActiveTabState(tab);
+    const nextParams = new URLSearchParams(searchParams?.toString() || "");
+    if (tab === "overview") nextParams.delete("tab");
+    else nextParams.set("tab", tab);
+    const qs = nextParams.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
   const [newAuditNote, setNewAuditNote] = useState("");
 
 
@@ -96,8 +119,8 @@ export default function ClaimDetailPage() {
     activityName: "Discharging commenced",
     berthId: "",
     portId: "",
-    startTime: new Date().toISOString().substring(0, 16),
-    stopTime: new Date(Date.now() + 4 * 3600 * 1000).toISOString().substring(0, 16),
+    startTime: new Date(Date.now() - 4 * 3600 * 1000).toISOString().substring(0, 16),
+    stopTime: new Date().toISOString().substring(0, 16),
     percentageCounted: 100,
     prorata: 100,
     deductionCategory: "Other" as const,
@@ -142,34 +165,54 @@ export default function ClaimDetailPage() {
     [role, userContext]
   );
 
-  const isClient = Boolean(userContext.clientId || role === "Client");
+  const isClient = normalizeRole(role, Boolean(userContext.clientId)) === "CLIENT";
+  const claimsParentHref = normalizeRole(role) === "CLAIM_PROCESSOR" ? "/claims/assigned" : "/claims";
 
-  const loadClaim = useCallback(async () => {
+  const loadClaim = useCallback(async (isManualRefresh = false) => {
     setIsLoading(true);
-    const data = await getClaimById(claimId);
-    setClaim(data);
-    if (data) {
-      setGeneralEditForm({
-        claimStatus: data.claimStatus,
-        agreedAmount: data.agreedAmount,
-        paymentReceived: data.paymentReceived,
-        claimNotes: data.claimNotes,
-        contentions: data.contentions,
-        demurrageRatePerDay: data.demurrageRatePerDay,
-        claimClosed: data.claimClosed,
-      });
+    setLoadError(null);
+    try {
+      const [data, holRes] = await Promise.all([
+        getClaimById(claimId),
+        fetch("/api/holidays", { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : { holidays: [] }))
+          .catch(() => ({ holidays: [] }))
+      ]);
+      setClaim(data);
+      setHolidays(Array.isArray(holRes?.holidays) ? holRes.holidays : []);
+      if (data) {
+        setGeneralEditForm({
+          claimStatus: data.claimStatus,
+          agreedAmount: data.agreedAmount,
+          paymentReceived: data.paymentReceived,
+          claimNotes: data.claimNotes,
+          contentions: data.contentions,
+          demurrageRatePerDay: data.demurrageRatePerDay,
+          claimClosed: data.claimClosed,
+        });
+      }
+      if (isManualRefresh) {
+        success("Claim Refreshed", `Reloaded ${claimId} from server.`);
+      }
+    } catch (e: any) {
+      const msg = e?.message || "Failed to load claim data from server.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        error("Refresh Failed", msg);
+      }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [claimId]);
+  }, [claimId, success, error]);
 
   useEffect(() => {
-    loadClaim();
+    loadClaim(false);
   }, [loadClaim]);
 
   const calculationResult = useMemo(() => {
     if (!claim) return null;
-    return calculateClaimLaytime(claim);
-  }, [claim]);
+    return calculateClaimLaytime(claim, undefined, holidays);
+  }, [claim, holidays]);
 
   const discrepancies = useMemo(() => {
     if (!claim) return [];
@@ -207,6 +250,17 @@ export default function ClaimDetailPage() {
   const handleCreateActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!claim) return;
+    const sofValidation = validateSofEvent({
+      id: editingAct?.id,
+      activityName: newActForm.activityName,
+      berthId: newActForm.berthId || claim.ports?.[0]?.berths?.[0]?.id || "",
+      startTime: newActForm.startTime,
+      stopTime: newActForm.stopTime
+    });
+    if (!sofValidation.isValid) {
+      error("Invalid Date/Time", sofValidation.error || "Invalid SoF timestamps.");
+      return;
+    }
     try {
       const { diffMins, formatted } = calculateDuration(newActForm.startTime, newActForm.stopTime);
       let updated;
@@ -307,7 +361,7 @@ export default function ClaimDetailPage() {
   useEffect(() => {
     if (!claim) return;
     if (!visibleTabs.includes(activeTab)) {
-      setActiveTab("overview");
+      setActiveTabState("overview");
     }
   }, [claim, visibleTabs, activeTab]);
 
@@ -328,12 +382,32 @@ export default function ClaimDetailPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="space-y-4 py-6">
+        <DataErrorBanner
+          title={`Unable to load claim ${claimId}`}
+          message={loadError}
+          onRetry={() => loadClaim(true)}
+          isRetrying={isLoading}
+        />
+        <Link href={claimsParentHref}>
+          <Button variant="outline" size="sm">
+            {claimsParentHref === "/claims/assigned" ? "Back to Assigned Claims" : "Back to Claims Ledger"}
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
   if (!claim) {
     return (
       <div className="p-8 text-center space-y-4">
         <p className="text-slate-600 font-medium">Claim file not found</p>
-        <Link href="/claims">
-          <Button variant="outline" size="sm">Back to Claims Ledger</Button>
+        <Link href={claimsParentHref}>
+          <Button variant="outline" size="sm">
+            {claimsParentHref === "/claims/assigned" ? "Back to Assigned Claims" : "Back to Claims Ledger"}
+          </Button>
         </Link>
       </div>
     );
@@ -346,8 +420,9 @@ export default function ClaimDetailPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
             <Link
-              href="/claims"
+              href={claimsParentHref}
               className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition"
+              title={claimsParentHref === "/claims/assigned" ? "Back to Assigned Claims" : "Back to Claims Ledger"}
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -368,6 +443,18 @@ export default function ClaimDetailPage() {
           </div>
 
           <div className="flex items-center space-x-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadClaim(true)}
+              disabled={isLoading}
+              className="text-xs font-semibold h-9 px-3 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+              title="Refresh claim details"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <span>Refresh</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -722,6 +809,15 @@ export default function ClaimDetailPage() {
               setIsAddActModalOpen(true);
             }}
             onDeleteActivity={handleDeleteActivity}
+            onQuickTrimActivity={async (actId, updates) => {
+              const updated = await updateSoFActivity(claim.id, actId, updates);
+              if (updated && updated.id) {
+                setClaim(updated);
+              } else {
+                await loadClaim();
+              }
+              success("Overlap Fixed", "Activity timestamp trimmed and audit-logged.");
+            }}
             onOpenEditModal={(act) => {
               setEditingAct(act);
               setNewActForm({
@@ -809,6 +905,7 @@ export default function ClaimDetailPage() {
         <ClaimCalculationsTab
           calculationResult={calculationResult}
           claim={claim}
+          userCanEdit={userCanEdit && !isReadOnly}
           onUpdateClaim={handleUpdateClaimData}
         />
       )}
@@ -1171,6 +1268,7 @@ export default function ClaimDetailPage() {
               <label className="block font-semibold text-slate-700 mb-1">Start Datetime *</label>
               <Input
                 type="datetime-local"
+                max={getNowDatetimeLocalIso()}
                 value={newActForm.startTime}
                 onChange={(e) => setNewActForm({ ...newActForm, startTime: e.target.value })}
                 required
@@ -1180,6 +1278,7 @@ export default function ClaimDetailPage() {
               <label className="block font-semibold text-slate-700 mb-1">Stop Datetime *</label>
               <Input
                 type="datetime-local"
+                max={getNowDatetimeLocalIso()}
                 value={newActForm.stopTime}
                 onChange={(e) => setNewActForm({ ...newActForm, stopTime: e.target.value })}
                 required

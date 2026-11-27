@@ -1,6 +1,7 @@
 import { getDatabase } from "./index";
 export { getDatabase };
 import { calculateClaimLaytime } from "@/lib/calculations/laytime";
+import { inferCountryAndTimezone, listHolidays } from "@/lib/calculations/holidays";
 import { isStatusUnderContention, normalizeClaimStatus } from "@/lib/calculations/status";
 import { generateNextClaimId } from "@/lib/utils/claimId";
 import {
@@ -331,6 +332,17 @@ function mapRowToClaim(row: any, includeRelations = false): Claim {
     isOverridden: Boolean(row.is_overridden),
     overriddenDemurrage: row.overridden_demurrage != null ? row.overridden_demurrage : undefined,
     overrideReason: row.override_reason || undefined,
+    dayRule: (row.day_rule || "SHEX") as any,
+    onceOnDemurrage: row.once_on_demurrage !== undefined && row.once_on_demurrage !== null ? Boolean(row.once_on_demurrage) : true,
+    noticeGracePeriodHours: row.notice_grace_hours !== undefined && row.notice_grace_hours !== null ? Number(row.notice_grace_hours) : 6,
+    applyWeatherWorkingDay24CH: row.apply_24ch !== undefined && row.apply_24ch !== null ? Boolean(row.apply_24ch) : true,
+    countryCode: row.country_code || undefined,
+    portTimezone: row.port_timezone || "UTC",
+    overlapPolicy: (row.overlap_policy || "block") as any,
+    overlapOverrideReason: row.overlap_override_reason || undefined,
+    noticeDaysSource: row.notice_days_source || "default",
+    claimDaysSource: row.claim_days_source || "default",
+    baseDateEstimated: Boolean(row.base_date_estimated),
     clientId: row.client_id || row.clientId,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -352,87 +364,99 @@ function mapRowToClaim(row: any, includeRelations = false): Claim {
 export function createClaim(claim: Partial<Claim>, userEmail: string): Claim {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
-  // Requirement 4.1: Claim ID generated on the SERVER: DBLS + 2-digit year + sequence
-  let id = claim.id;
-  const isExisting = id ? db.prepare("SELECT id FROM claims WHERE id = ?").get(id) : null;
-  if (!id || id.startsWith("CLM-") || isExisting) {
-    id = generateNextClaimId(db, claim.instructionReceivedDate);
-  }
 
-  const insert = db.prepare(`
-    INSERT INTO claims (
-      id, claim_name, account_name, broker_name, claim_status, claim_type, ship_name, cp_type,
-      voyage_number, assigned_to, days_open, claim_closed, contentions, claim_notes, document_links,
-      demurrage_rate_per_day, counterparty_name, counterparty_type, claim_filed_amount, received_claim_amount,
-      agreed_amount, billable_amount, payment_received, payment_concluded, layday, cancelling_date,
-      voyage_end_date, instruction_received_date, notice_received_date, claim_received_date,
-      notice_timebar_days, claim_timebar_days, timebarred, claim_agreed_date, charterparty_date,
-      days_awaiting_payment, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Execute ID generation and insertion inside an IMMEDIATE transaction for concurrency safety
+  const runCreate = db.transaction(() => {
+    let id = claim.id;
+    const isExisting = id ? db.prepare("SELECT id FROM claims WHERE id = ?").get(id) : null;
+    if (!id || id.startsWith("CLM-") || isExisting) {
+      id = generateNextClaimId(db, claim.instructionReceivedDate);
+    }
 
-  insert.run(
-    id,
-    claim.claimName || `${claim.shipName || "New Vessel"} - Demurrage Claim`,
-    claim.accountName || "Client Trading Ltd",
-    claim.brokerName || "Clarksons",
-    claim.claimStatus || "Submitted",
-    claim.claimType || "Discharge Port Demurrage",
-    claim.shipName || "Unknown Vessel",
-    claim.cpType || "BPVOY4",
-    claim.voyageNumber || "VOY-2024-01",
-    claim.assignedTo || userEmail || "Rohit Mengane",
-    claim.daysOpen || 0,
-    claim.claimClosed ? 1 : 0,
-    claim.contentions || "",
-    claim.claimNotes || "",
-    JSON.stringify(claim.documentLinks || []),
-    claim.demurrageRatePerDay || 0,
-    claim.counterpartyName || "",
-    claim.counterpartyType || "Charterer",
-    claim.claimFiledAmount || 0,
-    claim.receivedClaimAmount || 0,
-    claim.agreedAmount || 0,
-    claim.billableAmount || claim.claimFiledAmount || 0,
-    claim.paymentReceived || 0,
-    claim.paymentConcluded ? 1 : 0,
-    claim.layday || "",
-    claim.cancellingDate || "",
-    claim.voyageEndDate || "",
-    claim.instructionReceivedDate || "",
-    claim.noticeReceivedDate || "",
-    claim.claimReceivedDate || "",
-    claim.noticeTimebarDays || 30,
-    claim.claimTimebarDays || 90,
-    claim.timebarred ? 1 : 0,
-    claim.claimAgreedDate || null,
-    claim.charterpartyDate || null,
-    claim.daysAwaitingPayment || 0,
-    now,
-    now
-  );
+    const insert = db.prepare(`
+      INSERT INTO claims (
+        id, claim_name, account_name, broker_name, claim_status, claim_type, ship_name, cp_type,
+        voyage_number, assigned_to, days_open, claim_closed, contentions, claim_notes, document_links,
+        demurrage_rate_per_day, counterparty_name, counterparty_type, claim_filed_amount, received_claim_amount,
+        agreed_amount, billable_amount, payment_received, payment_concluded, layday, cancelling_date,
+        voyage_end_date, instruction_received_date, notice_received_date, claim_received_date,
+        notice_timebar_days, claim_timebar_days, timebarred, claim_agreed_date, charterparty_date,
+        days_awaiting_payment, notice_days_source, claim_days_source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-  // Save Ports & Berths if provided
-  if (claim.ports && claim.ports.length > 0) {
-    savePortsForClaim(id, claim.ports);
-  }
+    const defaults = getBusinessRule("laytime_defaults") || {};
+    const globalNoticeDefault = Number(defaults.defaultNoticeTimebarDays) || 30;
+    const globalClaimDefault = Number(defaults.defaultClaimTimebarDays) || 90;
+    const noticeDays = Number(claim.noticeTimebarDays) > 0 ? Number(claim.noticeTimebarDays) : globalNoticeDefault;
+    const claimDays = Number(claim.claimTimebarDays) > 0 ? Number(claim.claimTimebarDays) : globalClaimDefault;
+    const noticeSrc = claim.noticeDaysSource || (Number(claim.noticeTimebarDays) > 0 ? "claim" : "default");
+    const claimSrc = claim.claimDaysSource || (Number(claim.claimTimebarDays) > 0 ? "claim" : "default");
 
-  // Save SoF if provided
-  if (claim.activities && claim.activities.length > 0) {
-    saveActivitiesForClaim(id, claim.activities);
-  }
+    insert.run(
+      id,
+      claim.claimName || `${claim.shipName || "New Vessel"} - Demurrage Claim`,
+      claim.accountName || "Client Trading Ltd",
+      claim.brokerName || "Clarksons",
+      claim.claimStatus || "Submitted",
+      claim.claimType || "Discharge Port Demurrage",
+      claim.shipName || "Unknown Vessel",
+      claim.cpType || "BPVOY4",
+      claim.voyageNumber || "VOY-2024-01",
+      claim.assignedTo || userEmail || "Rohit Mengane",
+      claim.daysOpen || 0,
+      claim.claimClosed ? 1 : 0,
+      claim.contentions || "",
+      claim.claimNotes || "",
+      JSON.stringify(claim.documentLinks || []),
+      claim.demurrageRatePerDay || 0,
+      claim.counterpartyName || "",
+      claim.counterpartyType || "Charterer",
+      claim.claimFiledAmount || 0,
+      claim.receivedClaimAmount || 0,
+      claim.agreedAmount || 0,
+      claim.billableAmount || claim.claimFiledAmount || 0,
+      claim.paymentReceived || 0,
+      claim.paymentConcluded ? 1 : 0,
+      claim.layday || "",
+      claim.cancellingDate || "",
+      claim.voyageEndDate || "",
+      claim.instructionReceivedDate || "",
+      claim.noticeReceivedDate || "",
+      claim.claimReceivedDate || "",
+      noticeDays,
+      claimDays,
+      claim.timebarred ? 1 : 0,
+      claim.claimAgreedDate || null,
+      claim.charterpartyDate || null,
+      claim.daysAwaitingPayment || 0,
+      noticeSrc,
+      claimSrc,
+      now,
+      now
+    );
 
-  // Create notification
-  createNotificationRecord({
-    title: "New Demurrage Claim Created",
-    message: `Claim ${id} (${claim.shipName}) was successfully registered.`,
-    type: "claim",
-    claimId: id,
-    claimName: claim.claimName
+    if (claim.ports && claim.ports.length > 0) {
+      savePortsForClaim(id, claim.ports);
+    }
+
+    if (claim.activities && claim.activities.length > 0) {
+      saveActivitiesForClaim(id, claim.activities);
+    }
+
+    createNotificationRecord({
+      title: "New Demurrage Claim Created",
+      message: `Claim ${id} (${claim.shipName}) was successfully registered.`,
+      type: "claim",
+      claimId: id,
+      claimName: claim.claimName
+    });
+
+    return id;
   });
 
-  return getClaimById(id)!;
+  const createdId = runCreate.immediate();
+  return getClaimById(createdId)!;
 }
 
 export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
@@ -452,7 +476,10 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     "layday", "cancellingDate", "voyageEndDate", "instructionReceivedDate", "noticeReceivedDate",
     "claimReceivedDate", "noticeTimebarDays", "claimTimebarDays", "timebarred", "claimAgreedDate",
     "charterpartyDate", "daysAwaitingPayment", "invoiceNumber", "taxYear", "blQuantity",
-    "ownersClaimAmount", "claimTimebarDate", "claimFiledDate", "isOverridden", "overriddenDemurrage", "overrideReason"
+    "ownersClaimAmount", "claimTimebarDate", "claimFiledDate", "isOverridden", "overriddenDemurrage", "overrideReason",
+    "dayRule", "onceOnDemurrage", "noticeGracePeriodHours", "applyWeatherWorkingDay24CH",
+    "countryCode", "portTimezone", "overlapPolicy", "overlapOverrideReason",
+    "noticeDaysSource", "claimDaysSource"
   ];
 
   const dbFieldMap: Record<string, string> = {
@@ -493,6 +520,16 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     isOverridden: "is_overridden",
     overriddenDemurrage: "overridden_demurrage",
     overrideReason: "override_reason",
+    dayRule: "day_rule",
+    onceOnDemurrage: "once_on_demurrage",
+    noticeGracePeriodHours: "notice_grace_hours",
+    applyWeatherWorkingDay24CH: "apply_24ch",
+    countryCode: "country_code",
+    portTimezone: "port_timezone",
+    overlapPolicy: "overlap_policy",
+    overlapOverrideReason: "overlap_override_reason",
+    noticeDaysSource: "notice_days_source",
+    claimDaysSource: "claim_days_source",
     invoiceNumber: "invoice_number",
     taxYear: "tax_year",
     blQuantity: "bl_quantity",
@@ -508,6 +545,15 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
       if (typeof val === "boolean") val = val ? 1 : 0;
       vals.push(val);
     }
+  }
+
+  if (updates.noticeTimebarDays !== undefined && updates.noticeDaysSource === undefined) {
+    sets.push("notice_days_source = ?");
+    vals.push("claim");
+  }
+  if (updates.claimTimebarDays !== undefined && updates.claimDaysSource === undefined) {
+    sets.push("claim_days_source = ?");
+    vals.push("claim");
   }
 
   if (updates.documentLinks) {
@@ -536,6 +582,12 @@ export function updateClaim(id: string, updates: Partial<Claim>): Claim | null {
     updates.demurrageRatePerDay !== undefined ||
     updates.isOverridden !== undefined ||
     updates.overriddenDemurrage !== undefined ||
+    updates.dayRule !== undefined ||
+    updates.onceOnDemurrage !== undefined ||
+    updates.noticeGracePeriodHours !== undefined ||
+    updates.applyWeatherWorkingDay24CH !== undefined ||
+    updates.overlapPolicy !== undefined ||
+    updates.portTimezone !== undefined ||
     updates.ports !== undefined ||
     updates.activities !== undefined ||
     updates.deductions !== undefined
@@ -556,7 +608,9 @@ export function persistCalculationForClaim(claimId: string, calculatedBy?: strin
       throw new Error(`Claim not found: ${claimId}`);
     }
 
-    const calc = calculateClaimLaytime(fullClaim);
+    const holidays = listHolidays();
+    const assumptions = getBusinessRule("laytime_defaults") || undefined;
+    const calc = calculateClaimLaytime(fullClaim, assumptions, holidays);
     resultCalc = calc;
     const now = new Date().toISOString();
     const calcId = `calc-${claimId}`;
@@ -675,6 +729,8 @@ export function getPortsForClaim(claimId: string): Port[] {
       name: p.name,
       portType: p.port_type,
       loadRate: p.load_rate,
+      countryCode: p.country_code || inferCountryAndTimezone(p.name).countryCode,
+      timezone: p.timezone || inferCountryAndTimezone(p.name).timezone,
       berths: berthRows.map((b) => ({
         id: b.id,
         portId: b.port_id,
@@ -694,7 +750,7 @@ export function savePortsForClaim(claimId: string, ports: Port[]): void {
   const db = getDatabase();
   db.transaction(() => {
     db.prepare("DELETE FROM ports WHERE claim_id = ?").run(claimId);
-    const insertPort = db.prepare("INSERT OR REPLACE INTO ports (id, claim_id, name, port_type, load_rate, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+    const insertPort = db.prepare("INSERT OR REPLACE INTO ports (id, claim_id, name, port_type, load_rate, country_code, timezone, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     const insertBerth = db.prepare("INSERT OR REPLACE INTO berths (id, port_id, name, quantity, prorata_share, is_prorata_overridden, load_rate, cargo_type, receiver_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     const now = new Date().toISOString();
@@ -702,7 +758,8 @@ export function savePortsForClaim(claimId: string, ports: Port[]): void {
     for (const p of ports) {
       pIdx++;
       const portId = p.id ? (p.id.includes(claimId) ? p.id : `${claimId}-${p.id}`) : `port-${claimId}-${pIdx}`;
-      insertPort.run(portId, claimId, p.name, p.portType, p.loadRate, now);
+      const inferred = inferCountryAndTimezone(p.name);
+      insertPort.run(portId, claimId, p.name, p.portType, p.loadRate, p.countryCode || inferred.countryCode, p.timezone || inferred.timezone, now);
       let bIdx = 0;
       for (const b of p.berths || []) {
         bIdx++;
@@ -831,6 +888,12 @@ export function validateAndComputeDuration(startTime?: string | null, stopTime?:
   }
   if (stop <= start) {
     const err = new Error("Invalid time window: stopTime must be strictly after startTime");
+    (err as any).statusCode = 400;
+    throw err;
+  }
+  const nowBuffer = Date.now() + 60 * 1000;
+  if (start > nowBuffer || stop > nowBuffer) {
+    const err = new Error("SoF activity timestamps cannot be in the future");
     (err as any).statusCode = 400;
     throw err;
   }
@@ -1210,6 +1273,7 @@ function mapRowToDocument(r: any): DocumentRecord {
     extractedItemsCount: r.extracted_items_count,
     errorReason: r.error_reason,
     filePath: r.file_path,
+    fileHash: r.file_hash || undefined,
     revisions: revRows.map((rev) => ({
       id: rev.id,
       documentId: rev.document_id,
@@ -1224,17 +1288,27 @@ function mapRowToDocument(r: any): DocumentRecord {
   };
 }
 
+export function findDuplicateDocumentByHash(claimId: string | null, fileHash: string): DocumentRecord | null {
+  const db = getDatabase();
+  const normClaimId = claimId && claimId !== "General" ? claimId : null;
+  const row = normClaimId
+    ? (db.prepare("SELECT * FROM documents WHERE file_hash = ? AND claim_id = ? LIMIT 1").get(fileHash, normClaimId) as any)
+    : (db.prepare("SELECT * FROM documents WHERE file_hash = ? AND (claim_id IS NULL OR claim_id = 'General') LIMIT 1").get(fileHash) as any);
+  return row ? mapRowToDocument(row) : null;
+}
+
 export function createDocument(doc: Partial<DocumentRecord>, uploader: string): DocumentRecord {
   const db = getDatabase();
   const now = new Date().toISOString();
   const fileName = doc.fileName || "document.pdf";
   const claimId = doc.claimId && doc.claimId !== "General" ? doc.claimId : null;
-  const fileSize = doc.fileSize || 1024;
+  const fileSize = doc.fileSize ?? 0;
   const fileType = doc.fileType || "application/pdf";
   const category = doc.category || doc.type || "SOF";
-  const filePath = doc.filePath || `/uploads/${fileName}`;
+  const filePath = doc.filePath || "";
+  const fileHash = doc.fileHash || null;
 
-  // Check if existing document with same file_name and claim_id exists
+  // Check if existing document with same file_name and claim_id exists (only version-bump if content differs or no hash)
   const existing = claimId
     ? (db.prepare("SELECT * FROM documents WHERE file_name = ? AND claim_id = ? ORDER BY uploaded_at DESC LIMIT 1").get(fileName, claimId) as any)
     : (db.prepare("SELECT * FROM documents WHERE file_name = ? AND (claim_id IS NULL OR claim_id = 'General') ORDER BY uploaded_at DESC LIMIT 1").get(fileName) as any);
@@ -1246,9 +1320,9 @@ export function createDocument(doc: Partial<DocumentRecord>, uploader: string): 
 
     db.prepare(`
       UPDATE documents
-      SET version = ?, file_size = ?, file_type = ?, category = ?, uploaded_by = ?, uploaded_at = ?, status = 'Uploaded'
+      SET version = ?, file_size = ?, file_type = ?, category = ?, file_path = ?, file_hash = ?, uploaded_by = ?, uploaded_at = ?, status = 'Uploaded'
       WHERE id = ?
-    `).run(nextVersion, fileSize, fileType, category, uploader, now, existing.id);
+    `).run(nextVersion, fileSize, fileType, category, filePath || existing.file_path, fileHash, uploader, now, existing.id);
 
     const revRows = db.prepare("SELECT COUNT(*) as count FROM document_revisions WHERE document_id = ?").get(existing.id) as any;
     const revNum = (revRows?.count || 1) + 1;
@@ -1260,20 +1334,20 @@ export function createDocument(doc: Partial<DocumentRecord>, uploader: string): 
     return getDocumentById(existing.id)!;
   }
 
-  const id = doc.id || `doc-${Date.now()}`;
+  const id = doc.id || `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const version = doc.version || "v1.0";
 
   db.prepare(`
     INSERT INTO documents (
       id, claim_id, claim_name, rac_case_id, file_name, file_size, file_type, category,
       version, uploaded_by, uploaded_at, status, ocr_confidence, extracted_items_count,
-      error_reason, file_path
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      error_reason, file_path, file_hash
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, claimId, doc.claimName || null, doc.racCaseId || null, fileName,
     fileSize, fileType, category, version,
     uploader, now, doc.status || "Uploaded", doc.ocrConfidence || 0, doc.extractedItemsCount || 0,
-    doc.errorReason || null, filePath
+    doc.errorReason || null, filePath, fileHash
   );
 
   // Initial Revision

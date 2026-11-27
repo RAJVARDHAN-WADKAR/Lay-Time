@@ -22,6 +22,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils/formatters";
+import { getTodayIso } from "@/lib/utils/dateRules";
 
 export default function CreateRacPage() {
   const router = useRouter();
@@ -261,6 +262,7 @@ export default function CreateRacPage() {
               <input
                 type="date"
                 name="relevantDate"
+                max={getTodayIso()}
                 value={details.relevantDate}
                 onChange={handleDetailsChange}
                 className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-500"

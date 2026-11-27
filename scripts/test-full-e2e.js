@@ -431,21 +431,6 @@ async function runE2ETests() {
     assert(data.success && Array.isArray(data.previewRows), "Preview rows extracted from timesheet");
   }
 
-  // 11. AI MARITIME ASSISTANT
-  console.log("\n--- 11. AI Assistant Maritime Clause Query ---");
-  {
-    const res = await fetch(`${BASE_URL}/api/ai-assistant`, {
-      method: "POST",
-      headers: supHeaders,
-      body: JSON.stringify({
-        prompt: "How does Once on Demurrage Always on Demurrage apply under BPVOY4 Clause 18?"
-      })
-    });
-    assert(res.status === 200, "AI Assistant interpreted maritime clause query");
-    const data = await res.json();
-    assert(typeof data.answer === "string" && data.answer.length > 0, "AI returned structured legal interpretation");
-  }
-
   // 12. DASHBOARD & FINANCIAL REPORTING
   console.log("\n--- 12. Dashboard & Financial Reporting ---");
   {
@@ -468,14 +453,29 @@ async function runE2ETests() {
     assert(data.summary !== undefined, "Financial summary verified");
   }
 
-  // CLEANUP TEST CLAIM
+  // CLEANUP TEST CLAIM (Supervisor hard delete denied -> 403; Admin hard delete succeeds -> 200)
   console.log("\n--- 13. Cleanup Test Claim ---");
   {
-    const res = await fetch(`${BASE_URL}/api/claims/${createdClaimId}`, {
+    const supDelRes = await fetch(`${BASE_URL}/api/claims/${createdClaimId}`, {
       method: "DELETE",
       headers: supHeaders
     });
-    assert(res.status === 200, `Test claim ${createdClaimId} deleted cleanly`);
+    assert(supDelRes.status === 403, `Supervisor forbidden from hard deleting claim ${createdClaimId} (403)`);
+
+    const adminLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "admin@laytime.demo",
+        password: process.env.ADMIN_PASSWORD || process.env.DEMO_ADMIN_PASSWORD || "AdminSecurePass@2024!"
+      })
+    });
+    const adminCookie = extractCookie(adminLoginRes);
+    const adminDelRes = await fetch(`${BASE_URL}/api/claims/${createdClaimId}`, {
+      method: "DELETE",
+      headers: { Cookie: `laytime_auth_token=${adminCookie}` }
+    });
+    assert(adminDelRes.status === 200, `Test claim ${createdClaimId} deleted cleanly by Admin`);
   }
 
   console.log("\n=========================================================");

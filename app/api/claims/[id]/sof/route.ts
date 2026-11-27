@@ -1,23 +1,16 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getScopedSoF, getScopedClaimById } from "@/lib/db/scoped";
 import { addActivityToClaim, updateActivityInClaim, deleteActivityFromClaim, getClaimById } from "@/lib/db/queries";
 import { logAudit } from "@/lib/db/audit";
 import { z } from "zod";
 
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance", "Reviewer"],
+  permission: "sof:view",
   handler: async ({ user, params }) => {
-    const isClient = Boolean(user.clientId || user.assignedClientId);
-    if (user.role === "Client" || isClient) {
-      return NextResponse.json(
-        { error: "Forbidden: Client role may not access Statement of Facts" },
-        { status: 403 }
-      );
-    }
-
     const claim = getScopedClaimById(user, params.id);
     if (!claim) {
       return NextResponse.json({ error: "Claim not found" }, { status: 404 });
@@ -49,7 +42,8 @@ const SoFActivitySchema = z.object({
 );
 
 export const POST = withApi({
-  roles: ["Supervisor", "Claim Processor", "Processor"],
+  permission: "sof:edit",
+  checkClaimOwnership: true,
   schema: SoFActivitySchema,
   handler: async ({ user, params, body }) => {
     const claim = getScopedClaimById(user, params.id);
@@ -62,7 +56,7 @@ export const POST = withApi({
       logAudit({
         actorId: user.id,
         actorEmail: user.email,
-        actorRole: user.role,
+        actorRole: normalizeRole(user.role),
         action: "sof_create",
         targetType: "statement_of_facts",
         targetId: activity.id,
@@ -77,7 +71,8 @@ export const POST = withApi({
 });
 
 export const PUT = withApi({
-  roles: ["Supervisor", "Claim Processor", "Processor"],
+  permission: "sof:edit",
+  checkClaimOwnership: true,
   handler: async ({ user, params, req, body }) => {
     const claim = getScopedClaimById(user, params.id);
     if (!claim) {
@@ -104,7 +99,8 @@ export const PUT = withApi({
 });
 
 export const DELETE = withApi({
-  roles: ["Supervisor", "Claim Processor", "Processor"],
+  permission: "sof:edit",
+  checkClaimOwnership: true,
   handler: async ({ user, params, req }) => {
     const claim = getScopedClaimById(user, params.id);
     if (!claim) {

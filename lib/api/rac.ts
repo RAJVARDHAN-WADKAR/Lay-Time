@@ -1,11 +1,4 @@
 import { RacCase, RacCalculation } from "@/lib/types";
-import {
-  getStoreRacCases,
-  getStoreRacCaseById,
-  createStoreRacCase,
-  updateStoreRacCase,
-  deleteStoreRacCase
-} from "@/lib/mock/clientStore";
 
 export async function getRacCases(params?: {
   status?: string;
@@ -14,78 +7,107 @@ export async function getRacCases(params?: {
   claimId?: string;
   search?: string;
 }): Promise<RacCase[]> {
-  return getStoreRacCases(params);
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.racType) query.set("racType", params.racType);
+  if (params?.client) query.set("client", params.client);
+  if (params?.claimId) query.set("claimId", params.claimId);
+  if (params?.search) query.set("search", params.search);
+
+  const res = await fetch(`/api/rac/cases?${query.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache" }
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to load RAC cases (HTTP ${res.status})`);
+  }
+
+  const data = await res.json();
+  return Array.isArray(data.cases) ? data.cases : [];
 }
 
 export async function getRacCaseById(id: string): Promise<RacCase | null> {
-  return getStoreRacCaseById(id);
+  const res = await fetch(`/api/rac/cases/${encodeURIComponent(id)}`, {
+    method: "GET",
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache" }
+  });
+
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to fetch RAC case (HTTP ${res.status})`);
+  }
+
+  const data = await res.json();
+  return data.case || null;
 }
 
 export async function createRacCase(racData: Partial<RacCase>): Promise<RacCase> {
-  return createStoreRacCase(racData);
+  const res = await fetch("/api/rac/cases", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(racData)
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to create RAC case");
+  }
+  return data.case;
 }
 
 export async function updateRacCase(id: string, updates: Partial<RacCase>): Promise<RacCase> {
-  return updateStoreRacCase(id, updates);
+  const res = await fetch(`/api/rac/cases/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates)
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to update RAC case");
+  }
+  return data.case;
 }
 
 export async function deleteRacCase(id: string): Promise<boolean> {
-  return deleteStoreRacCase(id);
+  const res = await fetch(`/api/rac/cases/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    cache: "no-store"
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to delete RAC case");
+  }
+  return true;
 }
 
 export async function runRacCalculation(
   racCaseIdOrPayload: string | { racCaseId: string; [key: string]: any },
   calculationInput?: any
 ): Promise<{ calculation: RacCalculation }> {
-  const caseId = typeof racCaseIdOrPayload === "object" ? racCaseIdOrPayload.racCaseId : racCaseIdOrPayload;
-  const currentCase = getStoreRacCaseById(caseId);
+  const payload =
+    typeof racCaseIdOrPayload === "object"
+      ? racCaseIdOrPayload
+      : { racCaseId: racCaseIdOrPayload, ...(calculationInput || {}) };
 
-  const baseRate = calculationInput?.baseRate || 25000;
-  const days = calculationInput?.days || 2.5;
-  const calculated = Math.round(baseRate * days);
+  const res = await fetch("/api/rac/calculations", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 
-  const calculation: RacCalculation = {
-    id: `calc-rac-${Date.now()}`,
-    racCaseId: caseId,
-    ruleVersion: "RAC-2024.1",
-    parameters: {
-      baseRate,
-      unitType: "Days",
-      taxOrVatPercent: 0,
-      graceAllowanceHours: 6
-    },
-    inputs: {
-      quantityOrDuration: days,
-      agreedDailyOrHourlyRate: baseRate,
-      actualIncurredCost: calculated,
-      counterpartyAllowance: 0
-    },
-    adjustments: [
-      {
-        id: "adj-1",
-        description: "Contractual deductible 10%",
-        amount: Math.round(calculated * 0.1),
-        isDeduction: true
-      }
-    ],
-    calculatedResult: Math.round(calculated * 0.9),
-    formulaBreakdown: [
-      { step: "Gross Laytime Claim", formula: "Base Rate x Excess Days", value: calculated },
-      { step: "Contractual Deductible", formula: "Gross x 10%", value: -Math.round(calculated * 0.1) },
-      { step: "Net Recoverable Additional Cost", formula: "Gross - Deductible", value: Math.round(calculated * 0.9) }
-    ],
-    explanation: "Calculated based on standard contractual demurrage recoverable audit terms.",
-    calculationStatus: "Verified",
-    reviewedBy: "Elena Rostova",
-    calculatedAt: new Date().toISOString()
-  };
-
-  if (currentCase) {
-    updateStoreRacCase(caseId, {
-      calculation,
-      outstandingAmount: calculation.calculatedResult
-    });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to compute RAC calculation");
   }
-
-  return { calculation };
+  return { calculation: data.calculation };
 }

@@ -1,12 +1,72 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser, ScopedUser } from "@/lib/auth/session";
 import { UserRole } from "@/lib/types";
-import { normalizeRole, can, Role, Permission } from "@/lib/auth/rolePermissions";
+import { AppRole, Permission, can, normalizeRole } from "@/lib/auth/accessMatrix";
 import { getClaimById } from "@/lib/db/queries";
 
+/**
+ * Verifies same-origin for browser state-changing requests (Origin first, Referer fallback).
+ * Returns a 403 NextResponse on cross-origin mismatch, or null if allowed.
+ */
+export function verifySameOriginRequest(req: NextRequest): NextResponse | null {
+  const allowedHosts = new Set<string>();
+  const hostHeader = req.headers.get("host");
+  const xfHost = req.headers.get("x-forwarded-host");
+  if (hostHeader) allowedHosts.add(hostHeader.toLowerCase());
+  if (xfHost) {
+    for (const h of xfHost.split(",")) {
+      const cleaned = h.trim().toLowerCase();
+      if (cleaned) allowedHosts.add(cleaned);
+    }
+  }
+  if (req.nextUrl?.host) allowedHosts.add(req.nextUrl.host.toLowerCase());
+
+  if (allowedHosts.size === 0) return null;
+
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try {
+      const originHost = new URL(origin).host.toLowerCase();
+      if (!allowedHosts.has(originHost)) {
+        return NextResponse.json(
+          { error: "Forbidden: Cross-origin request rejected" },
+          { status: 403 }
+        );
+      }
+      return null;
+    } catch {
+      return NextResponse.json(
+        { error: "Forbidden: Invalid origin header" },
+        { status: 403 }
+      );
+    }
+  }
+
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      const refHost = new URL(referer).host.toLowerCase();
+      if (!allowedHosts.has(refHost)) {
+        return NextResponse.json(
+          { error: "Forbidden: Cross-origin referer rejected" },
+          { status: 403 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Forbidden: Invalid referer header" },
+        { status: 403 }
+      );
+    }
+  }
+
+  return null;
+}
+
 export interface WithApiConfig<T = any> {
-  roles?: (UserRole | Role | string)[];
+  roles?: (UserRole | AppRole | string)[];
   permission?: Permission;
   checkClaimOwnership?: boolean;
   schema?: z.ZodType<T>;
@@ -19,6 +79,26 @@ export interface WithApiConfig<T = any> {
   }) => Promise<NextResponse | Response>;
 }
 
+export function isClaimAssignedToUser(claim: any, user: ScopedUser): boolean {
+  const assignedLower = String(claim?.assignedTo ?? claim?.assigned_to ?? "").trim().toLowerCase();
+  if (!assignedLower) return false;
+  const emailLower = (user.email || "").trim().toLowerCase();
+  const nameLower = (user.name || "").trim().toLowerCase();
+  const idLower = (user.id || "").trim().toLowerCase();
+  return (
+    (emailLower !== "" && assignedLower === emailLower) ||
+    (nameLower !== "" && assignedLower === nameLower) ||
+    (idLower !== "" && assignedLower === idLower)
+  );
+}
+
+export function isClaimOwnedByClient(claim: any, user: ScopedUser): boolean {
+  const userClientId = user.assignedClientId || user.clientId || user.client_id;
+  if (!userClientId) return false;
+  const claimClientId = claim?.clientId ?? claim?.client_id;
+  return Boolean(claimClientId && claimClientId === userClientId);
+}
+
 export function withApi<T = any>(config: WithApiConfig<T>) {
   return async (req: NextRequest, { params }: { params?: any } = { params: {} }) => {
     try {
@@ -26,24 +106,8 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
 
       // 1. Origin verification on state mutations (CSRF protection)
       if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !config.skipCsrf) {
-        const origin = req.headers.get("origin");
-        const host = req.headers.get("host");
-        if (origin && host) {
-          try {
-            const originHost = new URL(origin).host;
-            if (originHost !== host) {
-              return NextResponse.json(
-                { error: "Forbidden: Origin verification failed" },
-                { status: 403 }
-              );
-            }
-          } catch {
-            return NextResponse.json(
-              { error: "Forbidden: Invalid origin header" },
-              { status: 403 }
-            );
-          }
-        }
+        const originBlock = verifySameOriginRequest(req);
+        if (originBlock) return originBlock;
       }
 
       // 2. Authentication and User Loading
@@ -55,59 +119,43 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
       const isClient = Boolean(user.clientId || user.assignedClientId);
       const userNorm = normalizeRole(user.role, isClient);
 
-      // 3. Permission-Based Access Control check
+      // 3. Permission-Based Access Control check via single accessMatrix
       if (config.permission) {
         if (!can(user.role, config.permission, isClient)) {
           return NextResponse.json(
-            { error: `Forbidden: Role '${user.role}' lacks permission '${config.permission}'` },
+            { error: `Forbidden: Role '${userNorm}' lacks permission '${config.permission}'` },
             { status: 403 }
           );
         }
       }
 
-      // 4. Role-Based Access Control check (if roles specified)
+      // 4. Optional Role-Based Access Control check
       if (config.roles && config.roles.length > 0) {
-        const isAllowed = config.roles.some((r) => {
-          const rNorm = normalizeRole(r);
-          return rNorm === userNorm;
-        });
-
+        const isAllowed = config.roles.some((r) => normalizeRole(r) === userNorm);
         if (!isAllowed) {
           return NextResponse.json(
-            { error: `Forbidden: Role '${user.role}' is not authorized for this action` },
+            { error: `Forbidden: Role '${userNorm}' is not authorized for this action` },
             { status: 403 }
           );
         }
       }
 
-      // 5. Ownership re-check for CLAIM_PROCESSOR on mutating endpoints for a specific claim
-      if (
-        userNorm === "CLAIM_PROCESSOR" &&
-        ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
-        (config.checkClaimOwnership || params?.id)
-      ) {
-        const claimId = params?.id;
-        if (claimId) {
-          const existingClaim = getClaimById(claimId);
-          if (existingClaim) {
-            const assignedLower = (existingClaim.assignedTo || (existingClaim as any).assigned_to || "").trim().toLowerCase();
-            const emailLower = (user.email || "").trim().toLowerCase();
-            const nameLower = (user.name || "").trim().toLowerCase();
-            const idLower = (user.id || "").trim().toLowerCase();
-
-            const isAssigned =
-              (emailLower && assignedLower === emailLower) ||
-              (nameLower && assignedLower === nameLower) ||
-              (idLower && assignedLower === idLower) ||
-              (nameLower.includes("rohan") && assignedLower.includes("rohan")) ||
-              (nameLower.includes("sneha") && assignedLower.includes("sneha"));
-
-            if (!isAssigned) {
-              return NextResponse.json(
-                { error: "Forbidden: Claim Processors may only modify claims assigned to them." },
-                { status: 403 }
-              );
-            }
+      // 5. Claim ownership / client scope re-check on claim-scoped endpoints
+      const claimId = params?.id;
+      if (claimId && (config.checkClaimOwnership || ["POST", "PUT", "PATCH", "DELETE"].includes(method))) {
+        const existingClaim = getClaimById(claimId);
+        if (existingClaim) {
+          if (userNorm === "CLAIM_PROCESSOR" && !isClaimAssignedToUser(existingClaim, user)) {
+            return NextResponse.json(
+              { error: "Forbidden: Claim Processors may only access or modify claims assigned to them." },
+              { status: 403 }
+            );
+          }
+          if (userNorm === "CLIENT" && !isClaimOwnedByClient(existingClaim, user)) {
+            return NextResponse.json(
+              { error: "Forbidden: Clients may only access their own company claims." },
+              { status: 403 }
+            );
           }
         }
       }
@@ -157,10 +205,14 @@ export function withApi<T = any>(config: WithApiConfig<T>) {
         params: params || {}
       });
     } catch (error: any) {
-      console.error("API handler error:", error);
+      const correlationId = crypto.randomUUID().slice(0, 12);
+      console.error(`[API ${correlationId}] handler error:`, error);
       const status = error.statusCode || error.status || 500;
       return NextResponse.json(
-        { error: error.message || "Internal server error" },
+        {
+          error: status >= 500 ? "Internal server error" : error.message || "Request failed",
+          correlationId
+        },
         { status }
       );
     }

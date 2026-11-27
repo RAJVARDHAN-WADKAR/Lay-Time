@@ -1,4 +1,4 @@
-export type ExactRole = "ADMIN" | "SUPERVISOR" | "CLAIM_PROCESSOR" | "REVIEWER" | "CLIENT" | "REVIEWER_CLIENT" | "FINANCE";
+export type ExactRole = "ADMIN" | "SUPERVISOR" | "CLAIM_PROCESSOR" | "REVIEWER" | "CLIENT";
 
 export type UserRole =
   | ExactRole
@@ -6,7 +6,6 @@ export type UserRole =
   | "Supervisor"
   | "Processor"
   | "Claim Processor"
-  | "Finance"
   | "Reviewer"
   | "Client";
 
@@ -138,6 +137,36 @@ export type DeductionCategory =
   | "Others"
   | "Custom";
 
+export type LaytimeDayRule =
+  | "SHINC"
+  | "SHEX"
+  | "SHEXUU"
+  | "FHINC"
+  | "FHEX"
+  | "FHEXUU"
+  | "SSHEX";
+
+export interface MaritimeHoliday {
+  id: string;
+  countryCode: string;
+  portId?: string | null;
+  date: string; // YYYY-MM-DD
+  name: string;
+  source: string;
+  createdAt?: string;
+}
+
+export interface DailyLaytimeBreakdownRow {
+  date: string;
+  weekday: string;
+  timezone: string;
+  countedMinutes: number;
+  excludedMinutes: number;
+  onDemurrageMinutes: number;
+  reasons: string[];
+  holidaysMatched: string[];
+}
+
 export interface Berth {
   id: string;
   portId: string;
@@ -156,7 +185,42 @@ export interface Port {
   name: string;
   portType: "Load Port" | "Discharge Port";
   loadRate: number; // MT per day
+  countryCode?: string;
+  timezone?: string;
   berths: Berth[];
+}
+
+export interface OcrFieldConfidences {
+  date: number;
+  startTime: number;
+  stopTime: number;
+  activityName: number;
+}
+
+export interface OcrDraftEvent extends SoFActivity {
+  pageNumber: number;
+  rawLine: string;
+  fieldConfidences: OcrFieldConfidences;
+  overallConfidencePct: number;
+  isUnclassified?: boolean;
+}
+
+export interface OcrDraft {
+  id: string;
+  documentId: string;
+  claimId: string;
+  portId?: string;
+  berthId?: string;
+  rawText: string;
+  pages: Array<{ pageNumber: number; text: string; averageConfidence: number }>;
+  parsedEvents: OcrDraftEvent[];
+  overallConfidence: number; // 0-100
+  isScanned: boolean;
+  isDemo: boolean;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SoFActivity {
@@ -267,6 +331,19 @@ export interface Claim {
   overriddenDemurrage?: number;
   overrideReason?: string;
 
+  // Laytime Day Rules, Timebar Source & Overlap Policy
+  dayRule?: LaytimeDayRule;
+  onceOnDemurrage?: boolean;
+  noticeGracePeriodHours?: number;
+  applyWeatherWorkingDay24CH?: boolean;
+  countryCode?: string;
+  portTimezone?: string;
+  overlapPolicy?: "block" | "exception_wins";
+  overlapOverrideReason?: string;
+  noticeDaysSource?: string;
+  claimDaysSource?: string;
+  baseDateEstimated?: boolean;
+
   // Key Operational Dates
   layday?: string; // "Layday"
   cancellingDate?: string; // "Cancelling Date"
@@ -332,11 +409,12 @@ export interface DocumentRecord {
   uploadedAt: string;
   modifiedBy?: string;
   modifiedAt?: string;
-  status: "Uploaded" | "OCR Processing..." | "OCR Completed" | "OCR Failed";
+  status: "Uploaded" | "OCR Processing" | "OCR Completed" | "OCR Failed" | "OCR Processing...";
   ocrConfidence?: number;
   extractedItemsCount?: number;
   errorReason?: string;
   filePath?: string;
+  fileHash?: string;
   revisions?: DocumentRevision[];
   ocrExtractedActivities?: SoFActivity[];
 }
@@ -426,13 +504,23 @@ export interface ClaimCalculation {
     isTimebarred: boolean;
   };
   assumptions?: CalculationAssumptions;
+  dayRule?: LaytimeDayRule;
+  holidaysExcludedCount?: number;
+  onceOnDemurrage?: boolean;
+  noticeGraceMinutesExcluded?: number;
+  dailyBreakdown?: DailyLaytimeBreakdownRow[];
+  overlapPolicy?: "block" | "exception_wins";
+  overlapBlocked?: boolean;
+  overlapAffectedMinutes?: number;
+  overlapErrors?: string[];
+  validationErrors?: string[];
   calculatedAt?: string;
   calculatedBy?: string;
 }
 
 export interface CalculationAssumptions {
   laytimeRule: "OOD_AOD" | "ONCE_ON_DEMURRAGE_ALWAYS_ON_DEMURRAGE" | "REVERSIBLE" | "NON_REVERSIBLE";
-  weekendRule: "SHEX" | "SHINC" | "FHEX" | "FHINC";
+  weekendRule: LaytimeDayRule;
   noticeGracePeriodHours: number; // e.g. 6 hours after NOR tendered
   currency: string;
   roundingPrecisionMinutes: number;
@@ -441,6 +529,13 @@ export interface CalculationAssumptions {
   defaultDemurrageRate?: number;
   defaultDespatchRate?: number;
   workingHours?: string;
+  onceOnDemurrageDefault?: boolean;
+  overlapPolicy?: "block" | "exception_wins";
+  defaultNoticeTimebarDays?: number;
+  defaultClaimTimebarDays?: number;
+  timebarCriticalPct?: number;
+  timebarApproachingPct?: number;
+  accountTimebarDefaults?: Record<string, { noticeDays?: number; claimDays?: number }>;
   companyName?: string;
   companyAddress?: string;
   companyContact?: string;

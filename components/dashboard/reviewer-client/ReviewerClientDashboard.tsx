@@ -13,8 +13,11 @@ import { RecentClaimsTable } from "@/components/dashboard/shared/RecentClaimsTab
 import { ClientClaimsList } from "@/components/roles/reviewer-client/ClientClaimsList";
 import { ClientNegotiationFeed } from "@/components/roles/reviewer-client/ClientNegotiationFeed";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAuth } from "@/lib/context/AuthContext";
+import { useToast } from "@/lib/hooks/useToast";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import {
   FileSpreadsheet,
   Clock,
@@ -29,24 +32,39 @@ import {
   RefreshCw
 } from "lucide-react";
 
-export function ReviewerClientDashboard() {
-  const { currentUser } = useAuth();
+export function ReviewerClientDashboard({ mode }: { mode?: "reviewer" | "client" }) {
+  const { currentUser, role } = useAuth();
+  const { success, error: showError } = useToast();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  const isClient = currentUser?.role === "Client" || !!currentUser?.clientId;
+  const isClient =
+    mode === "client" ||
+    (mode !== "reviewer" &&
+      normalizeRole(role, Boolean(currentUser?.clientId || (currentUser as any)?.client_id)) === "CLIENT");
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh = false) => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const [cls, notifs] = await Promise.all([
-        getClaims().catch(() => []),
-        getNotifications().catch(() => [])
+        getClaims(),
+        getNotifications()
       ]);
       setClaims(cls);
       setNotifications(notifs);
+      if (isManualRefresh) {
+        success("Portal Refreshed", "Claims and notifications updated.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load portal data.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -125,13 +143,13 @@ export function ReviewerClientDashboard() {
           <Link href="/documents">
             <Button variant="outline" size="sm" className="text-xs font-semibold h-9 px-3.5 bg-white rounded-xl flex items-center space-x-1.5 border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer">
               <FileCheck className="h-4 w-4 text-emerald-600" />
-              <span>{isClient ? "Upload Documents" : "Inspect Archive"}</span>
+              <span>{isClient ? "My Documents" : "Inspect Archive"}</span>
             </Button>
           </Link>
           <Button
             variant="ghost"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
             title="Refresh portal data"
           >
@@ -139,6 +157,15 @@ export function ReviewerClientDashboard() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load portal data"
+          message={loadError}
+          onRetry={() => loadData(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* 2. Key Metrics Grid */}
       {isClient ? (

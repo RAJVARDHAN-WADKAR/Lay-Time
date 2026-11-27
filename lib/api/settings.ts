@@ -1,9 +1,4 @@
 import { CalculationAssumptions } from "@/lib/types";
-import {
-  getStoreSettings,
-  updateStoreSettings,
-  resetClientStore
-} from "@/lib/mock/clientStore";
 
 export const DEFAULT_SETTINGS: CalculationAssumptions = {
   laytimeRule: "OOD_AOD",
@@ -19,22 +14,43 @@ export const DEFAULT_SETTINGS: CalculationAssumptions = {
 };
 
 export async function getAssumptions(): Promise<CalculationAssumptions> {
-  return getStoreSettings();
+  const res = await fetch("/api/settings", {
+    method: "GET",
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache" }
+  });
+  if (!res.ok) {
+    if (res.status === 403) return DEFAULT_SETTINGS;
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to load settings (HTTP ${res.status})`);
+  }
+  const data = await res.json();
+  return data.settings || DEFAULT_SETTINGS;
 }
 
 export const getSettings = getAssumptions;
 
 export async function saveAssumptions(assumptions: CalculationAssumptions): Promise<CalculationAssumptions> {
-  return updateStoreSettings(assumptions);
+  const res = await fetch("/api/settings", {
+    method: "PUT",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(assumptions)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Failed to save settings");
+  }
+  return data.settings || assumptions;
 }
 
 export const updateSettings = saveAssumptions;
 
 export async function resetSettings(): Promise<CalculationAssumptions> {
-  return updateStoreSettings(DEFAULT_SETTINGS);
+  return saveAssumptions(DEFAULT_SETTINGS);
 }
 
 export async function resetAllDataToZero(): Promise<boolean> {
-  resetClientStore();
+  await saveAssumptions(DEFAULT_SETTINGS);
   return true;
 }

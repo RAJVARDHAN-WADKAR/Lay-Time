@@ -117,7 +117,16 @@ export function exportClaimPdf(claim: Claim, calculation?: ClaimCalculation | nu
     if (calcY < 240) {
       doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
+      const dayRuleLabel = calculation.dayRule || calculation.assumptions?.weekendRule || "SHEX";
+      const holCount = calculation.holidaysExcludedCount ?? 0;
       doc.text("4. FINAL LAYTIME & DEMURRAGE RECONCILIATION", 14, calcY);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Day rule: ${dayRuleLabel}, holidays: ${holCount} excluded | Once on demurrage: ${calculation.onceOnDemurrage !== false ? "ON" : "OFF"}`,
+        14,
+        calcY + 5
+      );
 
       const calcSummary = [
         ["Total Gross Time Elapsed:", formatMinutesToDuration(calculation.totalGrossMinutes)],
@@ -129,7 +138,7 @@ export function exportClaimPdf(claim: Claim, calculation?: ClaimCalculation | nu
       ];
 
       autoTable(doc, {
-        startY: calcY + 4,
+        startY: calcY + 9,
         body: calcSummary,
         theme: "plain",
         styles: { fontSize: 8, cellPadding: 1.5 },
@@ -138,6 +147,32 @@ export function exportClaimPdf(claim: Claim, calculation?: ClaimCalculation | nu
           1: { cellWidth: 60, fontStyle: "bold" },
         },
       });
+
+      if (calculation.dailyBreakdown && calculation.dailyBreakdown.length > 0) {
+        const dayY = (doc as any).lastAutoTable.finalY + 8;
+        if (dayY < 250) {
+          doc.setFontSize(9.5);
+          doc.setFont("helvetica", "bold");
+          doc.text("5. PER-DAY PORT-LOCAL LAYTIME BREAKDOWN", 14, dayY);
+
+          const dayRows = calculation.dailyBreakdown.map((d) => [
+            d.date,
+            d.weekday,
+            formatMinutesToDuration(d.countedMinutes),
+            formatMinutesToDuration(d.excludedMinutes),
+            d.reasons.join("; ") || "Counted"
+          ]);
+
+          autoTable(doc, {
+            startY: dayY + 4,
+            head: [["Date", "Weekday", "Counted", "Excluded", "Reason"]],
+            body: dayRows,
+            theme: "striped",
+            headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 7.5 },
+            bodyStyles: { fontSize: 7, cellPadding: 1.8 }
+          });
+        }
+      }
     }
   }
 

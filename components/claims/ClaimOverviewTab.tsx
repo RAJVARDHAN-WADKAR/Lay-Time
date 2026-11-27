@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/inputs";
 import { CheckCircle2, XCircle, Save, Lock } from "lucide-react";
 import { useAuth } from "@/lib/context/AuthContext";
+import { calculateTimebarCompliance } from "@/lib/calculations/timebar";
 
 interface ClaimOverviewTabProps {
   claim: Claim;
@@ -58,20 +59,45 @@ export function ClaimOverviewTab({
 
         <Card className="p-4 bg-white border-slate-200">
           <span className="text-slate-400 block font-semibold uppercase text-[10px]">Timebar Compliance</span>
-          <div className="mt-1 flex items-center space-x-1.5">
-            {claim.timebarred ? (
-              <span className="text-rose-600 font-bold flex items-center">
-                <XCircle className="h-4 w-4 mr-1" /> Timebarred
-              </span>
-            ) : (
-              <span className="text-emerald-600 font-bold flex items-center">
-                <CheckCircle2 className="h-4 w-4 mr-1" /> Compliant
-              </span>
-            )}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1">
-            Notice: {claim.noticeTimebarDays}d | Claim: {claim.claimTimebarDays}d
-          </div>
+          {(() => {
+            const tb = calculateTimebarCompliance(claim);
+            return (
+              <>
+                <div className="mt-1 flex items-center flex-wrap gap-1.5">
+                  {tb.isTimebarred ? (
+                    <span className="text-rose-600 font-bold flex items-center text-xs">
+                      <XCircle className="h-4 w-4 mr-1" /> TIMEBARRED
+                    </span>
+                  ) : tb.isSubmittedOnTime ? (
+                    <span className="text-emerald-700 font-bold flex items-center text-xs">
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Submitted on time
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 font-bold flex items-center text-xs">
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> {tb.statusBadgeText}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  Notice: {tb.noticeDaysAllowed}d | Claim: {tb.claimDaysAllowed}d
+                </div>
+                {(tb.isBaseDateEstimated || tb.differsFromDefault) && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {tb.isBaseDateEstimated && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                        Base date estimated
+                      </span>
+                    )}
+                    {tb.differsFromDefault && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                        Imported value differs from default
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </Card>
       </div>
 

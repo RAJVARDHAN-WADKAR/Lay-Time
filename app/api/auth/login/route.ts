@@ -5,6 +5,7 @@ import { getUserByEmail } from "@/lib/db/queries";
 import { comparePassword } from "@/lib/auth/password";
 import { signToken } from "@/lib/auth/jwt";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/session";
+import { verifySameOriginRequest } from "@/lib/api/withApi";
 
 interface RateLimitEntry {
   failures: number;
@@ -25,6 +26,9 @@ function getClientIp(req: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const originBlock = verifySameOriginRequest(request);
+    if (originBlock) return originBlock;
+
     const body = await request.json();
     const { email, password } = body;
 
@@ -80,12 +84,13 @@ export async function POST(request: NextRequest) {
     // Login succeeded - clear failure counter
     loginFailureStore.delete(rateLimitKey);
 
-    // Sign JWT with userId, role, assignedClientId, tokenVersion
-    const isClientRole = user.role === "Client" || (user.role === "REVIEWER_CLIENT" && Boolean(user.client_id || user.clientId));
-    const assignedClientId = isClientRole ? (user.client_id || user.clientId || null) : null;
+    // Sign JWT with normalized role (5 distinct roles: ADMIN, SUPERVISOR, CLAIM_PROCESSOR, REVIEWER, CLIENT)
+    const { normalizeRole } = await import("@/lib/auth/accessMatrix");
+    const normRole = normalizeRole(user.role, Boolean(user.client_id || user.clientId));
+    const assignedClientId = normRole === "CLIENT" ? (user.client_id || user.clientId || null) : null;
     const token = signToken({
       userId: user.id,
-      role: user.role,
+      role: normRole,
       assignedClientId,
       tokenVersion: user.token_version ?? user.tokenVersion ?? 1,
       email: user.email,
@@ -98,7 +103,7 @@ export async function POST(request: NextRequest) {
       name: user.name,
       email: user.email,
       username: user.username,
-      role: user.role,
+      role: normRole,
       clientId: assignedClientId || undefined,
       clientName: user.clientName,
       avatar: user.avatar,
@@ -113,9 +118,11 @@ export async function POST(request: NextRequest) {
       user: userResponse
     });
 
+    const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim()?.toLowerCase();
+    const isHttpsRequest = forwardedProto === "https" || request.nextUrl?.protocol === "https:";
     const isSecure = process.env.COOKIE_SECURE !== undefined
       ? process.env.COOKIE_SECURE === "true"
-      : process.env.NODE_ENV === "production";
+      : process.env.NODE_ENV === "production" && isHttpsRequest;
 
     // Set Secure HTTP-Only Cookie (8 hours)
     response.cookies.set({

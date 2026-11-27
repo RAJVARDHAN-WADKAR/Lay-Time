@@ -1,15 +1,16 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest } from "@/lib/auth/session";
+import { NextResponse } from "next/server";
+import { withApi } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getRacCases, createRacCase, createNotificationRecord } from "@/lib/db/queries";
 import { logAudit } from "@/lib/db/audit";
+import { isFutureDate } from "@/lib/utils/dateRules";
 
-export async function GET(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    const searchParams = request.nextUrl.searchParams;
-
+export const GET = withApi({
+  permission: "rac:view",
+  handler: async ({ user, req }) => {
+    const searchParams = req.nextUrl.searchParams;
     const status = searchParams.get("status") || "All";
     const racType = searchParams.get("racType") || "All";
     const client = searchParams.get("client") || "All";
@@ -17,9 +18,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
 
     const cases = getRacCases({
-      role: session?.role,
-      userEmail: session?.email,
-      userName: session?.name,
+      role: user.role,
+      userEmail: user.email,
+      userName: user.name,
       status,
       racType,
       client,
@@ -31,42 +32,34 @@ export async function GET(request: NextRequest) {
       cases,
       total: cases.length
     });
-  } catch (error: any) {
-    console.error("GET RAC Cases API Error:", error);
-    return NextResponse.json({ error: "Failed to fetch RAC cases" }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
+export const POST = withApi({
+  permission: "rac:create",
+  handler: async ({ user, body }) => {
+    const racData = { ...(body || {}) };
+    if (racData.relevantDate && isFutureDate(racData.relevantDate)) {
+      return NextResponse.json(
+        { error: "Date validation error: RAC relevant operational date cannot be in the future." },
+        { status: 400 }
+      );
+    }
+    const normRole = normalizeRole(user.role);
+    if (normRole === "CLAIM_PROCESSOR") {
+      racData.assignedTo = user.name || user.email;
     }
 
-    const { normalizeRole } = await import("@/app/access/roles");
-    const userRoleNorm = normalizeRole(session.role);
-    if (
-      userRoleNorm === "REVIEWER_CLIENT" ||
-      userRoleNorm === "FINANCE" ||
-      session.role === "Reviewer" ||
-      session.role === "Client" ||
-      session.role === "Finance"
-    ) {
-      return NextResponse.json({ error: "Forbidden: Reviewers, Clients, and Finance cannot create RAC cases." }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const newCase = createRacCase(body, session.name || session.email || "System");
+    const newCase = createRacCase(racData, user.name || user.email || "System");
 
     logAudit({
-      actorId: session.userId,
-      actorEmail: session.email,
-      actorRole: session.role,
+      actorId: user.id,
+      actorEmail: user.email,
+      actorRole: normRole,
       action: "rac_create",
       targetType: "rac_case",
       targetId: newCase.id,
-      details: body
+      details: racData
     });
 
     createNotificationRecord({
@@ -77,12 +70,12 @@ export async function POST(request: NextRequest) {
       racReference: newCase.racReference
     });
 
-    return NextResponse.json({
-      success: true,
-      case: newCase
-    }, { status: 201 });
-  } catch (error: any) {
-    console.error("POST RAC Case API Error:", error);
-    return NextResponse.json({ error: "Failed to create RAC case" }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: true,
+        case: newCase
+      },
+      { status: 201 }
+    );
   }
-}
+});

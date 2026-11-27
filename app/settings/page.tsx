@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { getSettings, updateSettings, resetSettings, resetAllDataToZero } from "@/lib/api";
-import { CalculationAssumptions } from "@/lib/types";
+import { CalculationAssumptions, MaritimeHoliday } from "@/lib/types";
 import { DEFAULT_ASSUMPTIONS } from "@/lib/calculations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Input, Select } from "@/components/ui/inputs";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/context/AuthContext";
 import { useToast } from "@/lib/hooks/useToast";
-import Link from "next/link";
+import { NoAccessScreen } from "@/components/auth/NoAccessScreen";
 import {
   Settings as SettingsIcon,
   User,
@@ -64,6 +64,26 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 
+  // Maritime Holidays Calendar Management
+  const [holidays, setHolidays] = useState<MaritimeHoliday[]>([]);
+  const [holCountryFilter, setHolCountryFilter] = useState("ALL");
+  const [newHolCountry, setNewHolCountry] = useState("AE");
+  const [newHolDate, setNewHolDate] = useState("");
+  const [newHolName, setNewHolName] = useState("");
+  const [importYear, setImportYear] = useState(2025);
+  const [holBusy, setHolBusy] = useState(false);
+
+  const loadHolidays = async (country = holCountryFilter) => {
+    try {
+      const qs = country && country !== "ALL" ? `?countryCode=${encodeURIComponent(country)}` : "";
+      const res = await fetch(`/api/holidays${qs}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setHolidays(Array.isArray(data.holidays) ? data.holidays : []);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     async function load() {
       if (!canAccessSettings) {
@@ -81,6 +101,7 @@ export default function SettingsPage() {
           phone: stg.companyPhone || "",
         });
       }
+      await loadHolidays("ALL");
       setIsLoading(false);
     }
     if (!authLoading) {
@@ -100,26 +121,7 @@ export default function SettingsPage() {
   }
 
   if (!canAccessSettings) {
-    return (
-      <div className="max-w-2xl mx-auto my-12 bg-white rounded-2xl border border-rose-200 shadow-xl p-8 text-center space-y-4">
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-inner">
-          <AlertOctagon className="h-7 w-7" />
-        </div>
-        <div className="space-y-1">
-          <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            System settings are strictly restricted to users with the <strong>Admin</strong> role. Your current active role is <strong>{role}</strong>.
-          </p>
-        </div>
-        <div>
-          <Link href="/dashboard">
-            <Button variant="outline" size="sm" className="text-xs">
-              Return to Dashboard
-            </Button>
-          </Link>
-        </div>
-      </div>
-    );
+    return <NoAccessScreen message="System settings are strictly restricted to Administrators." />;
   }
 
   const handleSaveAll = async () => {
@@ -331,20 +333,228 @@ export default function SettingsPage() {
               />
             </div>
 
-            {/* Working Hours */}
+            {/* Working Hours / Default Day Rule */}
             <div className="space-y-1">
-              <label className="font-bold text-slate-700 block">Working Hours</label>
+              <label className="font-bold text-slate-700 block">Default Day Rule</label>
               <Select
-                value={calcSettings.workingHours || "24 Hours SHINC"}
-                onChange={(e) => setCalcSettings((p) => ({ ...p, workingHours: e.target.value }))}
+                value={calcSettings.weekendRule || "SHEX"}
+                onChange={(e) => setCalcSettings((p) => ({ ...p, weekendRule: e.target.value as any }))}
                 className="h-9 text-xs"
               >
-                <option value="24 Hours SHINC">24 Hours SHINC</option>
-                <option value="24 Hours SHEX">24 Hours SHEX</option>
-                <option value="8 Hours Standard">8 Hours Standard</option>
-                <option value="Weather Working Days">Weather Working Days</option>
+                <option value="SHINC">SHINC (Sundays &amp; Holidays Included)</option>
+                <option value="SHEX">SHEX (Sundays &amp; Holidays Excepted)</option>
+                <option value="SHEXUU">SHEXUU (SHEX Unless Used)</option>
+                <option value="FHINC">FHINC (Fridays &amp; Holidays Included)</option>
+                <option value="FHEX">FHEX (Fridays &amp; Holidays Excepted)</option>
+                <option value="FHEXUU">FHEXUU (FHEX Unless Used)</option>
+                <option value="SSHEX">SSHEX (Sat/Sun &amp; Holidays Excepted)</option>
               </Select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 mt-4 border-t border-slate-100">
+            <div className="space-y-1">
+              <label className="font-bold text-slate-700 block">Default Notice Timebar (Days)</label>
+              <Input
+                type="number"
+                value={calcSettings.defaultNoticeTimebarDays ?? 30}
+                onChange={(e) =>
+                  setCalcSettings((p) => ({
+                    ...p,
+                    defaultNoticeTimebarDays: Number(e.target.value) || 30,
+                  }))
+                }
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-bold text-slate-700 block">Default Formal Claim Timebar (Days)</label>
+              <Input
+                type="number"
+                value={calcSettings.defaultClaimTimebarDays ?? 90}
+                onChange={(e) =>
+                  setCalcSettings((p) => ({
+                    ...p,
+                    defaultClaimTimebarDays: Number(e.target.value) || 90,
+                  }))
+                }
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-bold text-slate-700 block">Notice Grace Period (Hours)</label>
+              <Input
+                type="number"
+                value={calcSettings.noticeGracePeriodHours ?? 6}
+                onChange={(e) =>
+                  setCalcSettings((p) => ({
+                    ...p,
+                    noticeGracePeriodHours: Number(e.target.value) || 0,
+                  }))
+                }
+                className="h-9 text-xs"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* MARITIME HOLIDAYS CALENDAR (ADMIN) */}
+      <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
+        <CardHeader className="p-5 pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-sm font-bold text-slate-900">
+              Maritime Holiday Calendar (SQLite Authoritative)
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              Manage country &amp; port public holidays for SHEX / FHEX / SSHEX laytime exclusions ({holidays.length} loaded)
+            </CardDescription>
+          </div>
+          <Select
+            value={holCountryFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              setHolCountryFilter(v);
+              loadHolidays(v);
+            }}
+            className="h-8 text-xs w-40"
+          >
+            <option value="ALL">All Countries</option>
+            <option value="AE">AE (UAE)</option>
+            <option value="SA">SA (Saudi Arabia)</option>
+            <option value="SG">SG (Singapore)</option>
+            <option value="NL">NL (Netherlands)</option>
+            <option value="BE">BE (Belgium)</option>
+            <option value="US">US (United States)</option>
+            <option value="GB">GB (UK)</option>
+            <option value="IN">IN (India)</option>
+            <option value="CN">CN (China)</option>
+          </Select>
+        </CardHeader>
+        <CardContent className="p-5 space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Country Code</label>
+              <Input
+                value={newHolCountry}
+                onChange={(e) => setNewHolCountry(e.target.value.toUpperCase())}
+                placeholder="e.g. AE"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Holiday Date</label>
+              <Input
+                type="date"
+                value={newHolDate}
+                onChange={(e) => setNewHolDate(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="font-bold text-slate-700 block mb-1">Holiday Name</label>
+              <Input
+                value={newHolName}
+                onChange={(e) => setNewHolName(e.target.value)}
+                placeholder="e.g. National Day Terminal Holiday"
+                className="h-8 text-xs"
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={holBusy || !newHolDate || !newHolName}
+              onClick={async () => {
+                setHolBusy(true);
+                try {
+                  const res = await fetch("/api/holidays", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      mode: "manual",
+                      countryCode: newHolCountry,
+                      date: newHolDate,
+                      name: newHolName
+                    })
+                  });
+                  if (!res.ok) throw new Error("Failed to save holiday");
+                  setNewHolDate("");
+                  setNewHolName("");
+                  await loadHolidays(holCountryFilter);
+                  success("Holiday Added", "Saved to holidays table.");
+                } catch (err: any) {
+                  info("Holiday Error", err?.message || "Failed");
+                } finally {
+                  setHolBusy(false);
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs"
+            >
+              Add Holiday
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="font-semibold text-slate-600">Seed Country Year via date-holidays:</span>
+            <Input
+              type="number"
+              value={importYear}
+              onChange={(e) => setImportYear(Number(e.target.value) || 2025)}
+              className="h-8 w-24 text-xs"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={holBusy}
+              onClick={async () => {
+                setHolBusy(true);
+                try {
+                  const res = await fetch("/api/holidays", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      mode: "import",
+                      countryCode: newHolCountry,
+                      year: importYear
+                    })
+                  });
+                  const d = await res.json();
+                  await loadHolidays(holCountryFilter);
+                  success("Holidays Imported", `Imported ${d.inserted || 0} holidays for ${newHolCountry} (${importYear}).`);
+                } finally {
+                  setHolBusy(false);
+                }
+              }}
+              className="h-8 text-xs"
+            >
+              Import {newHolCountry} ({importYear})
+            </Button>
+          </div>
+
+          <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+            {holidays.slice(0, 50).map((h) => (
+              <div key={h.id} className="px-3 py-2 flex items-center justify-between hover:bg-slate-50">
+                <div className="flex items-center space-x-3">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono font-bold text-[10px]">
+                    {h.countryCode}
+                  </span>
+                  <span className="font-mono text-slate-600">{h.date}</span>
+                  <span className="font-semibold text-slate-800">{h.name}</span>
+                  <span className="text-[10px] text-slate-400">({h.source})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch(`/api/holidays?id=${encodeURIComponent(h.id)}`, { method: "DELETE" });
+                    await loadHolidays(holCountryFilter);
+                    success("Holiday Removed", `${h.name} deleted.`);
+                  }}
+                  className="text-slate-400 hover:text-rose-600 p-1"
+                  title="Delete holiday"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

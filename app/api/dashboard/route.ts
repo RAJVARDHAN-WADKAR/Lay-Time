@@ -1,16 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest } from "@/lib/auth/session";
+import { NextResponse } from "next/server";
+import { withApi } from "@/lib/api/withApi";
 import { getDashboardAnalytics } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    const metrics = getDashboardAnalytics(session?.role, session?.email);
+export const GET = withApi({
+  permission: "claims:view",
+  handler: async ({ user }) => {
+    const metrics = getDashboardAnalytics(user.role, user.email);
     return NextResponse.json({ metrics });
-  } catch (error: any) {
-    console.error("Dashboard API Error:", error);
-    return NextResponse.json({ error: "Failed to generate dashboard metrics" }, { status: 500 });
   }
-}
+});

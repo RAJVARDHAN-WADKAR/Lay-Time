@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { getClaims } from "@/lib/api";
-import { Claim } from "@/lib/types";
+import { getClaimsWithTimebarDefaults } from "@/lib/api/claims";
+import { CalculationAssumptions, Claim } from "@/lib/types";
 import { calculateTimebarCompliance } from "@/lib/calculations/timebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils/formatters";
 import {
@@ -21,53 +22,65 @@ import {
   Calendar,
   ShieldCheck,
   Send,
-  Download
+  Download,
+  RefreshCw
 } from "lucide-react";
 import { useToast } from "@/lib/hooks/useToast";
 
 export default function TimeBarMonitorPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
+  const [timebarDefaults, setTimebarDefaults] = useState<Partial<CalculationAssumptions>>({
+    defaultNoticeTimebarDays: 30,
+    defaultClaimTimebarDays: 90
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "Safe" | "Approaching" | "Urgent" | "Timebarred">("ALL");
   const [clientFilter, setClientFilter] = useState<string>("ALL");
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
 
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
-      const data = await getClaims();
-      setClaims(data);
+  const load = async (isManualRefresh = false) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getClaimsWithTimebarDefaults({ limit: 500 });
+      setClaims(data.claims);
+      if (data.timebarDefaults) {
+        setTimebarDefaults(data.timebarDefaults);
+      }
+      if (isManualRefresh) {
+        success("Time-Bar Monitor Refreshed", "Deadline schedule synced with database.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load claims for timebar monitoring.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     load();
   }, []);
 
-  // Compute timebar details for each claim
+  // Compute timebar details for each claim using the single shared engine
   const processedClaims = useMemo(() => {
     return claims.map((c) => {
-      const tb = calculateTimebarCompliance(c);
-
-      // Determine synthesized status
-      let status: "Safe" | "Approaching" | "Urgent" | "Timebarred" = "Safe";
-      if (tb.isTimebarred) {
-        status = "Timebarred";
-      } else if (tb.claimDaysRemaining <= 10 || tb.noticeDaysRemaining <= 5) {
-        status = "Urgent";
-      } else if (tb.claimDaysRemaining <= 30 || tb.noticeDaysRemaining <= 14) {
-        status = "Approaching";
-      }
-
+      const tb = calculateTimebarCompliance(c, timebarDefaults);
       return {
         claim: c,
         timebar: tb,
-        computedStatus: status,
+        computedStatus: tb.computedUiStatus,
         daysRemaining: tb.claimDaysRemaining,
         deadlineDate: tb.claimDeadline !== "—" ? tb.claimDeadline : tb.noticeDeadline,
         claimDate: c.claimReceivedDate || c.voyageEndDate || c.createdAt.split("T")[0]
       };
     });
-  }, [claims]);
+  }, [claims, timebarDefaults]);
 
   // Clients list
   const uniqueClients = useMemo(() => {
@@ -98,7 +111,8 @@ export default function TimeBarMonitorPage() {
       safe: processedClaims.filter((r) => r.computedStatus === "Safe").length,
       approaching: processedClaims.filter((r) => r.computedStatus === "Approaching").length,
       urgent: processedClaims.filter((r) => r.computedStatus === "Urgent").length,
-      timebarred: processedClaims.filter((r) => r.computedStatus === "Timebarred").length
+      timebarred: processedClaims.filter((r) => r.computedStatus === "Timebarred").length,
+      differingFromDefault: processedClaims.filter((r) => r.timebar.differsFromDefault).length
     };
   }, [processedClaims]);
 
@@ -124,6 +138,16 @@ export default function TimeBarMonitorPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => load(true)}
+            disabled={isLoading}
+            className="text-xs font-semibold h-9 px-3 bg-white rounded-xl flex items-center space-x-1.5"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 text-slate-600 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => success("Export Complete", "Time-bar audit log exported to CSV")}
             className="text-xs font-semibold h-9 px-3.5 bg-white rounded-xl flex items-center space-x-1.5"
           >
@@ -132,6 +156,29 @@ export default function TimeBarMonitorPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load time-bar schedule"
+          message={loadError}
+          onRetry={() => load(true)}
+          isRetrying={isLoading}
+        />
+      )}
+
+      {counts.differingFromDefault > 0 && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="font-bold">Imported Timebar Audit Notice ({counts.differingFromDefault} claims): </span>
+            <span>
+              Imported values differ from the {timebarDefaults.defaultClaimTimebarDays || 90}-day global default.
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold text-amber-800 italic">
+            Open question: Is 45 days a real contractual claim timebar for the Sokana3 account, or a spreadsheet default?
+          </span>
+        </div>
+      )}
 
       {/* KPI Cards Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -148,7 +195,7 @@ export default function TimeBarMonitorPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-black text-emerald-700 mt-1.5">{counts.safe}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">&gt; 30 days remaining</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">&gt; 30% of period or filed on time</div>
         </div>
 
         <div
@@ -164,7 +211,7 @@ export default function TimeBarMonitorPage() {
             <Clock className="h-4 w-4 text-amber-600" />
           </div>
           <div className="text-2xl font-black text-amber-700 mt-1.5">{counts.approaching}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">10 - 30 days remaining</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">&le; 30% of period remaining</div>
         </div>
 
         <div
@@ -180,7 +227,7 @@ export default function TimeBarMonitorPage() {
             <AlertTriangle className="h-4 w-4 text-rose-600" />
           </div>
           <div className="text-2xl font-black text-rose-700 mt-1.5">{counts.urgent}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">&lt; 10 days remaining</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">&le; 10% (min 5d) remaining</div>
         </div>
 
         <div
@@ -317,14 +364,24 @@ export default function TimeBarMonitorPage() {
 
                       {/* Notice Period */}
                       <td className="py-3.5 px-4 text-slate-600">
-                        <span className="font-semibold">{row.claim.noticeTimebarDays || 30} days</span>
-                        <span className="text-[10px] text-slate-400 block">from NOR/voyage</span>
+                        <span className="font-semibold">{row.timebar.noticeDaysAllowed} days</span>
+                        <span className="text-[10px] text-slate-400 block">
+                          {row.timebar.isNoticeSubmittedOnTime ? "Notice submitted on time" : "from voyage / base"}
+                        </span>
                       </td>
 
                       {/* Claim Period */}
                       <td className="py-3.5 px-4 text-slate-600">
-                        <span className="font-semibold">{row.claim.claimTimebarDays || 90} days</span>
+                        <span className="font-semibold">{row.timebar.claimDaysAllowed} days</span>
                         <span className="text-[10px] text-slate-400 block">under {row.claim.cpType}</span>
+                        {row.timebar.differsFromDefault && (
+                          <span
+                            title="Is 45 days a real contractual claim timebar for the Sokana3 account, or a spreadsheet default?"
+                            className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 mt-0.5"
+                          >
+                            Imported value differs from default
+                          </span>
+                        )}
                       </td>
 
                       {/* Timebar Deadline Date */}
@@ -371,7 +428,7 @@ export default function TimeBarMonitorPage() {
                                 }`}
                                 style={{
                                   width: `${Math.min(
-                                    Math.max((row.daysRemaining / (row.claim.claimTimebarDays || 45)) * 100, 5),
+                                    Math.max((row.daysRemaining / (row.timebar.claimDaysAllowed || 90)) * 100, 5),
                                     100
                                   )}%`
                                 }}

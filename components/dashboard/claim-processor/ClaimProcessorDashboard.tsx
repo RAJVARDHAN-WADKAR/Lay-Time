@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getClaims, getNotifications, getDocuments } from "@/lib/api";
 import { Claim, NotificationRecord, DocumentRecord } from "@/lib/types";
 import { calculateDashboardMetrics } from "@/lib/mock/aggregate";
+import { calculateTimebarCompliance } from "@/lib/calculations/timebar";
 import { formatCurrency } from "@/lib/utils/formatters";
 import { KPICard } from "@/components/ui/kpi-card";
 import { TrackerPipeline } from "@/components/dashboard/shared/TrackerPipeline";
@@ -14,7 +15,9 @@ import { OperationalTasks } from "@/components/dashboard/shared/OperationalTasks
 import { ProcessorWorkbench } from "@/components/roles/claim-processor/ProcessorWorkbench";
 import { ProcessorTimebarWatch } from "@/components/roles/claim-processor/ProcessorTimebarWatch";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { useAuth } from "@/lib/context/AuthContext";
+import { useToast } from "@/lib/hooks/useToast";
 import {
   PlusCircle,
   Calculator,
@@ -28,24 +31,36 @@ import {
 
 export function ClaimProcessorDashboard() {
   const { currentUser } = useAuth();
+  const { success, error: showError } = useToast();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [selectedStage, setSelectedStage] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh = false) => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const [cls, notifs, docs] = await Promise.all([
-        getClaims().catch(() => []),
-        getNotifications().catch(() => []),
-        getDocuments().catch(() => [])
+        getClaims(),
+        getNotifications(),
+        getDocuments()
       ]);
       setClaims(cls);
       setNotifications(notifs);
       setDocuments(docs);
+      if (isManualRefresh) {
+        success("Dashboard Refreshed", "Assigned claims and operational metrics updated.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load processor dashboard data.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -90,9 +105,10 @@ export function ClaimProcessorDashboard() {
     return calculateDashboardMetrics(assignedClaims, unreadCount);
   }, [assignedClaims, unreadCount]);
 
-  const urgentTimebarCount = assignedClaims.filter(
-    (c) => Boolean(c.timebarred) || (c.claimTimebarDays && c.claimTimebarDays <= 14)
-  ).length;
+  const urgentTimebarCount = assignedClaims.filter((c) => {
+    const tb = calculateTimebarCompliance(c);
+    return tb.computedUiStatus === "Timebarred" || tb.computedUiStatus === "Urgent";
+  }).length;
 
   return (
     <div className="space-y-6 pb-12">
@@ -139,7 +155,7 @@ export function ClaimProcessorDashboard() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
             title="Refresh assigned queue"
           >
@@ -147,6 +163,15 @@ export function ClaimProcessorDashboard() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load workbench data"
+          message={loadError}
+          onRetry={() => loadData(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* 2. Processor Specific KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -220,7 +245,7 @@ export function ClaimProcessorDashboard() {
             claims={displayedClaims}
             title={selectedStage ? `Assigned Claims (${selectedStage})` : "My Assigned Claims"}
             subtitle="Active maritime claims registered to your processing queue"
-            viewAllHref="/claims?filter=assigned"
+            viewAllHref="/claims/assigned"
           />
         </div>
         <div>

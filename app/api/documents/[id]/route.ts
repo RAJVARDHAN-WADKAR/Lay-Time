@@ -1,63 +1,63 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUserFromRequest } from "@/lib/auth/session";
-import { getDocumentById, updateDocument } from "@/lib/db/queries";
+import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+import { withApi, isClaimAssignedToUser, isClaimOwnedByClient } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
+import { getDocumentById, updateDocument, getClaimById } from "@/lib/db/queries";
 import { getDatabase } from "@/lib/db";
 import { logAudit } from "@/lib/db/audit";
+import { UPLOAD_STORAGE_DIR } from "@/lib/uploads/serverValidation";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
+export const GET = withApi({
+  permission: "documents:view",
+  handler: async ({ user, params }) => {
     const doc = getDocumentById(params.id);
     if (!doc) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
+    const normRole = normalizeRole(user.role, Boolean(user.assignedClientId || user.clientId));
+    if ((normRole === "CLIENT" || normRole === "CLAIM_PROCESSOR") && doc.claimId) {
+      const claim = getClaimById(doc.claimId);
+      if (claim) {
+        if (normRole === "CLIENT" && !isClaimOwnedByClient(claim, user)) {
+          return NextResponse.json({ error: "Forbidden: Document belongs to another client." }, { status: 403 });
+        }
+        if (normRole === "CLAIM_PROCESSOR" && !isClaimAssignedToUser(claim, user)) {
+          return NextResponse.json({ error: "Forbidden: Document belongs to an unassigned claim." }, { status: 403 });
+        }
+      }
+    }
     return NextResponse.json({ document: doc });
-  } catch (error: any) {
-    return NextResponse.json({ error: "Failed to fetch document" }, { status: 500 });
   }
-}
+});
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    const { normalizeRole } = await import("@/app/access/roles");
-    const userRoleNorm = session ? normalizeRole(session.role) : null;
-    if (
-      !session ||
-      session.role === "Reviewer" ||
-      session.role === "Finance" ||
-      userRoleNorm === "FINANCE" ||
-      userRoleNorm === "REVIEWER_CLIENT"
-    ) {
-      return NextResponse.json({ error: "Forbidden: Reviewers, Clients, and Finance cannot modify documents." }, { status: 403 });
+export const PUT = withApi({
+  permission: "documents:upload",
+  handler: async ({ user, params, body }) => {
+    const doc = getDocumentById(params.id);
+    if (!doc) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    }
+    if (normalizeRole(user.role) === "CLAIM_PROCESSOR" && doc.claimId) {
+      const claim = getClaimById(doc.claimId);
+      if (claim && !isClaimAssignedToUser(claim, user)) {
+        return NextResponse.json({ error: "Forbidden: Claim Processors may only modify documents on assigned claims." }, { status: 403 });
+      }
     }
 
-    const body = await request.json();
-    const updated = updateDocument(params.id, body, session.name || session.email || "System");
-
+    const updated = updateDocument(params.id, body, user.name || user.email || "System");
     return NextResponse.json({ success: true, document: updated });
-  } catch (error: any) {
-    return NextResponse.json({ error: "Failed to update document" }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = getCurrentUserFromRequest(request);
-    const { normalizeRole } = await import("@/app/access/roles");
-    const userRoleNorm = session ? normalizeRole(session.role) : null;
-    if (!session || (userRoleNorm !== "ADMIN" && userRoleNorm !== "SUPERVISOR")) {
-      return NextResponse.json({ error: "Forbidden: Only Admin or Supervisor can delete documents." }, { status: 403 });
+export const DELETE = withApi({
+  permission: "documents:delete",
+  handler: async ({ user, params }) => {
+    const existing = getDocumentById(params.id);
+    if (!existing) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
     const db = getDatabase();
@@ -66,17 +66,28 @@ export async function DELETE(
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
+    if (existing.filePath) {
+      try {
+        const candidate = path.isAbsolute(existing.filePath)
+          ? existing.filePath
+          : path.join(UPLOAD_STORAGE_DIR, path.basename(existing.filePath));
+        const normalizedRoot = path.resolve(UPLOAD_STORAGE_DIR);
+        const normalizedTarget = path.resolve(candidate);
+        if (normalizedTarget.startsWith(normalizedRoot) && fs.existsSync(normalizedTarget)) {
+          fs.unlinkSync(normalizedTarget);
+        }
+      } catch {}
+    }
+
     logAudit({
-      actorId: session.userId,
-      actorEmail: session.email,
-      actorRole: session.role,
+      actorId: user.id,
+      actorEmail: user.email,
+      actorRole: normalizeRole(user.role),
       action: "document_delete",
       targetType: "document",
       targetId: params.id
     });
 
     return NextResponse.json({ success: true, message: "Document deleted" });
-  } catch (error: any) {
-    return NextResponse.json({ error: "Failed to delete document" }, { status: 500 });
   }
-}
+});

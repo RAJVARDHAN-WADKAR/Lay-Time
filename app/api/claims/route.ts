@@ -2,8 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getScopedClaims } from "@/lib/db/scoped";
-import { createClaim, createNotificationRecord } from "@/lib/db/queries";
+import { createClaim, createNotificationRecord, getBusinessRule } from "@/lib/db/queries";
 import { logAudit } from "@/lib/db/audit";
 import { validateDateChain } from "@/lib/utils/dateRules";
 import { z } from "zod";
@@ -19,6 +20,8 @@ const CreateClaimSchema = z.object({
   demurrageRatePerDay: z.number().optional(),
   claimFiledAmount: z.number().optional(),
   charterpartyDate: z.string().optional(),
+  voyageEndDate: z.string().optional(),
+  instructionReceivedDate: z.string().optional(),
   noticeReceivedDate: z.string().optional(),
   claimReceivedDate: z.string().optional(),
   assignedTo: z.string().optional(),
@@ -30,7 +33,7 @@ const CreateClaimSchema = z.object({
 
 // GET /api/claims: Scoped Claims Ledger
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance", "Reviewer", "Client"],
+  permission: "claims:view",
   handler: async ({ user, req }) => {
     const searchParams = req.nextUrl.searchParams;
 
@@ -53,18 +56,26 @@ export const GET = withApi({
       offset
     });
 
+    const defaults = getBusinessRule("laytime_defaults") || {};
+
     return NextResponse.json({
       claims: result.claims,
       total: result.total,
       page,
-      limit
+      limit,
+      timebarDefaults: {
+        defaultNoticeTimebarDays: Number(defaults.defaultNoticeTimebarDays) || 30,
+        defaultClaimTimebarDays: Number(defaults.defaultClaimTimebarDays) || 90,
+        timebarCriticalPct: Number(defaults.timebarCriticalPct ?? 0.1),
+        timebarApproachingPct: Number(defaults.timebarApproachingPct ?? 0.3),
+        accountTimebarDefaults: defaults.accountTimebarDefaults || {}
+      }
     });
   }
 });
 
 // POST /api/claims: Create a new claim (Admin, Supervisor, Claim Processor)
 export const POST = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "ADMIN", "SUPERVISOR", "CLAIM_PROCESSOR"],
   permission: "claims:create",
   schema: CreateClaimSchema,
   handler: async ({ user, body }) => {
@@ -72,8 +83,11 @@ export const POST = withApi({
 
     const dateValidation = validateDateChain({
       charterpartyDate: claimData.charterpartyDate,
+      voyageEndDate: claimData.voyageEndDate,
       instructionReceivedDate: claimData.instructionReceivedDate,
-      claimFiledDate: claimData.noticeReceivedDate || claimData.claimReceivedDate,
+      noticeReceivedDate: claimData.noticeReceivedDate,
+      claimReceivedDate: claimData.claimReceivedDate,
+      claimFiledDate: claimData.claimFiledDate || claimData.noticeReceivedDate || claimData.claimReceivedDate,
       agreedDate: claimData.claimAgreedDate,
       paymentReceivedDate: claimData.paymentReceivedDate
     });
@@ -85,8 +99,7 @@ export const POST = withApi({
       );
     }
 
-    const norm = user.role.toUpperCase().replace(/[\s-]+/g, "_");
-    if (norm === "CLAIM_PROCESSOR" || norm === "PROCESSOR") {
+    if (normalizeRole(user.role) === "CLAIM_PROCESSOR") {
       claimData.assignedTo = user.name || user.email;
     }
 

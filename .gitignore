@@ -34,12 +34,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# sqlite
+# sqlite & uploads
 data/*.db*
 data/*.db
 data/*.db.bak
 data/*.db-shm
 data/*.db-wal
+data/uploads/
 *.db*
 *.db
 *.db.bak

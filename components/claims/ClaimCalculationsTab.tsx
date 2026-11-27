@@ -1,25 +1,36 @@
 import React, { useState } from "react";
-import { Claim, ClaimCalculation } from "@/lib/types";
+import { Claim, ClaimCalculation, LaytimeDayRule } from "@/lib/types";
 import { formatCurrency, formatMinutesToDuration } from "@/lib/utils/formatters";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/inputs";
+import { Input, Select } from "@/components/ui/inputs";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { useAuth } from "@/lib/context/AuthContext";
-import { ShieldCheck, Edit3, CheckCircle2, AlertCircle } from "lucide-react";
+import { ShieldCheck, Edit3, Calendar, Clock } from "lucide-react";
 import { useToast } from "@/lib/hooks/useToast";
-import { Can } from "@/components/auth/Can";
 
 interface ClaimCalculationsTabProps {
   calculationResult: ClaimCalculation;
   claim?: Claim;
+  userCanEdit?: boolean;
   onUpdateClaim?: (updates: Partial<Claim>) => Promise<void>;
 }
+
+const DAY_RULES: Array<{ value: LaytimeDayRule; label: string }> = [
+  { value: "SHINC", label: "SHINC (Sundays & Holidays Included)" },
+  { value: "SHEX", label: "SHEX (Sundays & Holidays Excepted)" },
+  { value: "SHEXUU", label: "SHEXUU (Sundays & Holidays Excepted Unless Used)" },
+  { value: "FHINC", label: "FHINC (Fridays & Holidays Included)" },
+  { value: "FHEX", label: "FHEX (Fridays & Holidays Excepted)" },
+  { value: "FHEXUU", label: "FHEXUU (Fridays & Holidays Excepted Unless Used)" },
+  { value: "SSHEX", label: "SSHEX (Sat, Sun & Holidays Excepted)" }
+];
 
 export function ClaimCalculationsTab({
   calculationResult,
   claim,
+  userCanEdit = false,
   onUpdateClaim
 }: ClaimCalculationsTabProps) {
   const { canOverrideCalculation, role } = useAuth();
@@ -156,7 +167,152 @@ export function ClaimCalculationsTab({
             </span>
           </div>
         </CardContent>
+
+        {/* Contractual Day Rule, Holidays & Once-on-Demurrage Banner + Selector */}
+        <div className="px-5 pb-4 pt-2 border-t border-blue-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-blue-100 text-blue-900 border-blue-300 font-bold text-[11px]">
+              Day rule: {calculationResult.dayRule || claim?.dayRule || "SHEX"}, holidays:{" "}
+              {calculationResult.holidaysExcludedCount ?? 0} excluded
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`text-[11px] font-semibold ${
+                calculationResult.onceOnDemurrage !== false
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-slate-100 text-slate-700 border-slate-300"
+              }`}
+            >
+              Once on Demurrage: {calculationResult.onceOnDemurrage !== false ? "ON" : "OFF"}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`text-[11px] font-semibold ${
+                calculationResult.overlapBlocked
+                  ? "bg-rose-100 text-rose-800 border-rose-300"
+                  : "bg-white text-slate-700"
+              }`}
+            >
+              Overlap policy: {calculationResult.overlapPolicy || claim?.overlapPolicy || "block"}
+              {(calculationResult.overlapAffectedMinutes ?? 0) > 0
+                ? ` (${calculationResult.overlapAffectedMinutes}m affected)`
+                : ""}
+            </Badge>
+          </div>
+
+          {userCanEdit && onUpdateClaim && claim && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                aria-label="Laytime Day Rule"
+                value={claim.dayRule || calculationResult.dayRule || "SHEX"}
+                onChange={async (e) => {
+                  const nextRule = e.target.value as LaytimeDayRule;
+                  try {
+                    await onUpdateClaim({ dayRule: nextRule });
+                    success("Day Rule Updated", `Recalculated laytime under ${nextRule}.`);
+                  } catch (err: any) {
+                    error("Update Failed", err?.message || "Could not update day rule.");
+                  }
+                }}
+                className="h-8 text-xs bg-white w-64"
+              >
+                {DAY_RULES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </Select>
+
+              <Select
+                aria-label="Overlap Resolution Policy"
+                value={claim.overlapPolicy || calculationResult.overlapPolicy || "block"}
+                onChange={async (e) => {
+                  const nextPolicy = e.target.value as "block" | "exception_wins";
+                  try {
+                    await onUpdateClaim({ overlapPolicy: nextPolicy });
+                    success("Overlap Policy Updated", `Recalculated laytime under "${nextPolicy}".`);
+                  } catch (err: any) {
+                    error("Update Failed", err?.message || "Could not update overlap policy.");
+                  }
+                }}
+                className="h-8 text-xs bg-white w-48"
+              >
+                <option value="block">Overlap: Block on Conflict</option>
+                <option value="exception_wins">Overlap: Exception Wins</option>
+              </Select>
+
+              <label className="inline-flex items-center space-x-1.5 text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={claim.onceOnDemurrage !== false}
+                  onChange={async (e) => {
+                    try {
+                      await onUpdateClaim({ onceOnDemurrage: e.target.checked });
+                      success(
+                        "Demurrage Rule Updated",
+                        `Once on demurrage, always on demurrage: ${e.target.checked ? "ON" : "OFF"}.`
+                      );
+                    } catch (err: any) {
+                      error("Update Failed", err?.message || "Could not update switch.");
+                    }
+                  }}
+                />
+                <span>Once on Demurrage</span>
+              </label>
+            </div>
+          )}
+        </div>
       </Card>
+
+      {/* Per-Day Port-Local Laytime Breakdown Table */}
+      {calculationResult.dailyBreakdown && calculationResult.dailyBreakdown.length > 0 && (
+        <Card className="border-slate-200 shadow-xs overflow-hidden">
+          <CardHeader className="p-4 pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
+                <Calendar className="h-4 w-4 text-blue-600" />
+                <span>Per-Day Laytime Breakdown ({calculationResult.dayRule || "SHEX"})</span>
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                Port-local calendar days with counted minutes, weekend/holiday exclusions, and demurrage accrual
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
+                <tr>
+                  <th className="p-2.5">Date</th>
+                  <th className="p-2.5">Weekday</th>
+                  <th className="p-2.5">Time Zone</th>
+                  <th className="p-2.5">Counted</th>
+                  <th className="p-2.5">Excluded</th>
+                  <th className="p-2.5">Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {calculationResult.dailyBreakdown.map((day) => (
+                  <tr
+                    key={day.date}
+                    className={day.excludedMinutes > 0 && day.countedMinutes === 0 ? "bg-amber-50/50" : "hover:bg-slate-50"}
+                  >
+                    <td className="p-2.5 font-mono font-semibold text-slate-900">{day.date}</td>
+                    <td className="p-2.5 font-medium text-slate-700">{day.weekday}</td>
+                    <td className="p-2.5 font-mono text-[10px] text-slate-500">{day.timezone}</td>
+                    <td className="p-2.5 font-bold text-emerald-700">
+                      {day.countedMinutes}m ({formatMinutesToDuration(day.countedMinutes)})
+                    </td>
+                    <td className="p-2.5 font-bold text-rose-600">
+                      {day.excludedMinutes}m ({formatMinutesToDuration(day.excludedMinutes)})
+                    </td>
+                    <td className="p-2.5 text-slate-600">{day.reasons.join("; ") || "Counted"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-4">
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Port & Berth Calculation Hierarchy</h4>

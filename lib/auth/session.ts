@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, SessionPayload } from "./jwt";
 import { UserRole } from "@/lib/types";
+import { normalizeRole } from "./accessMatrix";
 
 export const AUTH_COOKIE_NAME = "laytime_auth_token";
 
 export function getCurrentUserFromRequest(request: NextRequest): SessionPayload | null {
-  // Check Authorization Header: Bearer <token>
   const authHeader = request.headers.get("authorization");
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7).trim();
@@ -13,7 +13,6 @@ export function getCurrentUserFromRequest(request: NextRequest): SessionPayload 
     if (payload) return payload;
   }
 
-  // Check Cookies
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (token) {
     return verifyToken(token);
@@ -54,7 +53,6 @@ export async function requireUser(request: NextRequest): Promise<
     };
   }
 
-  // Load from database to verify active state and tokenVersion
   const { getUserById } = await import("@/lib/db/queries");
   const dbUser = getUserById(session.userId);
   if (!dbUser) {
@@ -86,17 +84,16 @@ export async function requireUser(request: NextRequest): Promise<
     };
   }
 
+  const normRole = normalizeRole(dbUser.role, Boolean(dbUser.client_id || dbUser.clientId));
   const assignedClientId =
-    (dbUser.role === "REVIEWER_CLIENT" || dbUser.role === "Client")
-      ? dbUser.client_id || dbUser.clientId || null
-      : null;
+    normRole === "CLIENT" ? dbUser.client_id || dbUser.clientId || null : null;
 
   return {
     user: {
       id: dbUser.id,
       name: dbUser.name,
       email: dbUser.email,
-      role: dbUser.role,
+      role: normRole,
       clientId: dbUser.client_id || dbUser.clientId,
       client_id: dbUser.client_id || dbUser.clientId,
       clientName: dbUser.clientName,
@@ -109,5 +106,3 @@ export async function requireUser(request: NextRequest): Promise<
 }
 
 export * from "./permissions";
-
-

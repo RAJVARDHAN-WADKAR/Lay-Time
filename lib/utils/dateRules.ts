@@ -5,7 +5,10 @@
 
 export interface DateChainInputs {
   charterpartyDate?: string | null;
+  voyageEndDate?: string | null;
   instructionReceivedDate?: string | null;
+  noticeReceivedDate?: string | null;
+  claimReceivedDate?: string | null;
   claimFiledDate?: string | null;
   agreedDate?: string | null;
   paymentReceivedDate?: string | null;
@@ -38,6 +41,13 @@ export interface SofEventInput {
  */
 export function getTodayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Returns current UTC datetime formatted for <input type="datetime-local"> (YYYY-MM-DDTHH:mm).
+ */
+export function getNowDatetimeLocalIso(): string {
+  return new Date().toISOString().slice(0, 16);
 }
 
 /**
@@ -88,17 +98,32 @@ export function validateDateChain(dates: DateChainInputs): DateChainValidation {
   const warnings: Record<string, string> = {};
 
   const todayIso = getTodayIso();
-  const todayTime = new Date(todayIso).getTime() + 24 * 60 * 60 * 1000; // End of today
+  const todayTime = new Date(`${todayIso}T23:59:59.999Z`).getTime();
 
   const tCp = parseDateSafe(dates.charterpartyDate);
+  const tVoyageEnd = parseDateSafe(dates.voyageEndDate);
   const tInstr = parseDateSafe(dates.instructionReceivedDate);
-  const tFiled = parseDateSafe(dates.claimFiledDate);
+  const tNotice = parseDateSafe(dates.noticeReceivedDate);
+  const tClaimRec = parseDateSafe(dates.claimReceivedDate);
+  const tFiled = parseDateSafe(dates.claimFiledDate) ?? tNotice ?? tClaimRec;
   const tAgreed = parseDateSafe(dates.agreedDate);
   const tPaid = parseDateSafe(dates.paymentReceivedDate);
 
-  // 1. Future date checks
+  // 1. Future date checks (enforced against server clock)
+  if (tCp && tCp > todayTime) {
+    errors.charterpartyDate = "Charterparty date cannot be in the future.";
+  }
+  if (tVoyageEnd && tVoyageEnd > todayTime) {
+    errors.voyageEndDate = "Voyage End date cannot be in the future.";
+  }
   if (tInstr && tInstr > todayTime) {
     errors.instructionReceivedDate = "Instruction Received date cannot be in the future.";
+  }
+  if (tNotice && tNotice > todayTime) {
+    errors.noticeReceivedDate = "Notice Received date cannot be in the future.";
+  }
+  if (tClaimRec && tClaimRec > todayTime) {
+    errors.claimReceivedDate = "Claim Received date cannot be in the future.";
   }
   if (tFiled && tFiled > todayTime) {
     errors.claimFiledDate = "Claim Filed date cannot be in the future.";
@@ -173,6 +198,9 @@ export function validateSofEvent(input: SofEventInput): { isValid: boolean; erro
   const nowBuffer = Date.now() + 60 * 1000;
   if (start > nowBuffer) {
     return { isValid: false, error: "SoF event start time cannot be in the future." };
+  }
+  if (stop > nowBuffer) {
+    return { isValid: false, error: "SoF event stop time cannot be in the future." };
   }
 
   // Voyage window checks

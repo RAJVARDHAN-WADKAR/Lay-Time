@@ -4,9 +4,11 @@ import React, { useState, useEffect, useMemo } from "react";
 import { getClaims } from "@/lib/api";
 import { Claim } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils/formatters";
+import { getTodayIso } from "@/lib/utils/dateRules";
 import { exportToCSV } from "@/lib/utils/exportCsv";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Select, Input } from "@/components/ui/inputs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -25,10 +27,11 @@ import {
   Clock,
   CheckCircle2,
   Calendar,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ReportsPage() {
-  const { success, info } = useToast();
+  const { success, info, error: showError } = useToast();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [reportType, setReportType] = useState<string>("demurrage_summary");
   const [selectedClient, setSelectedClient] = useState<string>("ALL");
@@ -36,12 +39,26 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState<string>("");
   const [isGenerated, setIsGenerated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const fetchClaims = async () => {
+  const fetchClaims = async (isManualRefresh = false) => {
     setIsLoading(true);
-    const data = await getClaims();
-    setClaims(data);
-    setIsLoading(false);
+    setLoadError(null);
+    try {
+      const data = await getClaims();
+      setClaims(data);
+      if (isManualRefresh) {
+        success("Reports Refreshed", "Claims data updated for reporting.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load claims for reporting.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -194,7 +211,27 @@ export default function ReportsPage() {
             Generate executive demurrage settlement statements, aging analyses, and port turnaround reports
           </p>
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fetchClaims(true)}
+          disabled={isLoading}
+          className="text-xs font-semibold h-9 px-3 bg-white rounded-xl flex items-center space-x-1.5"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+          <span>Refresh</span>
+        </Button>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load report data"
+          message={loadError}
+          onRetry={() => fetchClaims(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* FILTERS & GENERATE CONTROLS matching Section 16 */}
       <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl overflow-hidden">
@@ -250,6 +287,7 @@ export default function ReportsPage() {
               <label className="font-bold text-slate-700 block">Start Date</label>
               <Input
                 type="date"
+                max={getTodayIso()}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="h-9 text-xs bg-white"
@@ -261,6 +299,7 @@ export default function ReportsPage() {
               <label className="font-bold text-slate-700 block">End Date</label>
               <Input
                 type="date"
+                max={getTodayIso()}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="h-9 text-xs bg-white"

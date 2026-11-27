@@ -1,16 +1,33 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { getClaims, getClaimById, updateActivity } from "@/lib/api";
-import { Claim, SoFActivity, Discrepancy } from "@/lib/types";
+import {
+  getClaims,
+  getClaimById,
+  getClaimOcrData,
+  runDocumentOcr,
+  confirmOcrDraft,
+  updateActivity
+} from "@/lib/api";
+import {
+  Claim,
+  DocumentRecord,
+  OcrDraft,
+  OcrDraftEvent,
+  SoFActivity,
+  Discrepancy
+} from "@/lib/types";
 import { detectDiscrepancies } from "@/lib/calculations/discrepancies";
+import { getNowDatetimeLocalIso, validateSofEvent } from "@/lib/utils/dateRules";
+import { CONTROLLED_SOF_VOCABULARY } from "@/lib/ocr/parser";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { Input, Select } from "@/components/ui/inputs";
 import { Modal } from "@/components/ui/modal";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/context/AuthContext";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { useToast } from "@/lib/hooks/useToast";
 import Link from "next/link";
 import {
@@ -18,50 +35,108 @@ import {
   AlertTriangle,
   CheckCircle2,
   Edit2,
-  FileSpreadsheet,
-  Layers,
   Sparkles,
-  Eye,
   ArrowRight,
   Wand2,
-  FileCode,
   FileCheck,
   RotateCcw,
-  ZoomIn,
-  ZoomOut,
   FileText,
-  Maximize2
+  Upload,
+  Check,
+  Trash2,
+  ShieldAlert
 } from "lucide-react";
 
 export default function OcrSoFReviewPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string>("");
   const [claim, setClaim] = useState<Claim | null>(null);
+  const [claimDocs, setClaimDocs] = useState<DocumentRecord[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState<string>("");
+  const [selectedPortId, setSelectedPortId] = useState<string>("");
+  const [selectedBerthId, setSelectedBerthId] = useState<string>("");
+
+  const [drafts, setDrafts] = useState<OcrDraft[]>([]);
+  const [draftEvents, setDraftEvents] = useState<OcrDraftEvent[]>([]);
+  const [activePageFilter, setActivePageFilter] = useState<number | "ALL">("ALL");
+
   const [isLoading, setIsLoading] = useState(true);
+  const [isRunningOcr, setIsRunningOcr] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [highlightedLine, setHighlightedLine] = useState<string | null>(null);
 
-  const [previewMode, setPreviewMode] = useState<"visual" | "raw">("visual");
-  const [zoomLevel, setZoomLevel] = useState(100);
-  const [highlightedActId, setHighlightedActId] = useState<string | null>(null);
-
+  const [editingDraftEvt, setEditingDraftEvt] = useState<OcrDraftEvent | null>(null);
   const [editingAct, setEditingAct] = useState<SoFActivity | null>(null);
   const [correctingDisc, setCorrectingDisc] = useState<Discrepancy | null>(null);
   const [correctionInput, setCorrectionInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const { canEditClaim, isReadOnly } = useAuth();
-  const { success, info } = useToast();
+  const { role, canEditClaim, canUploadDocuments } = useAuth();
+  const normRole = normalizeRole(role);
+  const canRunOcr = normRole === "ADMIN" || normRole === "SUPERVISOR" || normRole === "CLAIM_PROCESSOR";
+  const { success, error: showError } = useToast();
 
-  const loadInitial = useCallback(async () => {
+  const loadWorkspaceForClaim = useCallback(async (cId: string, loadedClaims?: Claim[]) => {
+    if (!cId) return;
+    const [fullClaim, ocrWorkspace] = await Promise.all([
+      getClaimById(cId),
+      getClaimOcrData(cId)
+    ]);
+    const targetClaim = fullClaim || loadedClaims?.find((c) => c.id === cId) || null;
+    setClaim(targetClaim);
+
+    const firstPort = targetClaim?.ports?.[0];
+    setSelectedPortId(firstPort?.id || "");
+    setSelectedBerthId(firstPort?.berths?.[0]?.id || "");
+
+    const ocrEligibleDocs = (ocrWorkspace.documents || []).filter((d) => {
+      const ext = d.fileName.split(".").pop()?.toLowerCase() || "";
+      return ["pdf", "png", "jpg", "jpeg"].includes(ext);
+    });
+    setClaimDocs(ocrEligibleDocs);
+    setDrafts(ocrWorkspace.drafts || []);
+
+    const preferredDoc =
+      ocrEligibleDocs.find((d) => d.id === selectedDocId) || ocrEligibleDocs[0] || null;
+    setSelectedDocId(preferredDoc?.id || "");
+
+    const matchedDraft = preferredDoc
+      ? ocrWorkspace.drafts.find((dr: OcrDraft) => dr.documentId === preferredDoc.id) || null
+      : null;
+    setDraftEvents(matchedDraft?.parsedEvents || []);
+  }, [selectedDocId]);
+
+  const loadInitial = useCallback(async (isManualRefresh = false) => {
     setIsLoading(true);
-    const allClaims = await getClaims();
-    setClaims(allClaims);
-    const target = (selectedClaimId ? allClaims.find((c) => c.id === selectedClaimId) : null) || allClaims[0] || null;
-    setClaim(target);
-    if (target && target.id !== selectedClaimId) {
-      setSelectedClaimId(target.id);
+    setLoadError(null);
+    try {
+      const allClaims = await getClaims();
+      setClaims(allClaims);
+      const targetId =
+        (selectedClaimId && allClaims.some((c) => c.id === selectedClaimId) ? selectedClaimId : "") ||
+        allClaims[0]?.id ||
+        "";
+      setSelectedClaimId(targetId);
+      if (targetId) {
+        await loadWorkspaceForClaim(targetId, allClaims);
+      } else {
+        setClaim(null);
+        setClaimDocs([]);
+        setDrafts([]);
+        setDraftEvents([]);
+      }
+      if (isManualRefresh) {
+        success("OCR Hub Refreshed", "Loaded latest uploaded documents and extraction drafts.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load OCR workspace.";
+      setLoadError(msg);
+      if (isManualRefresh) showError("Refresh Failed", msg);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [selectedClaimId]);
+  }, [selectedClaimId, loadWorkspaceForClaim, success, showError]);
 
   useEffect(() => {
     loadInitial();
@@ -69,10 +144,130 @@ export default function OcrSoFReviewPage() {
 
   const handleClaimChange = async (id: string) => {
     setSelectedClaimId(id);
+    setSelectedDocId("");
+    setDraftEvents([]);
     setIsLoading(true);
-    const target = await getClaimById(id);
-    setClaim(target);
-    setIsLoading(false);
+    try {
+      await loadWorkspaceForClaim(id);
+    } catch (err: any) {
+      showError("Failed to Load Claim", err?.message || "Could not load claim OCR state.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDocumentChange = (docId: string) => {
+    setSelectedDocId(docId);
+    const matchedDraft = drafts.find((d) => d.documentId === docId) || null;
+    setDraftEvents(matchedDraft?.parsedEvents || []);
+    setActivePageFilter("ALL");
+  };
+
+  const activeDoc = useMemo(
+    () => claimDocs.find((d) => d.id === selectedDocId) || null,
+    [claimDocs, selectedDocId]
+  );
+
+  const activeDraft = useMemo(
+    () => drafts.find((d) => d.documentId === selectedDocId) || null,
+    [drafts, selectedDocId]
+  );
+
+  const userCanEdit = canEditClaim(claim?.assignedTo) && canRunOcr;
+
+  const handleRunOcr = async () => {
+    if (!selectedDocId) {
+      showError("No Document Selected", "Upload and select a PDF, PNG, or JPG Statement of Facts first.");
+      return;
+    }
+    setIsRunningOcr(true);
+    try {
+      const result = await runDocumentOcr({
+        documentId: selectedDocId,
+        portId: selectedPortId || undefined,
+        berthId: selectedBerthId || undefined
+      });
+      await loadWorkspaceForClaim(selectedClaimId);
+      if (result?.extractedActivities) {
+        setDraftEvents(result.extractedActivities);
+      }
+      success(
+        "OCR Extraction Completed",
+        `Extracted ${result.extractedActivities?.length || 0} draft event(s) with ${result.overallConfidencePct ?? 0}% overall confidence. Review before saving to SoF.`
+      );
+    } catch (err: any) {
+      await loadWorkspaceForClaim(selectedClaimId).catch(() => {});
+      showError("OCR Failed", err?.message || "Could not extract events from document.");
+    } finally {
+      setIsRunningOcr(false);
+    }
+  };
+
+  const handleConfirmDraft = async () => {
+    if (!selectedDocId || draftEvents.length === 0) {
+      showError("No Draft Events", "Run OCR extraction first or ensure at least one draft event remains.");
+      return;
+    }
+
+    for (const evt of draftEvents) {
+      const check = validateSofEvent({
+        id: evt.id,
+        activityName: evt.activityName,
+        startTime: evt.startTime,
+        stopTime: evt.stopTime
+      });
+      if (!check.isValid) {
+        showError(`Invalid Draft Timestamp (${evt.activityName})`, check.error || "Check timestamps.");
+        return;
+      }
+    }
+
+    setIsConfirming(true);
+    try {
+      const res = await confirmOcrDraft({
+        documentId: selectedDocId,
+        portId: selectedPortId || undefined,
+        berthId: selectedBerthId || undefined,
+        events: draftEvents
+      });
+      await loadWorkspaceForClaim(selectedClaimId);
+      success(
+        "Confirmed into Statement of Facts",
+        `Saved ${res.savedCount} SoF event(s) to ${res.claimId}${res.correctionsCount ? ` (${res.correctionsCount} user corrections audit-logged)` : ""}.`
+      );
+    } catch (err: any) {
+      showError("Confirmation Failed", err?.message || "Could not save draft events.");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleSaveDraftEdit = () => {
+    if (!editingDraftEvt) return;
+    const s = new Date(editingDraftEvt.startTime).getTime();
+    const e = new Date(editingDraftEvt.stopTime).getTime();
+    const durationMinutes = !isNaN(s) && !isNaN(e) && e > s ? Math.round((e - s) / 60000) : 0;
+    const d = Math.floor(durationMinutes / 1440);
+    const h = Math.floor((durationMinutes % 1440) / 60);
+    const m = durationMinutes % 60;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const durationFormatted = d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m` : `${pad(h)}h ${pad(m)}m`;
+
+    setDraftEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === editingDraftEvt.id
+          ? {
+              ...editingDraftEvt,
+              durationMinutes,
+              durationFormatted,
+              isCorrected: true,
+              isUnclassified: editingDraftEvt.activityName === "Unclassified"
+            }
+          : ev
+      )
+    );
+    setEditingDraftEvt(null);
+    success("Draft Updated", "Modified event queued. Click Confirm & Save when ready.");
   };
 
   const discrepancies = useMemo(() => {
@@ -80,559 +275,625 @@ export default function OcrSoFReviewPage() {
     return detectDiscrepancies(claim.activities || [], claim.ports || []);
   }, [claim]);
 
-  const userCanEdit = canEditClaim(claim?.assignedTo);
-
-  // 1-Click Auto-Resolve All Discrepancies (Demonstration tool)
-  const handleAutoResolveAll = async () => {
-    if (!claim || discrepancies.length === 0) return;
-    setIsSaving(true);
-
-    for (const disc of discrepancies) {
-      if (disc.type === "start_after_stop" && disc.activityId) {
-        const act = claim.activities?.find((a) => a.id === disc.activityId);
-        if (act) {
-          const newStop = "2024-07-27T02:00:00Z";
-          await updateActivity(claim.id, act.id, { stopTime: newStop, isCorrected: true });
-        }
-      } else if (disc.type === "missing_berth" && disc.activityId) {
-        const targetBerth = claim.ports?.[0]?.berths?.[0]?.id || "";
-        await updateActivity(claim.id, disc.activityId, { berthId: targetBerth, isCorrected: true });
-      } else if (disc.type === "duplicate_activity" && disc.activityId) {
-        await updateActivity(claim.id, disc.activityId, { activityName: "Rain (Resumed)", isCorrected: true });
-      }
-    }
-
-    const refreshed = await getClaimById(claim.id);
-    setClaim(refreshed);
-    setIsSaving(false);
-    success("All Discrepancies Resolved", "Statement of Facts updated with corrected timestamps and berth bindings.");
-  };
-
-  const handleUpdateActivity = async () => {
+  const handleUpdateSavedActivity = async () => {
     if (!claim || !editingAct) return;
-    setIsSaving(true);
-    const gross = (new Date(editingAct.stopTime).getTime() - new Date(editingAct.startTime).getTime()) / (1000 * 60);
-    const durationMinutes = isNaN(gross) ? 0 : Math.round(gross);
-    const updatedClaim = await updateActivity(claim.id, editingAct.id, {
-      ...editingAct,
-      durationMinutes,
-      durationFormatted: `${Math.floor(durationMinutes / 60)}h ${Math.abs(durationMinutes) % 60}m`,
-      isCorrected: true,
+    const check = validateSofEvent({
+      id: editingAct.id,
+      activityName: editingAct.activityName,
+      startTime: editingAct.startTime,
+      stopTime: editingAct.stopTime
     });
-
-    setClaim(updatedClaim);
-    setIsSaving(false);
-    success("Activity Corrected", `"${editingAct.activityName}" updated and flagged as user-corrected`);
-    setEditingAct(null);
+    if (!check.isValid) {
+      showError("Invalid Date/Time", check.error || "Invalid timestamps.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateActivity(claim.id, editingAct.id, {
+        activityName: editingAct.activityName,
+        startTime: editingAct.startTime,
+        stopTime: editingAct.stopTime,
+        berthId: editingAct.berthId,
+        percentageCounted: editingAct.percentageCounted,
+        isCorrected: true
+      });
+      await loadWorkspaceForClaim(claim.id);
+      success("Saved SoF Corrected", `"${editingAct.activityName}" updated and flagged as corrected.`);
+      setEditingAct(null);
+    } catch (err: any) {
+      showError("Update Failed", err?.message || "Failed to update SoF event.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleApplyDiscrepancyCorrection = async () => {
     if (!claim || !correctingDisc) return;
     setIsSaving(true);
-
-    if (correctingDisc.type === "start_after_stop" && correctingDisc.activityId) {
-      const act = claim.activities?.find((a) => a.id === correctingDisc.activityId);
-      if (act) {
-        const newStop = correctionInput || new Date(new Date(act.startTime).getTime() + 4 * 3600 * 1000).toISOString();
-        await updateActivity(claim.id, act.id, { stopTime: newStop, isCorrected: true });
+    try {
+      if (correctingDisc.type === "start_after_stop" && correctingDisc.activityId) {
+        const act = claim.activities?.find((a) => a.id === correctingDisc.activityId);
+        if (act) {
+          const newStop = correctionInput || new Date(new Date(act.startTime).getTime() + 4 * 3600 * 1000).toISOString();
+          await updateActivity(claim.id, act.id, { stopTime: newStop, isCorrected: true });
+        }
+      } else if (correctingDisc.type === "missing_berth" && correctingDisc.activityId) {
+        const targetBerth = correctionInput || claim.ports?.[0]?.berths?.[0]?.id || "";
+        await updateActivity(claim.id, correctingDisc.activityId, { berthId: targetBerth, isCorrected: true });
       }
-    } else if (correctingDisc.type === "missing_berth" && correctingDisc.activityId) {
-      const targetBerth = correctionInput || claim.ports?.[0]?.berths?.[0]?.id || "";
-      await updateActivity(claim.id, correctingDisc.activityId, { berthId: targetBerth, isCorrected: true });
+      await loadWorkspaceForClaim(claim.id);
+      success("Correction Applied", "Discrepancy resolved.");
+      setCorrectingDisc(null);
+      setCorrectionInput("");
+    } catch (err: any) {
+      showError("Correction Failed", err?.message || "Could not apply correction.");
+    } finally {
+      setIsSaving(false);
     }
-
-    const refreshed = await getClaimById(claim.id);
-    setClaim(refreshed);
-    setIsSaving(false);
-    success("Correction Applied", "Discrepancy marked as resolved");
-    setCorrectingDisc(null);
   };
 
-  const cargoName = claim?.ports?.flatMap((p) => p.berths)?.[0]?.cargoType || "Crude Oil";
-  const cargoQuantity = claim?.ports?.flatMap((p) => p.berths)?.reduce((acc, b) => acc + (b.quantity || 0), 0) || 50000;
-  const cpDate = claim?.charterpartyDate || "2024-06-15";
+  const filteredDraftEvents = useMemo(() => {
+    if (activePageFilter === "ALL") return draftEvents;
+    return draftEvents.filter((e) => e.pageNumber === activePageFilter);
+  }, [draftEvents, activePageFilter]);
+
+  const rawDisplayText = useMemo(() => {
+    if (!activeDraft) return "";
+    if (activePageFilter === "ALL") return activeDraft.rawText;
+    const pg = activeDraft.pages?.find((p) => p.pageNumber === activePageFilter);
+    return pg ? pg.text : activeDraft.rawText;
+  }, [activeDraft, activePageFilter]);
 
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
           <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">OCR Extraction & Discrepancy Hub</h1>
-            <Badge variant="ocr">Deterministic Engine</Badge>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Document OCR &amp; Statement of Facts Review
+            </h1>
+            <Badge variant="ocr">Real Byte-Level OCR</Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Review parsed Statement of Facts activities, inspect confidence ratings, and resolve flagged sequence errors.
+            Extract Statements of Facts from uploaded PDF text layers or scanned PNG/JPG images (offline Tesseract + PDFParse) and review drafts before saving to SQLite.
           </p>
         </div>
 
-        {/* Claim Selector & Auto Fix */}
-        <div className="flex items-center space-x-2">
-          {discrepancies.length > 0 && userCanEdit && (
-            <Button
-              onClick={handleAutoResolveAll}
-              isLoading={isSaving}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 h-9"
-            >
-              <Wand2 className="h-3.5 w-3.5" />
-              <span>Auto-Resolve All ({discrepancies.length})</span>
-            </Button>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadInitial(true)}
+            disabled={isLoading}
+            className="text-xs h-9 px-3 rounded-lg flex items-center space-x-1.5"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
 
           <Select
             value={selectedClaimId}
             onChange={(e) => handleClaimChange(e.target.value)}
-            className="w-72 text-xs font-semibold h-9"
+            className="w-64 text-xs font-semibold h-9"
           >
             {claims.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.id} — {c.shipName} ({c.accountName.split(" ")[0]})
+                {c.id} — {c.shipName}
               </option>
             ))}
           </Select>
         </div>
       </div>
 
-      {claims.length === 0 ? (
-        <Card className="p-12 text-center border-slate-200 bg-white shadow-2xs">
-          <div className="max-w-md mx-auto space-y-3">
-            <div className="h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
-              <ScanText className="h-6 w-6" />
+      {activeDraft?.isDemo && (
+        <div className="flex items-center space-x-2.5 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-xl text-xs font-bold">
+          <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0" />
+          <span>DEMO DATA MODE ACTIVE (OCR_MODE=demo) — Displayed draft events are simulated demo fixtures.</span>
+        </div>
+      )}
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load OCR workspace"
+          message={loadError}
+          onRetry={() => loadInitial(true)}
+          isRetrying={isLoading}
+        />
+      )}
+
+      {/* Document Selection & OCR Run Controls */}
+      {claim && (
+        <Card className="border-slate-200 shadow-2xs bg-white rounded-2xl">
+          <CardContent className="p-4 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Uploaded SoF Document ({claimDocs.length})
+                </label>
+                <Select
+                  value={selectedDocId}
+                  onChange={(e) => handleDocumentChange(e.target.value)}
+                  className="h-9 text-xs bg-white"
+                >
+                  {claimDocs.length === 0 && <option value="">No PDF/PNG/JPG documents uploaded for {claim.id}</option>}
+                  {claimDocs.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.fileName} [{d.status}]
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Target Port</label>
+                <Select
+                  value={selectedPortId}
+                  onChange={(e) => {
+                    const pId = e.target.value;
+                    setSelectedPortId(pId);
+                    const p = claim.ports?.find((x) => x.id === pId);
+                    setSelectedBerthId(p?.berths?.[0]?.id || "");
+                  }}
+                  className="h-9 text-xs bg-white"
+                >
+                  <option value="">Default Port</option>
+                  {(claim.ports || []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.portType})
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Target Berth</label>
+                <Select
+                  value={selectedBerthId}
+                  onChange={(e) => setSelectedBerthId(e.target.value)}
+                  className="h-9 text-xs bg-white"
+                >
+                  <option value="">Default Berth</option>
+                  {(claim.ports?.find((p) => p.id === selectedPortId)?.berths || []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </div>
-            <h3 className="text-base font-bold text-slate-800">No Statement of Facts Loaded</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Upload a Statement of Facts PDF in Documents or create a claim to run automated discrepancy checks.
-            </p>
-            <div className="flex items-center justify-center space-x-2 pt-2">
-              <Link href="/documents">
-                <Button variant="outline" className="text-xs">
-                  Upload SoF PDF
+
+            <div className="flex flex-wrap items-center gap-2">
+              {canUploadDocuments() && userCanEdit && (
+                <Link href={`/documents?claimId=${claim.id}`}>
+                  <Button variant="outline" size="sm" className="h-9 text-xs rounded-xl">
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />
+                    Upload SoF File
+                  </Button>
+                </Link>
+              )}
+
+              {userCanEdit && (
+                <Button
+                  size="sm"
+                  onClick={handleRunOcr}
+                  isLoading={isRunningOcr}
+                  disabled={!selectedDocId || isRunningOcr}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold h-9 px-4 rounded-xl flex items-center space-x-1.5"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>{isRunningOcr ? "Running OCR..." : "Run Real OCR"}</span>
                 </Button>
-              </Link>
-              <Link href="/claims/create">
-                <Button className="text-xs bg-blue-600 hover:bg-blue-700">
-                  Create Claim
-                </Button>
-              </Link>
+              )}
             </div>
-          </div>
+          </CardContent>
+
+          {activeDoc && (
+            <div className="px-4 pb-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-600 border-t border-slate-100 pt-2.5">
+              <span>
+                Status:{" "}
+                <strong
+                  className={
+                    activeDoc.status === "OCR Completed"
+                      ? "text-emerald-700"
+                      : activeDoc.status === "OCR Failed"
+                      ? "text-rose-700"
+                      : "text-blue-700"
+                  }
+                >
+                  {activeDoc.status}
+                </strong>
+              </span>
+              {activeDoc.errorReason && (
+                <span className="text-rose-700 font-semibold">Reason: {activeDoc.errorReason}</span>
+              )}
+              {activeDraft && (
+                <>
+                  <span>• Mode: <strong>{activeDraft.isScanned ? "Scanned Image (Tesseract OCR)" : "Digital PDF Text Layer"}</strong></span>
+                  <span>
+                    • Overall Confidence:{" "}
+                    <strong className={activeDraft.overallConfidence < 80 ? "text-rose-600" : "text-emerald-700"}>
+                      {Math.round(activeDraft.overallConfidence)}%
+                    </strong>
+                  </span>
+                  {activeDraft.confirmedAt ? (
+                    <Badge variant="success">Confirmed on {activeDraft.confirmedAt.slice(0, 10)}</Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">
+                      Pending Draft Review (Not yet saved to SoF)
+                    </Badge>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </Card>
-      ) : (
+      )}
+
+      {/* SIDE-BY-SIDE OCR DRAFT REVIEW WORKSPACE */}
+      {activeDraft ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT COLUMN: Scanned SoF Document Preview (5 cols) */}
+          {/* Left: Raw Extracted Text */}
           <div className="lg:col-span-5 space-y-3">
-            <Card className="border-slate-200 shadow-xs bg-white rounded-xl overflow-hidden flex flex-col">
+            <Card className="border-slate-200 shadow-xs bg-white rounded-xl overflow-hidden">
               <CardHeader className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-row items-center justify-between space-y-0">
                 <div className="flex items-center space-x-2">
                   <FileText className="h-4 w-4 text-blue-600" />
-                  <span className="text-xs font-bold text-slate-800">Scanned Document Preview</span>
-                  <Badge variant="outline" className="text-[10px] uppercase font-mono">
-                    PDF Page 1 of 1
-                  </Badge>
+                  <span className="text-xs font-bold text-slate-800">Original Extracted Text</span>
                 </div>
-                <div className="flex items-center space-x-1">
-                  <div className="flex items-center bg-white border border-slate-200 rounded-md p-0.5 shadow-2xs mr-1">
+                <div className="flex items-center space-x-1 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setActivePageFilter("ALL")}
+                    className={`px-2 py-0.5 rounded font-semibold ${
+                      activePageFilter === "ALL" ? "bg-blue-600 text-white" : "bg-white border text-slate-600"
+                    }`}
+                  >
+                    All ({activeDraft.pages?.length || 1}p)
+                  </button>
+                  {(activeDraft.pages || []).map((p) => (
                     <button
+                      key={p.pageNumber}
                       type="button"
-                      onClick={() => setPreviewMode("visual")}
-                      className={`px-2 py-0.5 text-[10px] font-semibold rounded transition ${
-                        previewMode === "visual"
-                          ? "bg-blue-600 text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
+                      onClick={() => setActivePageFilter(p.pageNumber)}
+                      className={`px-2 py-0.5 rounded font-semibold ${
+                        activePageFilter === p.pageNumber ? "bg-blue-600 text-white" : "bg-white border text-slate-600"
                       }`}
                     >
-                      Visual
+                      P{p.pageNumber}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewMode("raw")}
-                      className={`px-2 py-0.5 text-[10px] font-semibold rounded transition ${
-                        previewMode === "raw"
-                          ? "bg-blue-600 text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Raw OCR
-                    </button>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-slate-500 hover:text-slate-800"
-                    onClick={() => setZoomLevel((prev) => Math.max(75, prev - 15))}
-                    title="Zoom Out"
-                  >
-                    <ZoomOut className="h-3.5 w-3.5" />
-                  </Button>
-                  <span className="text-[10px] font-mono text-slate-500 w-8 text-center">
-                    {zoomLevel}%
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-slate-500 hover:text-slate-800"
-                    onClick={() => setZoomLevel((prev) => Math.min(140, prev + 15))}
-                    title="Zoom In"
-                  >
-                    <ZoomIn className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-slate-500 hover:text-slate-800"
-                    onClick={() => setZoomLevel(100)}
-                    title="Reset Zoom"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </Button>
+                  ))}
                 </div>
               </CardHeader>
-
-              {/* Document viewport */}
-              <CardContent className="p-4 bg-slate-100/70 overflow-auto max-h-[750px]">
-                {previewMode === "raw" ? (
-                  <div className="bg-slate-950 text-emerald-400 p-4 rounded-lg font-mono text-[11px] leading-relaxed overflow-x-auto shadow-inner border border-slate-800">
-                    <div className="text-slate-500 pb-2 mb-2 border-b border-slate-800 flex justify-between items-center text-[10px]">
-                      <span># OCR RAW TEXT STREAM ENGINE v2.4</span>
-                      <span className="text-emerald-500">Confidence: 96.4%</span>
-                    </div>
-                    <pre className="whitespace-pre-wrap font-mono text-[10px]">
-{`=== STATEMENT OF FACTS (RAW INGESTION LOG) ===
-VESSEL: ${claim?.shipName?.toUpperCase()}
-PORT: ${claim?.ports?.[0]?.name?.toUpperCase() || "ROTTERDAM"}
-CARGO: ${cargoName.toUpperCase()} (${cargoQuantity.toLocaleString()} MT)
-C/P DATE: ${cpDate}
-AGENT: OCEANIC MARITIME SERVICES B.V.
-
-TIMESTAMP              | EVENT / ACTIVITY DESCRIPTION             | CONF | BOUNDING BOX
----------------------------------------------------------------------------------------
-${(claim?.activities || []).map((a, idx) => 
-  `${a.startTime.replace("T", " ").substring(0, 16).padEnd(22)} | ${a.activityName.padEnd(36)} | ${Math.round((a.ocrConfidence || 0.95) * 100)}% | [y:${120 + idx * 28}, x:35, w:480, h:22]`
-).join("\n")}
----------------------------------------------------------------------------------------
-[EOF - 100% PARSED, 0 OCR FAILS DETECTED]`}
-                    </pre>
-                  </div>
-                ) : (
-                  <div
-                    style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top left" }}
-                    className="transition-transform duration-150 bg-white border border-slate-300 shadow-sm rounded p-5 w-full min-h-[700px] font-sans text-slate-800 text-xs relative select-none"
-                  >
-                    {/* Watermark / Stamp */}
-                    <div className="absolute top-5 right-5 border-2 border-emerald-600/40 text-emerald-700/60 font-mono text-[9px] font-extrabold uppercase px-2 py-0.5 rounded rotate-[-6deg]">
-                      VERIFIED SOF ORIGINAL
-                    </div>
-
-                    {/* Port Agent Document Header */}
-                    <div className="border-b-2 border-slate-800 pb-3 mb-3 text-center">
-                      <h2 className="text-xs font-extrabold tracking-wider text-slate-950 uppercase">
-                        Maritime Port Services Agency Ltd.
-                      </h2>
-                      <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-0.5">
-                        Statement of Facts & Port Time Sheet
-                      </p>
-                    </div>
-
-                    {/* Metadata Box */}
-                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-50 p-2.5 rounded border border-slate-200 mb-3 font-mono">
-                      <div>
-                        <span className="text-slate-500 font-sans font-medium">Vessel:</span>{" "}
-                        <span className="font-bold text-slate-900">{claim?.shipName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 font-sans font-medium">Port:</span>{" "}
-                        <span className="font-bold text-slate-900">{claim?.ports?.[0]?.name || "Rotterdam"}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 font-sans font-medium">Cargo:</span>{" "}
-                        <span className="font-bold text-slate-900">{cargoName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 font-sans font-medium">Quantity:</span>{" "}
-                        <span className="font-bold text-slate-900">{cargoQuantity.toLocaleString()} MT</span>
-                      </div>
-                    </div>
-
-                    {/* Document Event Lines with OCR Bounding Box Highlights */}
-                    <div className="space-y-1 text-[10px]">
-                      <div className="font-bold uppercase text-[9px] text-slate-500 border-b border-slate-300 pb-1 mb-1.5 grid grid-cols-12">
-                        <span className="col-span-4">Date / Time</span>
-                        <span className="col-span-6">Statement of Event</span>
-                        <span className="col-span-2 text-right">Confidence</span>
-                      </div>
-
-                      {(claim?.activities || []).map((act) => {
-                        const isSelected = highlightedActId === act.id;
-                        const hasDiscrepancy = discrepancies.some((d) => d.activityId === act.id);
-                        const confPct = Math.round((act.ocrConfidence || 0.95) * 100);
-
-                        return (
-                          <div
-                            key={act.id}
-                            onMouseEnter={() => setHighlightedActId(act.id)}
-                            onMouseLeave={() => setHighlightedActId(null)}
-                            onClick={() => setEditingAct(act)}
-                            className={`p-1.5 rounded transition-all cursor-pointer grid grid-cols-12 items-center relative group ${
-                              isSelected
-                                ? "bg-amber-100 ring-2 ring-amber-500 shadow-2xs"
-                                : hasDiscrepancy
-                                ? "bg-rose-50/80 border border-rose-300 hover:bg-rose-100"
-                                : "hover:bg-blue-50/60 border border-transparent"
-                            }`}
-                          >
-                            <span className="col-span-4 font-mono text-[9px] text-slate-600">
-                              {act.startTime.substring(0, 10)}{" "}
-                              <strong className="text-slate-900">{act.startTime.substring(11, 16)}</strong>
-                            </span>
-                            <span className="col-span-6 font-medium text-slate-800 truncate pr-1">
-                              {act.activityName}
-                              {act.remarks && (
-                                <span className="text-[9px] text-slate-400 block font-normal truncate">
-                                  {act.remarks}
-                                </span>
-                              )}
-                            </span>
-                            <div className="col-span-2 flex items-center justify-end space-x-1">
-                              {hasDiscrepancy && (
-                                <AlertTriangle className="h-3 w-3 text-rose-600 shrink-0" />
-                              )}
-                              <span
-                                className={`text-[9px] font-mono font-bold px-1 rounded ${
-                                  confPct >= 90
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : confPct >= 75
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-rose-100 text-rose-800"
-                                }`}
-                              >
-                                {confPct}%
-                              </span>
-                            </div>
-
-                            {/* Yellow OCR Bounding Box Indicator */}
-                            {isSelected && (
-                              <div className="absolute -inset-0.5 border-2 border-dashed border-amber-500 rounded pointer-events-none" />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Document Footer Signatures */}
-                    <div className="mt-8 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-[9px] text-slate-500">
-                      <div>
-                        <div className="border-b border-slate-400 pb-4 mb-1">
-                          <span className="italic text-slate-700 font-serif">Capt. A. Vance</span>
-                        </div>
-                        <p className="font-semibold text-slate-700">Master, {claim?.shipName}</p>
-                      </div>
-                      <div>
-                        <div className="border-b border-slate-400 pb-4 mb-1">
-                          <span className="italic text-slate-700 font-serif">P. de Jongh</span>
-                        </div>
-                        <p className="font-semibold text-slate-700">Port Agent / Representative</p>
-                      </div>
-                    </div>
+              <CardContent className="p-4 bg-slate-950 text-emerald-300 max-h-[600px] overflow-auto">
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
+                  {rawDisplayText || "(No extracted text)"}
+                </pre>
+                {highlightedLine && (
+                  <div className="mt-3 pt-2 border-t border-slate-800 text-[10px] text-amber-300 font-mono">
+                    Source Line: {highlightedLine}
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* RIGHT COLUMN: Discrepancies & Extracted SoF Table (7 cols) */}
+          {/* Right: Editable Parsed Draft Events */}
           <div className="lg:col-span-7 space-y-4">
-            {/* Discrepancy Warnings Cards */}
-            {discrepancies.length > 0 ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-rose-700 font-bold text-xs uppercase tracking-wider">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>{discrepancies.length} Discrepancies Detected</span>
-                  </div>
-                  <span className="text-[11px] text-slate-500">Auto-flagged by pure TypeScript validator</span>
+            <Card className="border-slate-200 shadow-xs bg-white rounded-xl overflow-hidden">
+              <CardHeader className="p-4 pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm font-bold text-slate-900">
+                    Parsed OCR Draft Events ({filteredDraftEvents.length})
+                  </CardTitle>
+                  <CardDescription className="text-[11px]">
+                    Inspect confidence scores, fix any unclassified or low-confidence entries, then click Confirm &amp; Save.
+                  </CardDescription>
                 </div>
+                {userCanEdit && (
+                  <Button
+                    size="sm"
+                    onClick={handleConfirmDraft}
+                    isLoading={isConfirming}
+                    disabled={draftEvents.length === 0 || isConfirming}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold h-8 px-3.5 rounded-lg flex items-center space-x-1.5"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Confirm &amp; Save to SoF</span>
+                  </Button>
+                )}
+              </CardHeader>
 
-                <div className="grid grid-cols-1 gap-2.5">
-                  {discrepancies.map((disc) => (
-                    <Card key={disc.id} className="border-rose-200 bg-rose-50/50 shadow-2xs">
-                      <CardContent className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div className="flex items-start space-x-2.5">
-                          <div className="p-1.5 rounded-lg bg-rose-100 text-rose-600 mt-0.5 shrink-0 shadow-2xs">
-                            <AlertTriangle className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-slate-900 text-xs">{disc.title}</h4>
-                            <p className="text-slate-600 mt-0.5 text-[11px] leading-relaxed">{disc.description}</p>
-                            <div className="text-[11px] text-slate-500 mt-1 space-x-2">
-                              <span>Current: <code className="bg-slate-200/80 px-1.5 py-0.5 rounded font-mono text-rose-800 font-bold">{disc.currentValue}</code></span>
-                              <span>Suggested: <code className="bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded font-mono font-bold">{disc.suggestedValue}</code></span>
+              <CardContent className="p-0 overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
+                    <tr>
+                      <th className="p-2.5">Pg</th>
+                      <th className="p-2.5">Controlled Event</th>
+                      <th className="p-2.5">Start / Stop (UTC)</th>
+                      <th className="p-2.5">Field Confidences</th>
+                      <th className="p-2.5 text-right">Review</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredDraftEvents.map((evt) => {
+                      const isLowConf = evt.overallConfidencePct < 80;
+                      const isUnclassified = evt.activityName === "Unclassified" || evt.isUnclassified;
+                      return (
+                        <tr
+                          key={evt.id}
+                          onMouseEnter={() => setHighlightedLine(evt.rawLine)}
+                          onMouseLeave={() => setHighlightedLine(null)}
+                          className={
+                            isLowConf || isUnclassified
+                              ? "bg-amber-50/60 hover:bg-amber-50"
+                              : "hover:bg-slate-50"
+                          }
+                        >
+                          <td className="p-2.5 font-mono text-[11px] text-slate-500">
+                            P{evt.pageNumber}
+                          </td>
+                          <td className="p-2.5">
+                            <div className="flex items-center space-x-1.5">
+                              <span
+                                className={`font-bold ${
+                                  isUnclassified ? "text-amber-800" : "text-slate-900"
+                                }`}
+                              >
+                                {evt.activityName}
+                              </span>
+                              {evt.isCorrected && <Badge variant="corrected">Edited</Badge>}
                             </div>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-end shrink-0">
-                          {userCanEdit ? (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setCorrectingDisc(disc);
-                                setCorrectionInput(disc.suggestedValue || "");
-                              }}
-                              className="text-xs bg-rose-600 hover:bg-rose-700 h-7 px-3 font-semibold shadow-2xs text-white"
-                            >
-                              Quick Correct
-                            </Button>
-                          ) : (
-                            <span className="text-[10px] text-slate-400">Read-Only</span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <Card className="p-3.5 border-emerald-200 bg-emerald-50/60 flex items-center justify-between text-xs shadow-2xs">
-                <div className="flex items-center space-x-3">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <div>
-                    <span className="font-bold text-emerald-950">Statement of Facts Clean & Validated</span>
-                    <p className="text-emerald-700 text-[11px]">All timestamps, durations, and berth associations conform to charterparty sequence standards.</p>
-                  </div>
-                </div>
-                <Badge variant="success">Validated</Badge>
-              </Card>
-            )}
-
-            {/* Main Extracted SoF Table */}
-            {claim && (
-              <Card className="border-slate-200 shadow-xs bg-white rounded-xl overflow-hidden">
-                <CardHeader className="p-4 pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xs font-bold text-slate-900">
-                      Statement of Facts: {claim.shipName} ({claim.activities?.length || 0} Events)
-                    </CardTitle>
-                    <CardDescription className="text-[11px]">
-                      Hover over any row to highlight its corresponding OCR bounding box
-                    </CardDescription>
-                  </div>
-                  <Link href={`/claims/${claim.id}`}>
-                    <Button variant="ghost" size="sm" className="text-xs text-blue-600 hover:text-blue-700 h-7 px-2">
-                      <span>Full Claim</span>
-                      <ArrowRight className="h-3 w-3 ml-1" />
-                    </Button>
-                  </Link>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
-                        <tr>
-                          <th className="p-3">Activity</th>
-                          <th className="p-3">Berth</th>
-                          <th className="p-3">Start (UTC)</th>
-                          <th className="p-3">Stop (UTC)</th>
-                          <th className="p-3">Duration</th>
-                          <th className="p-3">Conf.</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3 text-right">Action</th>
+                            <p className="text-[10px] text-slate-500 truncate max-w-[220px]" title={evt.rawLine}>
+                              {evt.rawLine}
+                            </p>
+                          </td>
+                          <td className="p-2.5 font-mono text-[11px] text-slate-700 whitespace-nowrap">
+                            <div>{evt.startTime.slice(0, 16).replace("T", " ")}</div>
+                            <div className="text-slate-500">{evt.stopTime.slice(0, 16).replace("T", " ")}</div>
+                          </td>
+                          <td className="p-2.5">
+                            <div className="flex flex-wrap gap-1 text-[10px] font-mono">
+                              <span
+                                className={`px-1.5 py-0.5 rounded font-bold ${
+                                  isLowConf
+                                    ? "bg-rose-100 text-rose-800"
+                                    : "bg-emerald-100 text-emerald-800"
+                                }`}
+                              >
+                                Overall {evt.overallConfidencePct}%
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                D:{evt.fieldConfidences?.date ?? 100}%
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                T:{Math.min(evt.fieldConfidences?.startTime ?? 100, evt.fieldConfidences?.stopTime ?? 100)}%
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                E:{evt.fieldConfidences?.activityName ?? 100}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-right whitespace-nowrap">
+                            {userCanEdit ? (
+                              <div className="inline-flex items-center space-x-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setEditingDraftEvt(evt)}
+                                  className="h-6 px-2 text-[11px]"
+                                >
+                                  <Edit2 className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDraftEvents((prev) => prev.filter((x) => x.id !== evt.id))
+                                  }
+                                  className="h-6 px-1.5 text-rose-600 hover:bg-rose-50"
+                                  title="Discard draft line"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Read-Only</span>
+                            )}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {(claim.activities || []).map((act) => {
-                          const hasDiscrepancy = discrepancies.some((d) => d.activityId === act.id);
-                          const berthObj = claim.ports?.flatMap((p) => p.berths).find((b) => b.id === act.berthId);
-                          const isHighlighted = highlightedActId === act.id;
-
-                          return (
-                            <tr
-                              key={act.id}
-                              onMouseEnter={() => setHighlightedActId(act.id)}
-                              onMouseLeave={() => setHighlightedActId(null)}
-                              className={`transition ${
-                                isHighlighted
-                                  ? "bg-amber-50 ring-1 ring-amber-400"
-                                  : hasDiscrepancy
-                                  ? "bg-rose-50/60 hover:bg-rose-50"
-                                  : "hover:bg-slate-50/80"
-                              }`}
-                            >
-                              <td className="p-3 font-bold text-slate-900">
-                                <div>{act.activityName}</div>
-                                {act.remarks && <div className="text-[10px] text-slate-400 font-normal">{act.remarks}</div>}
-                              </td>
-                              <td className="p-3">
-                                {berthObj ? (
-                                  <span className="text-slate-800 font-medium">{berthObj.name}</span>
-                                ) : (
-                                  <span className="text-rose-600 font-bold flex items-center">
-                                    <AlertTriangle className="h-3 w-3 mr-1" /> Unlinked
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-3 text-slate-600 font-mono text-[11px]">{act.startTime.substring(0, 16).replace("T", " ")}</td>
-                              <td className="p-3 text-slate-600 font-mono text-[11px]">
-                                <span className={act.durationMinutes <= 0 ? "text-rose-600 font-bold" : ""}>
-                                  {act.stopTime.substring(0, 16).replace("T", " ")}
-                                </span>
-                              </td>
-                              <td className="p-3 font-bold text-slate-900">{act.durationFormatted}</td>
-                              <td className="p-3">
-                                {act.ocrConfidence ? (
-                                  <span
-                                    className={`font-bold font-mono text-[11px] ${
-                                      act.ocrConfidence >= 0.8 ? "text-emerald-600" : "text-rose-600"
-                                    }`}
-                                  >
-                                    {Math.round(act.ocrConfidence * 100)}%
-                                  </span>
-                                ) : (
-                                  "—"
-                                )}
-                              </td>
-                              <td className="p-3">
-                                {act.isCorrected ? (
-                                  <Badge variant="corrected">Corrected</Badge>
-                                ) : act.isOcrExtracted ? (
-                                  <Badge variant="ocr">OCR</Badge>
-                                ) : (
-                                  <span className="text-slate-400 text-[10px]">Manual</span>
-                                )}
-                              </td>
-                              <td className="p-3 text-right">
-                                {userCanEdit ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setEditingAct(act)}
-                                    className="h-6 px-2 text-[11px] text-blue-600 hover:bg-blue-50"
-                                  >
-                                    <Edit2 className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                ) : (
-                                  <span className="text-slate-400 text-xs">Locked</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
           </div>
         </div>
+      ) : (
+        claim && (
+          <Card className="p-8 text-center border-slate-200 bg-white shadow-2xs space-y-2">
+            <FileCheck className="h-8 w-8 text-slate-400 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800">
+              {claimDocs.length > 0
+                ? "Select a document above and click Run Real OCR to extract a review draft"
+                : "Upload a PDF, PNG, or JPG Statement of Facts document first"}
+            </h3>
+            <p className="text-xs text-slate-500">
+              OCR results are saved as a review draft first and never modify Statement of Facts until confirmed.
+            </p>
+          </Card>
+        )
       )}
 
-      {/* Edit Activity Modal */}
+      {/* Existing Confirmed Statement of Facts + Discrepancy Monitor */}
+      {claim && (
+        <Card className="border-slate-200 shadow-xs bg-white rounded-xl overflow-hidden">
+          <CardHeader className="p-4 pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-xs font-bold text-slate-900">
+                Saved Statement of Facts: {claim.shipName} ({claim.activities?.length || 0} Confirmed Events • {discrepancies.length} Discrepancies)
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                Confirmed maritime time sheet records persisted in SQLite
+              </CardDescription>
+            </div>
+            <Link href={`/claims/${claim.id}?tab=sof`}>
+              <Button variant="ghost" size="sm" className="text-xs text-blue-600 h-7 px-2">
+                <span>Open Claim SoF</span>
+                <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
+                <tr>
+                  <th className="p-3">Activity</th>
+                  <th className="p-3">Start (UTC)</th>
+                  <th className="p-3">Stop (UTC)</th>
+                  <th className="p-3">Duration</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(claim.activities || []).map((act) => (
+                  <tr key={act.id} className="hover:bg-slate-50/80">
+                    <td className="p-3 font-semibold text-slate-900">{act.activityName}</td>
+                    <td className="p-3 font-mono text-[11px]">{act.startTime.slice(0, 16).replace("T", " ")}</td>
+                    <td className="p-3 font-mono text-[11px]">{act.stopTime.slice(0, 16).replace("T", " ")}</td>
+                    <td className="p-3 font-bold">{act.durationFormatted}</td>
+                    <td className="p-3">
+                      {act.isCorrected ? (
+                        <Badge variant="corrected">Corrected</Badge>
+                      ) : act.isOcrExtracted ? (
+                        <Badge variant="ocr">OCR Confirmed</Badge>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Manual</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-right">
+                      {userCanEdit ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingAct(act)}
+                          className="h-6 px-2 text-[11px]"
+                        >
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Locked</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {(claim.activities || []).length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-xs text-slate-400">
+                      No confirmed SoF events yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Edit Draft Modal */}
+      {editingDraftEvt && (
+        <Modal
+          isOpen={!!editingDraftEvt}
+          onClose={() => setEditingDraftEvt(null)}
+          title={`Review Draft Event (Page ${editingDraftEvt.pageNumber})`}
+          maxWidth="md"
+        >
+          <div className="space-y-3 text-xs">
+            <div>
+              <label className="block font-medium text-slate-700 mb-1">Controlled Activity Name</label>
+              <Select
+                value={
+                  CONTROLLED_SOF_VOCABULARY.some((v) => v.canonical === editingDraftEvt.activityName) ||
+                  editingDraftEvt.activityName.startsWith("Commenced ") ||
+                  editingDraftEvt.activityName.startsWith("Completed ")
+                    ? editingDraftEvt.activityName
+                    : editingDraftEvt.activityName
+                }
+                onChange={(e) =>
+                  setEditingDraftEvt({ ...editingDraftEvt, activityName: e.target.value })
+                }
+              >
+                <option value="Unclassified">Unclassified</option>
+                <option value="Commenced loading">Commenced loading</option>
+                <option value="Commenced discharging">Commenced discharging</option>
+                <option value="Completed loading">Completed loading</option>
+                <option value="Completed discharging">Completed discharging</option>
+                {CONTROLLED_SOF_VOCABULARY.map((v) => (
+                  <option key={v.canonical} value={v.canonical}>
+                    {v.canonical}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Start Time (UTC)</label>
+                <Input
+                  type="datetime-local"
+                  max={getNowDatetimeLocalIso()}
+                  value={editingDraftEvt.startTime.slice(0, 16)}
+                  onChange={(e) =>
+                    setEditingDraftEvt({ ...editingDraftEvt, startTime: `${e.target.value}:00Z` })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Stop Time (UTC)</label>
+                <Input
+                  type="datetime-local"
+                  max={getNowDatetimeLocalIso()}
+                  value={editingDraftEvt.stopTime.slice(0, 16)}
+                  onChange={(e) =>
+                    setEditingDraftEvt({ ...editingDraftEvt, stopTime: `${e.target.value}:00Z` })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block font-medium text-slate-700 mb-1">Percentage Counted (0-100)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={editingDraftEvt.percentageCounted}
+                onChange={(e) =>
+                  setEditingDraftEvt({
+                    ...editingDraftEvt,
+                    percentageCounted: Number(e.target.value)
+                  })
+                }
+              />
+            </div>
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <Button variant="outline" onClick={() => setEditingDraftEvt(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveDraftEdit}>Apply Draft Correction</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit Saved Activity Modal */}
       {editingAct && (
         <Modal
           isOpen={!!editingAct}
           onClose={() => setEditingAct(null)}
-          title={`Edit Activity: ${editingAct.activityName}`}
+          title={`Edit Saved Activity: ${editingAct.activityName}`}
           maxWidth="md"
         >
           <div className="space-y-3 text-xs">
@@ -643,25 +904,13 @@ ${(claim?.activities || []).map((a, idx) =>
                 onChange={(e) => setEditingAct({ ...editingAct, activityName: e.target.value })}
               />
             </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Assigned Berth</label>
-              <Select
-                value={editingAct.berthId}
-                onChange={(e) => setEditingAct({ ...editingAct, berthId: e.target.value })}
-              >
-                {(claim?.ports?.flatMap((p) => p.berths) || []).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.quantity} MT)
-                  </option>
-                ))}
-              </Select>
-            </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Start Time (UTC)</label>
                 <Input
                   type="datetime-local"
-                  value={editingAct.startTime.substring(0, 16)}
+                  max={getNowDatetimeLocalIso()}
+                  value={editingAct.startTime.slice(0, 16)}
                   onChange={(e) => setEditingAct({ ...editingAct, startTime: e.target.value })}
                 />
               </div>
@@ -669,40 +918,43 @@ ${(claim?.activities || []).map((a, idx) =>
                 <label className="block font-medium text-slate-700 mb-1">Stop Time (UTC)</label>
                 <Input
                   type="datetime-local"
-                  value={editingAct.stopTime.substring(0, 16)}
+                  max={getNowDatetimeLocalIso()}
+                  value={editingAct.stopTime.slice(0, 16)}
                   onChange={(e) => setEditingAct({ ...editingAct, stopTime: e.target.value })}
                 />
               </div>
             </div>
             <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
-              <Button variant="outline" onClick={() => setEditingAct(null)}>Cancel</Button>
-              <Button onClick={handleUpdateActivity} isLoading={isSaving}>Save & Mark Corrected</Button>
+              <Button variant="outline" onClick={() => setEditingAct(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateSavedActivity} isLoading={isSaving}>
+                Save &amp; Mark Corrected
+              </Button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Discrepancy Correction Quick Modal */}
+      {/* Discrepancy Correction Modal */}
       {correctingDisc && (
         <Modal
           isOpen={!!correctingDisc}
           onClose={() => setCorrectingDisc(null)}
-          title={`Resolve: ${correctingDisc.title}`}
+          title={`Quick Resolve: ${correctingDisc.title}`}
           maxWidth="md"
         >
           <div className="space-y-3 text-xs">
-            <p className="text-slate-600 leading-relaxed">{correctingDisc.description}</p>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Enter Corrected Value</label>
-              <Input
-                value={correctionInput}
-                onChange={(e) => setCorrectionInput(e.target.value)}
-                placeholder={correctingDisc.suggestedValue}
-              />
-            </div>
-            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
-              <Button variant="outline" onClick={() => setCorrectingDisc(null)}>Cancel</Button>
-              <Button onClick={handleApplyDiscrepancyCorrection} isLoading={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+            <p className="text-slate-600">{correctingDisc.description}</p>
+            <Input
+              value={correctionInput}
+              onChange={(e) => setCorrectionInput(e.target.value)}
+            />
+            <div className="flex justify-end space-x-2 pt-3 border-t">
+              <Button variant="outline" onClick={() => setCorrectingDisc(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleApplyDiscrepancyCorrection} isLoading={isSaving}>
                 Apply Correction
               </Button>
             </div>

@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import { getScopedClaimById } from "@/lib/db/scoped";
 import { updateClaim, createNotificationRecord } from "@/lib/db/queries";
 import { logAudit } from "@/lib/db/audit";
@@ -13,16 +14,10 @@ const OverrideSchema = z.object({
 });
 
 export const POST = withApi({
-  roles: ["Supervisor"],
+  permission: "calculator:override",
+  checkClaimOwnership: true,
   schema: OverrideSchema,
   handler: async ({ user, params, body }) => {
-    if (user.role === "Client") {
-      return NextResponse.json(
-        { error: "Forbidden: Client role may not override calculations" },
-        { status: 403 }
-      );
-    }
-
     const claim = getScopedClaimById(user, params.id);
     if (!claim) {
       return NextResponse.json({ error: "Claim not found" }, { status: 404 });
@@ -37,7 +32,7 @@ export const POST = withApi({
     logAudit({
       actorId: user.id,
       actorEmail: user.email,
-      actorRole: user.role,
+      actorRole: normalizeRole(user.role),
       action: "override_calculation",
       targetType: "claim",
       targetId: params.id,
@@ -50,7 +45,7 @@ export const POST = withApi({
     const cName = (claim as any).claimName || params.id;
     createNotificationRecord({
       title: "Calculation Overridden",
-      message: `Supervisor applied calculation override on claim ${cName}`,
+      message: `Calculation override applied on claim ${cName}`,
       type: "claim",
       claimId: claim.id,
       claimName: cName

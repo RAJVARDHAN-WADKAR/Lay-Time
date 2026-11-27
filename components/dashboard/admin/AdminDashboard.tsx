@@ -10,11 +10,14 @@ import { formatCurrency } from "@/lib/utils/formatters";
 import { KPICard } from "@/components/ui/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DataErrorBanner } from "@/components/ui/data-error-banner";
 import { RecentClaimsTable } from "@/components/dashboard/shared/RecentClaimsTable";
 import { AccountPortfolioCards } from "@/components/dashboard/shared/AccountPortfolioCards";
 import { AdminSecurityAudit } from "@/components/roles/admin/AdminSecurityAudit";
 import { AdminUserSummary } from "@/components/roles/admin/AdminUserSummary";
 import { useAuth } from "@/lib/context/AuthContext";
+import { useToast } from "@/lib/hooks/useToast";
+import { normalizeRole } from "@/lib/auth/accessMatrix";
 import {
   Users,
   Shield,
@@ -28,25 +31,37 @@ import {
 
 export function AdminDashboard() {
   const { currentUser } = useAuth();
+  const { success, error: showError } = useToast();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh = false) => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const [cls, usrs, notifs, docs] = await Promise.all([
-        getClaims().catch(() => []),
-        getUsers().catch(() => []),
-        getNotifications().catch(() => []),
-        getDocuments().catch(() => [])
+        getClaims(),
+        getUsers(),
+        getNotifications(),
+        getDocuments()
       ]);
       setClaims(cls);
       setUsers(usrs);
       setNotifications(notifs);
       setDocuments(docs);
+      if (isManualRefresh) {
+        success("Dashboard Refreshed", "System metrics and records updated from database.");
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to load admin console data.";
+      setLoadError(msg);
+      if (isManualRefresh) {
+        showError("Refresh Failed", msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -66,10 +81,13 @@ export function AdminDashboard() {
   }, [claims, unreadCount]);
 
   const activeUsersCount = users.filter((u) => u.status === "Active").length;
-  const adminCount = users.filter((u) => u.role === "Admin" || u.role === "ADMIN").length;
-  const supervisorCount = users.filter((u) => u.role === "Supervisor" || u.role === "SUPERVISOR").length;
-  const processorCount = users.filter((u) => u.role === "Claim Processor" || u.role === "CLAIM_PROCESSOR" || u.role === "Processor").length;
-  const clientCount = users.filter((u) => u.role === "Client" || u.role === "Reviewer" || u.role === "REVIEWER_CLIENT").length;
+  const adminCount = users.filter((u) => normalizeRole(u.role) === "ADMIN").length;
+  const supervisorCount = users.filter((u) => normalizeRole(u.role) === "SUPERVISOR").length;
+  const processorCount = users.filter((u) => normalizeRole(u.role) === "CLAIM_PROCESSOR").length;
+  const clientCount = users.filter((u) => {
+    const r = normalizeRole(u.role, Boolean(u.clientId));
+    return r === "CLIENT" || r === "REVIEWER";
+  }).length;
 
   return (
     <div className="space-y-6 pb-12">
@@ -116,7 +134,7 @@ export function AdminDashboard() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
             title="Refresh dashboard data"
           >
@@ -124,6 +142,15 @@ export function AdminDashboard() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <DataErrorBanner
+          title="Unable to load admin console data"
+          message={loadError}
+          onRetry={() => loadData(true)}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* 2. Admin System KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

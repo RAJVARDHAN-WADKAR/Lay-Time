@@ -7,12 +7,15 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, AlertTriangle, FileCheck, FileWarning, UploadCloud } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/lib/context/AuthContext";
 
 interface ClaimMissingDocsTabProps {
   claim: Claim;
 }
 
 export function ClaimMissingDocsTab({ claim }: ClaimMissingDocsTabProps) {
+  const { canUploadDocuments, canEditClaim } = useAuth();
+  const canUpload = canUploadDocuments() && canEditClaim(claim.assignedTo);
   const [audit, setAudit] = useState<{
     isCompliant: boolean;
     uploadedCount: number;
@@ -61,12 +64,14 @@ export function ClaimMissingDocsTab({ claim }: ClaimMissingDocsTabProps) {
           </div>
         </div>
 
-        <Link href="/documents">
-          <Button size="sm" variant="outline" className="text-xs h-9 bg-white">
-            <UploadCloud className="h-4 w-4 mr-1.5" />
-            <span>Upload Document</span>
-          </Button>
-        </Link>
+        {canUpload && (
+          <Link href={`/documents?claimId=${claim.id}`}>
+            <Button size="sm" variant="outline" className="text-xs h-9 bg-white">
+              <UploadCloud className="h-4 w-4 mr-1.5" />
+              <span>Upload Document</span>
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Audit Checklist Card */}

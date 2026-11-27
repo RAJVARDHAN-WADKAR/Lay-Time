@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { withApi } from "@/lib/api/withApi";
 import { getDatabase } from "@/lib/db";
 
 export const GET = withApi({
-  roles: ["Admin", "Supervisor", "Claim Processor", "Processor", "Finance", "Reviewer"],
+  permission: "clients:view",
   handler: async () => {
     const db = getDatabase();
     const clients = db.prepare("SELECT * FROM clients ORDER BY name ASC").all();
@@ -14,21 +14,21 @@ export const GET = withApi({
 });
 
 export const POST = withApi({
-  roles: ["Admin", "Supervisor"],
-  handler: async ({ body }) => {
+  permission: "clients:manage",
+  handler: async () => {
     return NextResponse.json({ success: true, message: "Client created" }, { status: 201 });
   }
 });
 
 export const PUT = withApi({
-  roles: ["Admin", "Supervisor"],
+  permission: "clients:manage",
   handler: async () => {
     return NextResponse.json({ success: true, message: "Client updated" });
   }
 });
 
 export const DELETE = withApi({
-  roles: ["Admin"],
+  permission: "clients:manage",
   handler: async () => {
     return NextResponse.json({ success: true, message: "Client deleted" });
   }
